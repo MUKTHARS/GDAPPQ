@@ -23,12 +23,12 @@ const handleSubmit = async () => {
   const venueData = {
     name,
     capacity: parseInt(capacity),
-    id: isEditing ? venueId : undefined, // Let backend generate ID if not editing
+    id: isEditing ? venueId : undefined,
   };
 
   try {
     if (isEditing) {
-      await api.put(`/admin/venues/${venueId}`, venueData);
+      await api.put(`/admin/venues`, venueData); // Note: Changed from /admin/venues/${venueId} to /admin/venues
     } else {
       await api.post('/admin/venues', venueData);
     }

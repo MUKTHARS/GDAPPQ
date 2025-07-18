@@ -38,7 +38,13 @@ func SetupAdminRoutes() *http.ServeMux {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
 })))
-
+router.Handle("/admin/venues/", middleware.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.Method == http.MethodPut {
+        controllers.UpdateVenue(w, r)
+    } else {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    }
+})))
 	log.Println("Venue routes setup complete")
 	return router
 

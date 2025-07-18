@@ -78,7 +78,33 @@ const handleGenerateQR = async (venueId) => {
     } catch (error) {
       console.error('Error updating venue:', error);
     }
-  };
+};
+
+
+  // const handleUpdateVenue = async () => {
+  //   try {
+  //     const updatedVenue = {
+  //       name: venueName,
+  //       capacity: parseInt(venueCapacity),
+  //     };
+      
+  //     await api.put(`/admin/venues/${editingVenue.id}`, updatedVenue, {
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
+  //       }
+  //     });
+      
+  //     // Refresh the venues list
+  //     const response = await api.get('/admin/venues');
+  //     setVenues(response.data);
+      
+  //     // Close the modal
+  //     setEditingVenue(null);
+  //   } catch (error) {
+  //     console.error('Error updating venue:', error);
+  //   }
+  // };
 
   return (
     <ScrollView style={styles.container}>
