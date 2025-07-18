@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { useIsFocused } from '@react-navigation/native';
 export default function Dashboard({ navigation }) {
   const [venues, setVenues] = useState([]);
   const [editingVenue, setEditingVenue] = useState(null);
@@ -15,7 +15,7 @@ export default function Dashboard({ navigation }) {
   const [expiryTime, setExpiryTime] = useState('');
   const [showSideMenu, setShowSideMenu] = useState(false);
   const [slideAnim] = useState(new Animated.Value(-250));
-
+const isFocused = useIsFocused();
 const toggleSideMenu = () => {
   if (showSideMenu) {
     Animated.timing(slideAnim, {
@@ -61,8 +61,10 @@ const menuItems = [
       }
     };
 
-    fetchVenues();
-  }, []);
+    if (isFocused) {
+      fetchVenues();
+    }
+  }, [isFocused]); 
 
 const handleGenerateQR = async (venueId) => {
   try {

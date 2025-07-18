@@ -1,15 +1,18 @@
 package main
+
 ///////////////
 import (
 	"database/sql"
 	"fmt"
-	"gd/database"
 	"gd/admin/routes"
+	"gd/database"
+
 	// "gd/admin/controllers"
 	"log"
 	"net/http"
 
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var db *sql.DB
@@ -193,8 +196,8 @@ func initDB(db *sql.DB) error {
     // Insert sample data with IGNORE to skip existing records
     sampleData := []string{
         // Admin user
-        `INSERT IGNORE INTO admin_users (id, email, password_hash) VALUES 
-        ('admin1', 'admin@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe')`,
+        // `INSERT IGNORE INTO admin_users (id, email, password_hash) VALUES 
+        // ('admin1', 'admin@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe')`,
 
         // Staff user
         `INSERT IGNORE INTO staff_users (id, email, password_hash, admin_id) VALUES 
@@ -230,6 +233,20 @@ func initDB(db *sql.DB) error {
             log.Printf("Warning: inserting sample data: %v (this might be expected if data already exists)", err)
         }
     }
+adminPassword := "admin123" 
+hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+if err != nil {
+    return fmt.Errorf("error hashing password: %v", err)
+}
+
+_, err = db.Exec(
+    `INSERT IGNORE INTO admin_users (id, email, password_hash) VALUES 
+    ('admin1', 'admin@example.com', ?)`,
+    string(hashedPassword),
+)
+if err != nil {
+    log.Printf("Warning: inserting admin user: %v", err)
+}
 
     log.Println("Database initialization completed successfully!")
     return nil

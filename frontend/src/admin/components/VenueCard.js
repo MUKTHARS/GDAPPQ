@@ -1,7 +1,6 @@
 // components/VenueCard.js
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Button } from 'react-native';
-import InlineEditText from './InlineEditText';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 const VenueCard = ({ venue, onEdit, onGenerateQR }) => {
   return (
@@ -32,47 +31,6 @@ const VenueCard = ({ venue, onEdit, onGenerateQR }) => {
 
   );
 };
-
-// const VenueCard = ({ venue, onEdit, onGenerateQR }) => {
-//   const [currentVenue, setCurrentVenue] = useState(venue);
-
-//   const handleSaveName = (newName) => {
-//     const updatedVenue = { ...currentVenue, name: newName };
-//     setCurrentVenue(updatedVenue);
-//     onEdit(updatedVenue); // This calls the existing onEdit prop
-//   };
-
-//   const handleSaveCapacity = (newCapacity) => {
-//     const updatedVenue = { ...currentVenue, capacity: parseInt(newCapacity) || 0 };
-//     setCurrentVenue(updatedVenue);
-//     onEdit(updatedVenue); // This calls the existing onEdit prop
-//   };
-
-//   return (
-//     <View style={styles.card}>
-//       <InlineEditText
-//         value={currentVenue.name}
-//         onSave={handleSaveName}
-//         style={styles.name}
-//       />
-//       <InlineEditText
-//         value={currentVenue.capacity.toString()}
-//         onSave={handleSaveCapacity}
-//         style={styles.capacity}
-//       />
-      
-//       {/* Keep all existing buttons and design */}
-//       <View style={styles.buttonContainer}>
-//         <TouchableOpacity 
-//           style={[styles.button, styles.qrButton]} 
-//           onPress={() => onGenerateQR(currentVenue.id)}
-//         >
-//           <Text style={styles.buttonText}>Generate QR</Text>
-//         </TouchableOpacity>
-//       </View>
-//     </View>
-//   );
-// };
 
 const styles = StyleSheet.create({
   card: {

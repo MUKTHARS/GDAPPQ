@@ -28,7 +28,7 @@ const handleSubmit = async () => {
 
   try {
     if (isEditing) {
-      await api.put(`/admin/venues`, venueData); // Note: Changed from /admin/venues/${venueId} to /admin/venues
+      await api.put(`/admin/venues`, venueData); 
     } else {
       await api.post('/admin/venues', venueData);
     }
