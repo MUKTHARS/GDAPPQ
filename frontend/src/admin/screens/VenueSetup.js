@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
 import api from '../services/api';
-
+import HeaderWithMenu from '../components/HeaderWithMenu';
 export default function VenueSetup({ route, navigation }) {
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('');
@@ -44,6 +44,7 @@ const handleSubmit = async () => {
 
   return (
     <View style={styles.container}>
+      <HeaderWithMenu />
       <Text style={styles.title}>
         {isEditing ? 'Edit Venue' : 'Create New Venue'}
       </Text>

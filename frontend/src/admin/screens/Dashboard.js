@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Button, Modal, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Button, Modal,Animated, TextInput, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import QrList from '../components/QrList';
+import QrScreen from './QrScreen';
+
 export default function Dashboard({ navigation }) {
   const [venues, setVenues] = useState([]);
   const [editingVenue, setEditingVenue] = useState(null);
@@ -13,7 +15,37 @@ export default function Dashboard({ navigation }) {
   const [showQRModal, setShowQRModal] = useState(false);
   const [currentQR, setCurrentQR] = useState(null);
   const [expiryTime, setExpiryTime] = useState('');
+  const [showSideMenu, setShowSideMenu] = useState(false);
+  const [slideAnim] = useState(new Animated.Value(-250));
 
+const toggleSideMenu = () => {
+  if (showSideMenu) {
+    Animated.timing(slideAnim, {
+      toValue: -250,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setShowSideMenu(false));
+  } else {
+    setShowSideMenu(true);
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }
+};
+
+ const menuItems = [
+    { title: 'Session Calendar', screen: 'SessionCalendar' },
+    { title: 'Student Progress', screen: 'StudentProgress' },
+    { title: 'Question Bank', screen: 'QuestionBank' },
+    { title: 'Venue Management', screen: 'VenueSetup' },
+    { title: 'Session Rules', screen: 'SessionRules' },
+    { title: 'Analytics', screen: 'Analytics' },
+    { title: 'Bulk Sesison', screen: 'Bulk Session' },
+    { title: 'Dashboard', screen: 'Dashboard' },
+    { title: 'QrScreen', screen: 'QrScreen' },
+  ];
   useEffect(() => {
     const fetchVenues = async () => {
       try {
@@ -108,9 +140,56 @@ const handleGenerateQR = async (venueId) => {
 
   return (
     <ScrollView style={styles.container}>
+      <View style={styles.header}>
+  <TouchableOpacity onPress={toggleSideMenu} style={styles.hamburgerButton}>
+    <View style={styles.hamburgerLine} />
+    <View style={styles.hamburgerLine} />
+    <View style={styles.hamburgerLine} />
+  </TouchableOpacity>
+  {/* Side Menu */}
+{showSideMenu && (
+  <Modal
+    visible={showSideMenu}
+    transparent={true}
+    animationType="none"
+    onRequestClose={() => setShowSideMenu(false)}
+  >
+    <TouchableOpacity 
+      style={styles.overlay} 
+      activeOpacity={1} 
+      onPress={() => toggleSideMenu()}
+    >
+      <Animated.View 
+        style={[
+          styles.sideMenu,
+          {
+            transform: [{ translateX: slideAnim }]
+          }
+        ]}
+      >
+        <TouchableOpacity activeOpacity={1}>
+          <Text style={styles.menuHeader}>Menu</Text>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.menuItem}
+              onPress={() => {
+                navigation.navigate(item.screen);
+                toggleSideMenu();
+              }}
+            >
+              <Text style={styles.menuItemText}>{item.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </TouchableOpacity>
+      </Animated.View>
+    </TouchableOpacity>
+  </Modal>
+)}
+</View>
       <Text style={styles.title}>GD Session Manager</Text>
       
-      <Button
+      {/* <Button
         title="Create New Venue"
         onPress={() => navigation.navigate('VenueSetup')}
       />
@@ -120,6 +199,17 @@ const handleGenerateQR = async (venueId) => {
         onPress={() => navigation.navigate('SessionConfig')}
         style={styles.button}
       />
+
+      <Button 
+      title="Configure Session Rules" 
+      onPress={() => navigation.navigate('SessionRules')} 
+      />
+
+      <Button
+      title="View Analytics"
+      onPress={() => navigation.navigate('Analytics')}
+      /> */}
+
       
       <Text style={styles.sectionTitle}>Your Venues</Text>
 
@@ -310,5 +400,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     marginTop: 10,
-  }
+  },
+   container: { padding: 10 },
+  buttonContainer: {
+    marginVertical: 5
+  },
+ header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#2e86de',
+    marginBottom: 20,
+  },
+  hamburgerButton: {
+    padding: 10,
+  },
+  hamburgerLine: {
+    width: 25,
+    height: 3,
+    backgroundColor: 'white',
+    marginVertical: 2,
+    borderRadius: 2,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginLeft: 15,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  sideMenu: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 250,
+    backgroundColor: 'white',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 2,
+      height: 0,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  menuHeader: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 30,
+    color: '#2e86de',
+  },
+  menuItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
 });

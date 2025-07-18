@@ -3,7 +3,7 @@ import { View, Button, Alert } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import AgendaEditor from '../components/AgendaEditor';
 import api from '../services/api';
-
+import HeaderWithMenu from '../components/HeaderWithMenu';
 export default function SessionConfig() {
   const [level, setLevel] = useState(1);
   const [agenda, setAgenda] = useState({
@@ -56,6 +56,7 @@ export default function SessionConfig() {
 
   return (
     <View style={{ padding: 20 }}>
+      <HeaderWithMenu />
       <Picker
         selectedValue={selectedVenue}
         onValueChange={setSelectedVenue}

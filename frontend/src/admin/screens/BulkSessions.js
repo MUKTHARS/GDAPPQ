@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Button, TextInput } from 'react-native';
+import { View, Button, TextInput, } from 'react-native';
 import api from '../services/api';
-
+import HeaderWithMenu from '../components/HeaderWithMenu';
 export default function BulkSessions() {
   const [sessions, setSessions] = useState([{ 
     venue_id: '', 
@@ -20,6 +20,7 @@ export default function BulkSessions() {
 
   return (
     <View>
+      <HeaderWithMenu />
       {sessions.map((session, index) => (
         <View key={index}>
           <TextInput

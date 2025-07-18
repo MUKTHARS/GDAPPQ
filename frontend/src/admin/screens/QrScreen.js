@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Button } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
+import logoImage from '../assets/images/logo.png';
 
 export default function QrScreen({ route, navigation }) {
   const [qrData, setQrData] = useState(null);
@@ -83,12 +84,17 @@ if (!route.params?.venue?.id) {
       ) : qrData ? (
         <>
           <View style={styles.qrContainer}>
-            <QRCode
-              value={qrData}
-              size={250}
-              color="black"
-              backgroundColor="white"
-            />
+           <QRCode
+  value={qrData}
+  size={250}
+  color="black"
+  backgroundColor="white"
+  logo={require('../assets/images/logo.png')}  // small image path
+  logoSize={40}
+  logoMargin={2}
+  logoBorderRadius={8}
+  logoBackgroundColor="transparent"
+/>
           </View>
           <Text style={styles.expiry}>Valid until: {expiryTime}</Text>
         </>

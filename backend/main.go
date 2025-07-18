@@ -163,6 +163,25 @@ func initDB(db *sql.DB) error {
             FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
             FOREIGN KEY (approved_by) REFERENCES staff_users(id) ON DELETE SET NULL
         )`,
+
+        `CREATE TABLE IF NOT EXISTS gd_rules (
+         level INT PRIMARY KEY,
+        prep_time INT NOT NULL,
+        discussion_time INT NOT NULL,
+        penalty_threshold DECIMAL(3,1) NOT NULL,
+        allow_override BOOLEAN DEFAULT TRUE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+
+// Analytics view
+        `CREATE VIEW IF NOT EXISTS qualification_rates AS
+        SELECT department, 
+        COUNT(*) as total,
+        SUM(CASE WHEN qualified_for_level > current_gd_level THEN 1 ELSE 0 END) as passed,
+        (SUM(CASE WHEN qualified_for_level > current_gd_level THEN 1 ELSE 0 END) / COUNT(*)) * 100 as rate
+        FROM student_users
+        JOIN qualifications ON student_users.id = qualifications.student_id
+        GROUP BY department`,
     }
 
     for _, query := range createTables {
