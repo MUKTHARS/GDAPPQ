@@ -35,17 +35,18 @@ const toggleSideMenu = () => {
   }
 };
 
- const menuItems = [
+const menuItems = [
+  { title: 'Dashboard', screen: 'Dashboard' },
+  { title: 'Venue Management', screen: 'VenueSetup' },
+   { title: 'Session Config', screen: 'SessionConfig' },
+   { title: 'Session Rules', screen: 'SessionRules' },
     { title: 'Session Calendar', screen: 'SessionCalendar' },
     { title: 'Student Progress', screen: 'StudentProgress' },
     { title: 'Question Bank', screen: 'QuestionBank' },
-    { title: 'Venue Management', screen: 'VenueSetup' },
-    { title: 'Session Rules', screen: 'SessionRules' },
     { title: 'Analytics', screen: 'Analytics' },
     { title: 'Bulk Sesison', screen: 'Bulk Session' },
-    { title: 'Dashboard', screen: 'Dashboard' },
-    { title: 'QrScreen', screen: 'QrScreen' },
   ];
+
   useEffect(() => {
     const fetchVenues = async () => {
       try {

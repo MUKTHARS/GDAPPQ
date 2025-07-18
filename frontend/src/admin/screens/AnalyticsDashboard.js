@@ -3,19 +3,12 @@ import { View, Text, StyleSheet, Animated, TouchableOpacity, Modal } from 'react
 import { BarChart } from 'react-native-chart-kit';
 import api from '../services/api';
 import { sideMenuStyles } from '../assets/styles/sideMenuStyles';
+import HeaderWithMenu from '../components/HeaderWithMenu';
 export default function AnalyticsDashboard() {
   const [data, setData] = useState(null);
   const [showSideMenu, setShowSideMenu] = useState(false);
   const [slideAnim] = useState(new Animated.Value(-250));
 
-  const menuItems = [
-    { title: 'Session Calendar', screen: 'SessionCalendar' },
-    { title: 'Student Progress', screen: 'StudentProgress' },
-    { title: 'Question Bank', screen: 'QuestionBank' },
-    { title: 'Venue Management', screen: 'VenueSetup' },
-    { title: 'Session Rules', screen: 'SessionRules' },
-    { title: 'Analytics', screen: 'Analytics' },
-  ];
 
   const toggleSideMenu = () => {
     if (showSideMenu) {
@@ -48,54 +41,8 @@ export default function AnalyticsDashboard() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={toggleSideMenu} style={styles.hamburgerButton}>
-          <View style={styles.hamburgerLine} />
-          <View style={styles.hamburgerLine} />
-          <View style={styles.hamburgerLine} />
-        </TouchableOpacity>
-      </View>
-
-      {showSideMenu && (
-        <Modal
-          visible={showSideMenu}
-          transparent={true}
-          animationType="none"
-          onRequestClose={() => setShowSideMenu(false)}
-        >
-          <TouchableOpacity 
-            style={sideMenuStyles.overlay} 
-            activeOpacity={1} 
-            onPress={() => toggleSideMenu()}
-          >
-            <Animated.View 
-              style={[
-                sideMenuStyles.sideMenu,
-                {
-                  transform: [{ translateX: slideAnim }]
-                }
-              ]}
-            >
-              <TouchableOpacity activeOpacity={1}>
-                <Text style={sideMenuStyles.menuHeader}>Menu</Text>
-                {menuItems.map((item, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={sideMenuStyles.menuItem}
-                    onPress={() => {
-                      navigation.navigate(item.screen);
-                      toggleSideMenu();
-                    }}
-                  >
-                    <Text style={sideMenuStyles.menuItemText}>{item.title}</Text>
-                  </TouchableOpacity>
-                ))}
-              </TouchableOpacity>
-            </Animated.View>
-          </TouchableOpacity>
-        </Modal>
-      )}
-
+        <HeaderWithMenu />
+      
       <Text style={styles.title}>Qualification Analytics</Text>
       
       {data && (

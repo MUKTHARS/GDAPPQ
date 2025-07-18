@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import api from '../services/api';
-
+import HeaderWithMenu from '../components/HeaderWithMenu';
 export default function QuestionBank() {
   const [questions, setQuestions] = useState([]);
 
@@ -20,6 +20,7 @@ export default function QuestionBank() {
 
   return (
     <View style={styles.container}>
+        <HeaderWithMenu />
       <FlatList
         data={questions}
         keyExtractor={item => item.id}

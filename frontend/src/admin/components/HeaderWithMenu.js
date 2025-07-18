@@ -24,13 +24,16 @@ const HeaderWithMenu = () => {
     }
   };
 
-  const menuItems = [
+const menuItems = [
+  { title: 'Dashboard', screen: 'Dashboard' },
+  { title: 'Venue Management', screen: 'VenueSetup' },
+   { title: 'Session Config', screen: 'SessionConfig' },
+   { title: 'Session Rules', screen: 'SessionRules' },
     { title: 'Session Calendar', screen: 'SessionCalendar' },
     { title: 'Student Progress', screen: 'StudentProgress' },
     { title: 'Question Bank', screen: 'QuestionBank' },
-    { title: 'Venue Management', screen: 'VenueSetup' },
-    { title: 'Session Rules', screen: 'SessionRules' },
     { title: 'Analytics', screen: 'Analytics' },
+    { title: 'Bulk Sesison', screen: 'Bulk Session' },
   ];
 
   return (
@@ -92,6 +95,12 @@ const styles = {
     paddingVertical: 10,
     backgroundColor: '#2e86de',
     marginBottom: 20,
+  },
+  menuHeader: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 30,
+    color: '#2e86de',
   },
   hamburgerButton: {
     padding: 10,
