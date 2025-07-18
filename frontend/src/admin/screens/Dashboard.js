@@ -4,8 +4,6 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import QrList from '../components/QrList';
-import QrScreen from './QrScreen';
 
 export default function Dashboard({ navigation }) {
   const [venues, setVenues] = useState([]);
@@ -112,33 +110,6 @@ const handleGenerateQR = async (venueId) => {
       console.error('Error updating venue:', error);
     }
 };
-
-
-  // const handleUpdateVenue = async () => {
-  //   try {
-  //     const updatedVenue = {
-  //       name: venueName,
-  //       capacity: parseInt(venueCapacity),
-  //     };
-      
-  //     await api.put(`/admin/venues/${editingVenue.id}`, updatedVenue, {
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
-  //       }
-  //     });
-      
-  //     // Refresh the venues list
-  //     const response = await api.get('/admin/venues');
-  //     setVenues(response.data);
-      
-  //     // Close the modal
-  //     setEditingVenue(null);
-  //   } catch (error) {
-  //     console.error('Error updating venue:', error);
-  //   }
-  // };
-
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -189,29 +160,6 @@ const handleGenerateQR = async (venueId) => {
 )}
 </View>
       <Text style={styles.title}>GD Session Manager</Text>
-      
-      {/* <Button
-        title="Create New Venue"
-        onPress={() => navigation.navigate('VenueSetup')}
-      />
-      
-      <Button
-        title="Bulk Create Sessions"
-        onPress={() => navigation.navigate('SessionConfig')}
-        style={styles.button}
-      />
-
-      <Button 
-      title="Configure Session Rules" 
-      onPress={() => navigation.navigate('SessionRules')} 
-      />
-
-      <Button
-      title="View Analytics"
-      onPress={() => navigation.navigate('Analytics')}
-      /> */}
-
-      
       <Text style={styles.sectionTitle}>Your Venues</Text>
 
       {/* Edit Venue Modal */}
@@ -309,7 +257,6 @@ const handleGenerateQR = async (venueId) => {
     </View>
   </View>
 ))}
-   <QrList venues={venues} navigation={navigation} />
     </ScrollView>
   );
 }
@@ -402,10 +349,7 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 10,
   },
-   container: { padding: 10 },
-  buttonContainer: {
-    marginVertical: 5
-  },
+ 
  header: {
     flexDirection: 'row',
     alignItems: 'center',
