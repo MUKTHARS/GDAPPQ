@@ -1,20 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { View, FlatList, Text, TouchableOpacity } from 'react-native';
 import api from '../services/api';
+import auth from '../services/auth'; 
 import { globalStyles, colors } from '../assets/globalStyles';
 export default function SessionBooking() {
   const [sessions, setSessions] = useState([]);
   const [level, setLevel] = useState(1);
 
   useEffect(() => {
+    // const fetchSessions = async () => {
+    //   try {
+    //     const response = await api.student.getSessions(level);
+    //     setSessions(response.data);
+    //   } catch (error) {
+    //     console.error(error);
+    //   }
+    // };
+
     const fetchSessions = async () => {
-      try {
-        const response = await api.student.getSessions(level);
-        setSessions(response.data);
-      } catch (error) {
-        console.error(error);
-      }
-    };
+  try {
+    // First verify we have a valid token
+    const authData = await auth.getAuthData();
+    if (!authData.token) {
+      console.error('No token available');
+      // Optionally redirect to login
+      return;
+    }
+
+    const response = await api.student.getSessions(level);
+    console.log('Sessions response:', response.data);
+    setSessions(response.data);
+  } catch (error) {
+    console.error('Error fetching sessions:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    
+    if (error.response?.status === 403) {
+      // Token might be invalid, try to refresh or logout
+      console.log('Forbidden access - possible token issue');
+      // Optionally: await auth.logout();
+      // Optionally: navigation.navigate('Login');
+    }
+  }
+};
+
     fetchSessions();
   }, [level]);
 
