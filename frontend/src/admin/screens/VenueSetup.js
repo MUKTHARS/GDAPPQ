@@ -44,7 +44,7 @@ const handleSubmit = async () => {
 
   return (
     <View style={styles.container}>
-      <HeaderWithMenu />
+     
       <Text style={styles.title}>
         {isEditing ? 'Edit Venue' : 'Create New Venue'}
       </Text>

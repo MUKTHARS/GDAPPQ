@@ -20,7 +20,7 @@ export default function QuestionBank() {
 
   return (
     <View style={styles.container}>
-        <HeaderWithMenu />
+       
       <FlatList
         data={questions}
         keyExtractor={item => item.id}

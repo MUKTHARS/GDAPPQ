@@ -41,7 +41,7 @@ export default function AnalyticsDashboard() {
 
   return (
     <View style={styles.container}>
-        <HeaderWithMenu />
+        
       
       <Text style={styles.title}>Qualification Analytics</Text>
       

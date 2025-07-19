@@ -21,7 +21,7 @@ export default function StudentProgress() {
 
   return (
     <View style={styles.container}>
-        <HeaderWithMenu />
+        
       <View style={styles.filterContainer}>
         <Text 
           style={[styles.filter, filter === 'all' && styles.activeFilter]}

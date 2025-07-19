@@ -20,7 +20,7 @@ export default function BulkSessions() {
 
   return (
     <View>
-      <HeaderWithMenu />
+     
       {sessions.map((session, index) => (
         <View key={index}>
           <TextInput

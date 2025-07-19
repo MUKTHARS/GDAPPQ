@@ -22,7 +22,7 @@ export default function SessionRules() {
 
   return (
     <View style={styles.container}>
-        <HeaderWithMenu />
+       
       <Text style={styles.header}>GD Level {rules.level} Rules</Text>
       
       <View style={styles.ruleItem}>

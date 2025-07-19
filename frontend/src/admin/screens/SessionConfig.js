@@ -56,7 +56,7 @@ export default function SessionConfig() {
 
   return (
     <View style={{ padding: 20 }}>
-      <HeaderWithMenu />
+     
       <Picker
         selectedValue={selectedVenue}
         onValueChange={setSelectedVenue}

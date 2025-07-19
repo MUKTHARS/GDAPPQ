@@ -1,4 +1,4 @@
-// src/admin/navigation/AdminStack.js
+// AdminStack.js
 import { createStackNavigator } from '@react-navigation/stack';
 import LoginScreen from '../screens/LoginScreen';
 import Dashboard from '../screens/Dashboard';
@@ -11,12 +11,10 @@ import SessionCalendar from '../screens/SessionCalendar';
 import StudentProgress from '../screens/StudentProgress';
 import QuestionBank from '../screens/QuestionBank';
 import BulkSessions from '../screens/BulkSessions';
-import React from 'react';
-
+import AdminHamburgerHeader from '../components/AdminHamburgerHeader';
 const Stack = createStackNavigator();
 
 const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
-  // Create a wrapped LoginScreen component that calls onLoginSuccess
   const LoginScreenWrapper = (props) => (
     <LoginScreen 
       {...props} 
@@ -32,112 +30,66 @@ const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
   return (
     <Stack.Navigator 
       initialRouteName={initialRouteName}
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#2e86de',
+      screenOptions={({ route }) => ({
+        header: ({ navigation }) => {
+          if (route.name === 'Login') {
+            return null;
+          }
+          return (
+            <AdminHamburgerHeader 
+              title={getHeaderTitle(route)} 
+              navigation={navigation} 
+            />
+          );
         },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      }}
+      })}
     >
       <Stack.Screen 
         name="Login" 
         component={LoginScreenWrapper}
         options={{ headerShown: false }}
       />
-      <Stack.Screen 
-        name="Dashboard" 
-        component={Dashboard} 
-        options={{ title: 'Admin Dashboard' }} 
+      <Stack.Screen name="Dashboard" component={Dashboard} />
+      <Stack.Screen name="VenueSetup" component={VenueSetup} />
+       <Stack.Screen name="Bulk Session" component={BulkSessions} />
+      <Stack.Screen name="SessionConfig" component={SessionConfig} />
+      <Stack.Screen name="QrScreen" component={QrScreen} options={{ title: 'Venue QR Code' }}
       />
-      <Stack.Screen 
-        name="VenueSetup" 
-        component={VenueSetup} 
-        options={{ title: 'Venue Setup' }} 
-      />
-      <Stack.Screen 
-        name="Bulk Session" 
-        component={BulkSessions} 
-        options={{ title: 'Bulk Session Setup' }} 
-      />
-      <Stack.Screen 
-        name="SessionConfig" 
-        component={SessionConfig} 
-        options={{ title: 'Session Configuration' }} 
-      />
-      <Stack.Screen 
-        name="QrScreen" 
-        component={QrScreen} 
-        options={{ title: 'Venue QR Code' }}
-      />
-      <Stack.Screen 
-        name="SessionRules" 
-        component={SessionRules} 
-        options={{ title: 'Session Rules' }} 
-      />
-      <Stack.Screen 
-        name="Analytics" 
-        component={AnalyticsDashboard} 
-        options={{ title: 'Analytics Dashboard' }} 
-      />
-      <Stack.Screen 
-        name="SessionCalendar" 
-        component={SessionCalendar} 
-        options={{ title: 'Session Calendar' }} 
-      />
-      <Stack.Screen 
-        name="StudentProgress" 
-        component={StudentProgress} 
-        options={{ title: 'Student Progress' }} 
-      />
-      <Stack.Screen 
-        name="QuestionBank" 
-        component={QuestionBank} 
-        options={{ title: 'Question Bank' }} 
-      />
+      <Stack.Screen name="SessionRules" component={SessionRules} />
+      <Stack.Screen name="Analytics" component={AnalyticsDashboard} />
+      <Stack.Screen name="SessionCalendar" component={SessionCalendar} />
+      <Stack.Screen name="StudentProgress" component={StudentProgress} />
+      <Stack.Screen name="QuestionBank" component={QuestionBank} />
     </Stack.Navigator>
   );
+}
+const getHeaderTitle = (route) => {
+  const routeName = route.name;
+  
+  switch (routeName) {
+    case 'Dashboard':
+      return 'Admin Dashboard';
+    case 'VenueSetup':
+      return 'Venue Setup';
+    case 'SessionConfig':
+      return 'Session Configuration';
+    case 'QrScreen':
+      return 'Venue QR Code';
+    case 'SessionRules':
+      return 'Session Rules';
+    case 'Analytics':
+      return 'Analytics Dashboard';
+    case 'SessionCalendar':
+      return 'Session Calendar';
+    case 'StudentProgress':
+      return 'Student Progress';
+    case 'QuestionBank':
+      return 'Question Bank';
+    case 'Bulk Session':
+      return 'Bulk Session Setup';
+    default:
+      return '';
+  }
 };
 
 export default AdminStack;
-
-// // AdminStack.js
-// import { createStackNavigator } from '@react-navigation/stack';
-// import LoginScreen from '../screens/LoginScreen';
-// import Dashboard from '../screens/Dashboard';
-// import VenueSetup from '../screens/VenueSetup';
-// import SessionConfig from '../screens/SessionConfig';
-// import QrScreen from '../screens/QrScreen';
-// import SessionRules from '../screens/SessionRules';
-// import AnalyticsDashboard from '../screens/AnalyticsDashboard';
-// import SessionCalendar from '../screens/SessionCalendar';
-// import StudentProgress from '../screens/StudentProgress';
-// import QuestionBank from '../screens/QuestionBank';
-// import BulkSessions from '../screens/BulkSessions';
-
-// const Stack = createStackNavigator();
-
-// export default function AdminStack() {
-//   return (
-//     <Stack.Navigator initialRouteName="Login">
-//       <Stack.Screen 
-//         name="Login" 
-//         component={LoginScreen}
-//         options={{ headerShown: false }}
-//       />
-//       <Stack.Screen name="Dashboard" component={Dashboard} />
-//       <Stack.Screen name="VenueSetup" component={VenueSetup} />
-//        <Stack.Screen name="Bulk Session" component={BulkSessions} />
-//       <Stack.Screen name="SessionConfig" component={SessionConfig} />
-//       <Stack.Screen name="QrScreen" component={QrScreen} options={{ title: 'Venue QR Code' }}
-//       />
-//       <Stack.Screen name="SessionRules" component={SessionRules} />
-//       <Stack.Screen name="Analytics" component={AnalyticsDashboard} />
-//       <Stack.Screen name="SessionCalendar" component={SessionCalendar} />
-//       <Stack.Screen name="StudentProgress" component={StudentProgress} />
-//       <Stack.Screen name="QuestionBank" component={QuestionBank} />
-//     </Stack.Navigator>
-//   );
-// }

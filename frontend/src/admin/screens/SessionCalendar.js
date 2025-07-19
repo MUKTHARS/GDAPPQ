@@ -26,7 +26,7 @@ export default function SessionCalendar() {
 
   return (
     <View style={styles.container}>
-        <HeaderWithMenu />
+        
       <CalendarPicker
         onDateChange={onDateChange}
         selectedStartDate={selectedDate}

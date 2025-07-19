@@ -114,147 +114,101 @@ const handleGenerateQR = async (venueId) => {
 };
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-  <TouchableOpacity onPress={toggleSideMenu} style={styles.hamburgerButton}>
-    <View style={styles.hamburgerLine} />
-    <View style={styles.hamburgerLine} />
-    <View style={styles.hamburgerLine} />
-  </TouchableOpacity>
-  {/* Side Menu */}
-{showSideMenu && (
-  <Modal
-    visible={showSideMenu}
-    transparent={true}
-    animationType="none"
-    onRequestClose={() => setShowSideMenu(false)}
-  >
-    <TouchableOpacity 
-      style={styles.overlay} 
-      activeOpacity={1} 
-      onPress={() => toggleSideMenu()}
-    >
-      <Animated.View 
-        style={[
-          styles.sideMenu,
-          {
-            transform: [{ translateX: slideAnim }]
-          }
-        ]}
-      >
-        <TouchableOpacity activeOpacity={1}>
-          <Text style={styles.menuHeader}>Menu</Text>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.menuItem}
-              onPress={() => {
-                navigation.navigate(item.screen);
-                toggleSideMenu();
-              }}
-            >
-              <Text style={styles.menuItemText}>{item.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </TouchableOpacity>
-      </Animated.View>
-    </TouchableOpacity>
-  </Modal>
-)}
-</View>
-      <Text style={styles.title}>GD Session Manager</Text>
-      <Text style={styles.sectionTitle}>Your Venues</Text>
 
-      {/* Edit Venue Modal */}
-      <Modal
-        visible={!!editingVenue}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditingVenue(null)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Venue</Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Venue Name"
-              value={venueName}
-              onChangeText={setVenueName}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Capacity"
-              value={venueCapacity}
-              onChangeText={setVenueCapacity}
-              keyboardType="numeric"
-            />
-            
-            <View style={styles.modalButtons}>
-              <Button title="Cancel" onPress={() => setEditingVenue(null)} />
-              <Button title="Save" onPress={handleUpdateVenue} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+                      <Text style={styles.title}>GD Session Manager</Text>
+                      <Text style={styles.sectionTitle}>Your Venues</Text>
 
-      {/* QR Code Modal */}
-      <Modal
-        visible={showQRModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowQRModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Venue QR Code</Text>
-            
-            {currentQR ? (
-              <>
-                <View style={styles.qrContainer}>
-                  <QRCode
-                    value={currentQR}
-                    size={200}
-                    color="black"
-                    backgroundColor="white"
-                  />
-                </View>
-                <Text style={styles.expiryText}>Valid until: {expiryTime}</Text>
-              </>
-            ) : (
-              <Text>Generating QR code...</Text>
-            )}
-            
-            <View style={styles.modalButtons}>
-              <Button title="Close" onPress={() => setShowQRModal(false)} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+                      {/* Edit Venue Modal */}
+                      <Modal
+                        visible={!!editingVenue}
+                        animationType="slide"
+                        transparent={true}
+                        onRequestClose={() => setEditingVenue(null)}
+                      >
+                        <View style={styles.modalContainer}>
+                          <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Edit Venue</Text>
+                            
+                            <TextInput
+                              style={styles.input}
+                              placeholder="Venue Name"
+                              value={venueName}
+                              onChangeText={setVenueName}
+                            />
+                            
+                            <TextInput
+                              style={styles.input}
+                              placeholder="Capacity"
+                              value={venueCapacity}
+                              onChangeText={setVenueCapacity}
+                              keyboardType="numeric"
+                            />
+                            
+                            <View style={styles.modalButtons}>
+                              <Button title="Cancel" onPress={() => setEditingVenue(null)} />
+                              <Button title="Save" onPress={handleUpdateVenue} />
+                            </View>
+                          </View>
+                        </View>
+                      </Modal>
 
-      {venues.map(venue => (
-  <View key={venue.id} style={styles.venueCard}>
-    <View style={styles.venueInfo}>
-      <Text style={styles.venueName}>{venue.name}</Text>
-      <Text>Capacity: {venue.capacity}</Text>
-    </View>
-    
-    <View style={styles.venueActions}>
-      <TouchableOpacity 
-        onPress={() => {
-          setEditingVenue(venue);
-          setVenueName(venue.name);
-          setVenueCapacity(venue.capacity.toString());
-        }}
-      >
-        <Icon name="edit" size={24} color="#555" />
-      </TouchableOpacity>
-      
-      <TouchableOpacity 
-        onPress={() => navigation.navigate('QrScreen', { venue })}
-        style={styles.qrButton}
-      >
-        <Icon name="qr-code-2" size={24} color="#2e86de" />
+                      {/* QR Code Modal */}
+                      <Modal
+                        visible={showQRModal}
+                        animationType="slide"
+                        transparent={true}
+                        onRequestClose={() => setShowQRModal(false)}
+                      >
+                        <View style={styles.modalContainer}>
+                          <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Venue QR Code</Text>
+                            
+                            {currentQR ? (
+                              <>
+                                <View style={styles.qrContainer}>
+                                  <QRCode
+                                    value={currentQR}
+                                    size={200}
+                                    color="black"
+                                    backgroundColor="white"
+                                  />
+                                </View>
+                                <Text style={styles.expiryText}>Valid until: {expiryTime}</Text>
+                              </>
+                            ) : (
+                              <Text>Generating QR code...</Text>
+                            )}
+                            
+                            <View style={styles.modalButtons}>
+                              <Button title="Close" onPress={() => setShowQRModal(false)} />
+                            </View>
+                          </View>
+                        </View>
+                      </Modal>
+
+                      {venues.map(venue => (
+                     <View key={venue.id} style={styles.venueCard}>
+                      <View style={styles.venueInfo}>
+                      <Text style={styles.venueName}>{venue.name}</Text>
+                      <Text>Capacity: {venue.capacity}</Text>
+                      </View>
+                    
+                      <View style={styles.venueActions}>
+                      <TouchableOpacity 
+                        onPress={() => {
+                          setEditingVenue(venue);
+                          setVenueName(venue.name);
+                          setVenueCapacity(venue.capacity.toString());
+                        }}
+                      >
+                        <Icon name="edit" size={24} color="#555" />
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                onPress={() => navigation.navigate('QrScreen', { venue })}
+                style={styles.qrButton}
+              >
+                <Icon name="qr-code-2" size={24} color="#2e86de" />
       </TouchableOpacity>
     </View>
   </View>
