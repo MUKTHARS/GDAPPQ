@@ -1,7 +1,8 @@
+// \GDAPPC\frontend\src\student\screens\LoginScreen.js
 import React, { useState } from 'react';
 import { View, TextInput, Button, Alert, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import auth from '../services/auth';
-
+import { CommonActions } from '@react-navigation/native';
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('student1@example.com');
   const [password, setPassword] = useState('password123');
@@ -16,7 +17,12 @@ export default function LoginScreen({ navigation }) {
     setIsLoading(true);
     try {
       await auth.login(email.trim(), password);
-      navigation.replace('StudentStack'); // Changed to student dashboard
+      navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'SessionBooking' }],
+      })
+    );
     } catch (error) {
       Alert.alert(
         'Login Failed',

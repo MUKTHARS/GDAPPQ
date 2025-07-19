@@ -3,7 +3,8 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Modal, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { globalStyles, colors } from '../assets/globalStyles';
-
+import { CommonActions } from '@react-navigation/native';
+import auth from '../services/auth';
 const MenuModal = ({ visible, onClose, navigation }) => {
   const menuItems = [
     { name: 'SessionBooking', title: 'Available Sessions', icon: 'event' },
@@ -18,11 +19,20 @@ const MenuModal = ({ visible, onClose, navigation }) => {
     onClose();
   };
 
-  const handleLogout = () => {
-    // Handle logout logic here
-    onClose();
-    navigation.navigate('Login');
-  };
+const handleLogout = async () => {
+  try {
+    await auth.logout();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'Login' }], 
+      })
+    );
+  } catch (error) {
+    console.error('Logout failed:', error);
+    Alert.alert('Error', 'Failed to logout');
+  }
+};
 
   return (
     <Modal

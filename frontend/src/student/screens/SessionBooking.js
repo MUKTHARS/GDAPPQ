@@ -8,15 +8,6 @@ export default function SessionBooking() {
   const [level, setLevel] = useState(1);
 
   useEffect(() => {
-    // const fetchSessions = async () => {
-    //   try {
-    //     const response = await api.student.getSessions(level);
-    //     setSessions(response.data);
-    //   } catch (error) {
-    //     console.error(error);
-    //   }
-    // };
-
     const fetchSessions = async () => {
   try {
     // First verify we have a valid token

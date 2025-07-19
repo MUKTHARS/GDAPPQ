@@ -77,70 +77,10 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(session)
 }
 
-// SubmitSurvey handles survey responses
-// func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
-// 	var request struct {
-// 		SessionID string                     `json:"session_id"`
-// 		StudentID string                     `json:"student_id"`
-// 		Responses map[int]map[int]string `json:"responses"` // question_number -> rank -> student_id
-// 	}
-
-// 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-// 		w.WriteHeader(http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	tx, err := database.GetDB().Begin()
-// 	if err != nil {
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	// Delete existing responses if any
-// 	_, err = tx.Exec("DELETE FROM survey_responses WHERE responder_id = ? AND session_id = ?", 
-// 		request.StudentID, request.SessionID)
-// 	if err != nil {
-// 		tx.Rollback()
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	// Insert new responses
-// 	for qNum, rankings := range request.Responses {
-// 		for rank, studentID := range rankings {
-// 			_, err := tx.Exec(`
-// 				INSERT INTO survey_responses 
-// 				(id, session_id, responder_id, question_number, 
-// 				first_place, second_place, third_place)
-// 				VALUES (UUID(), ?, ?, ?, 
-// 					IF(?=1,?,NULL), 
-// 					IF(?=2,?,NULL), 
-// 					IF(?=3,?,NULL))`,
-// 				request.SessionID, request.StudentID, qNum,
-// 				rank, studentID,
-// 				rank, studentID,
-// 				rank, studentID,
-// 			)
-// 			if err != nil {
-// 				tx.Rollback()
-// 				w.WriteHeader(http.StatusInternalServerError)
-// 				return
-// 			}
-// 		}
-// 	}
-
-// 	if err := tx.Commit(); err != nil {
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	w.WriteHeader(http.StatusOK)
-// 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
-// }
 
 type SurveyResponse struct {
 	Question int               `json:"question"`
-	Rankings map[int]string    `json:"rankings"` // rank -> student_id
+	Rankings map[int]string    `json:"rankings"` 
 }
 
 func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {

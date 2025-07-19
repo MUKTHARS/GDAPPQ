@@ -8,36 +8,39 @@ const api = axios.create({
     : 'http://localhost:8080',
 });
 
-
 api.interceptors.request.use(async (config) => {
-  console.log('Making request to:', config.url);
   try {
     const token = await AsyncStorage.getItem('token');
     if (token) {
-      console.log('Adding auth token to headers');
-      // Remove any quotes and whitespace from the token
       const cleanToken = token.replace(/['"]+/g, '').trim();
       config.headers.Authorization = `Bearer ${cleanToken}`;
-      
-      // Add debug log for the token being sent
-      console.log('Token being sent:', cleanToken);
+    } else {
+      // Don't throw error, just continue without token
+      console.log('No token available - proceeding without authorization');
     }
   } catch (error) {
     console.error('Error getting token:', error);
+    // Don't throw error, just continue without token
   }
   return config;
 }, error => {
-  console.error('Request error:', error);
   return Promise.reject(error);
 });
-
 // api.interceptors.request.use(async (config) => {
 //   console.log('Making request to:', config.url);
-//   const token = await AsyncStorage.getItem('token');
-//   if (token) {
-//     console.log('Adding auth token to headers');
-//     const cleanToken = token.replace(/^"(.*)"$/, '$1');
-//     config.headers.Authorization = `Bearer ${cleanToken}`;
+//   try {
+//     const token = await AsyncStorage.getItem('token');
+//     if (token) {
+//       console.log('Adding auth token to headers');
+//       // Remove any quotes and whitespace from the token
+//       const cleanToken = token.replace(/['"]+/g, '').trim();
+//       config.headers.Authorization = `Bearer ${cleanToken}`;
+      
+//       // Add debug log for the token being sent
+//       console.log('Token being sent:', cleanToken);
+//     }
+//   } catch (error) {
+//     console.error('Error getting token:', error);
 //   }
 //   return config;
 // }, error => {

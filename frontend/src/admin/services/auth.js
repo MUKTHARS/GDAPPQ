@@ -24,8 +24,13 @@ export default {
   },
   
   logout: async () => {
-    await AsyncStorage.removeItem('token');
-    delete api.defaults.headers.common['Authorization'];
+    try {
+      await AsyncStorage.multiRemove(['token', 'role', 'level']);
+      return true; // Indicate successful logout
+    } catch (error) {
+      console.error('Logout error:', error);
+      return false;
+    }
   },
   
   getToken: async () => {

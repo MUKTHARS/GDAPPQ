@@ -31,34 +31,6 @@ export default {
   }
 },
 
-  // login: async (email, password) => {
-  //   try {
-  //     const response = await api.post('/student/login', { 
-  //       email: email.trim().toLowerCase(), 
-  //       password 
-  //     });
-      
-  //     if (!response.data?.token) {
-  //       throw new Error('Authentication failed - no token received');
-  //     }
-
-  //     await AsyncStorage.multiSet([
-  //       ['token', response.data.token],
-  //       ['role', 'student'],
-  //       ['level', String(response.data.level || 1)]
-  //     ]);
-      
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error('Login error:', error);
-  //     // Extract the error message more reliably
-  //     const errorMessage = error.response?.data?.error || 
-  //                        error.message || 
-  //                        'Invalid credentials';
-  //     throw new Error(errorMessage);
-  //   }
-  // },
-  
    logout: async () => {
     await AsyncStorage.multiRemove(['token', 'role', 'level']);
   },

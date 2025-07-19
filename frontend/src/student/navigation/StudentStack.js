@@ -17,29 +17,21 @@ const StudentStack = () => {
   return (
     <Stack.Navigator
       screenOptions={({ route }) => ({
-        header: () => <HamburgerHeader title={getHeaderTitle(route)} />,
+        header: ({ navigation }) => {
+          // Don't show header for Login screen
+          if (route.name === 'Login') {
+            return null;
+          }
+          return <HamburgerHeader title={getHeaderTitle(route)} navigation={navigation} />;
+        },
       })}
     >
-      <Stack.Screen 
-        name="SessionBooking" 
-        component={SessionBooking}
-      />
-      <Stack.Screen 
-        name="QrScanner" 
-        component={QrScannerScreen}
-      />
-      <Stack.Screen 
-        name="GdSession" 
-        component={GdSessionScreen}
-      />
-      <Stack.Screen 
-        name="Survey" 
-        component={SurveyScreen}
-      />
-      <Stack.Screen 
-        name="Results" 
-        component={ResultsScreen}
-      />
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="SessionBooking" component={SessionBooking} />
+      <Stack.Screen name="QrScanner" component={QrScannerScreen} />
+      <Stack.Screen name="GdSession" component={GdSessionScreen} />
+      <Stack.Screen name="Survey" component={SurveyScreen} />
+      <Stack.Screen name="Results" component={ResultsScreen} />
     </Stack.Navigator>
   );
 };
@@ -65,51 +57,3 @@ const getHeaderTitle = (route) => {
 };
 
 export default StudentStack;
-
-// import { createStackNavigator } from '@react-navigation/stack';
-// import LoginScreen from '../screens/LoginScreen';
-// import SessionBooking from '../screens/SessionBooking';
-// import QrScannerScreen from '../screens/QrScannerScreen';
-// import GdSessionScreen from '../screens/GdSessionScreen';
-// import SurveyScreen from '../screens/SurveyScreen';
-// import ResultsScreen from '../screens/ResultsScreen';
-
-// const Stack = createStackNavigator();
-
-// export default function StudentStack() {
-//   return (
-//     <Stack.Navigator initialRouteName="Login">
-//       <Stack.Screen 
-//         name="Login" 
-//         component={LoginScreen}
-//         options={{ headerShown: false }}
-//       />
-//       <Stack.Screen 
-//         name="SessionBooking" 
-//         component={SessionBooking}
-//         options={{ title: 'Available Sessions' }}
-//       />
-//       <Stack.Screen 
-//         name="QrScanner" 
-//         component={QrScannerScreen}
-//         options={{ title: 'Scan QR Code' }}
-//       />
-//       <Stack.Screen 
-//         name="GdSession" 
-//         component={GdSessionScreen}
-//         options={{ headerShown: false }}
-//       />
-//       <Stack.Screen 
-//         name="Survey" 
-//         component={SurveyScreen}
-//         options={{ title: 'GD Survey' }}
-//       />
-//       <Stack.Screen 
-//         name="Results" 
-//         component={ResultsScreen}
-//         options={{ title: 'GD Results' }}
-//       />
-//     </Stack.Navigator>
-//   );
-// }
-

@@ -20,17 +20,40 @@ type StudentClaims struct {
 
 
 func GenerateStudentToken(id string, level int) (string, error) {
-	claims := &StudentClaims{
-		UserID: id,
-		Role:   "student",
-		Level:  level,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(secret)
+    claims := &StudentClaims{
+        UserID: id,
+        Role:   "student",
+        Level:  level,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+            IssuedAt:  jwt.NewNumericDate(time.Now()),
+            NotBefore: jwt.NewNumericDate(time.Now()),
+            Issuer:    "gd-app",
+        },
+    }
+    
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    tokenString, err := token.SignedString(secret)
+    if err != nil {
+        return "", err
+    }
+    
+    log.Printf("Generated token for user %s (level %d)", id, level)
+    return tokenString, nil
 }
+
+// func GenerateStudentToken(id string, level int) (string, error) {
+// 	claims := &StudentClaims{
+// 		UserID: id,
+// 		Role:   "student",
+// 		Level:  level,
+// 		RegisteredClaims: jwt.RegisteredClaims{
+// 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+// 		},
+// 	}
+// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+// 	return token.SignedString(secret)
+// }
 
 func VerifyStudentToken(tokenString string) (*StudentClaims, error) {
     if tokenString == "" {
@@ -65,10 +88,13 @@ func VerifyStudentToken(tokenString string) (*StudentClaims, error) {
 
 
 func init() {
-    if len(secret) == 0 {
-        secret = []byte("password123") // Fallback for development
+    secretStr := os.Getenv("JWT_SECRET_STUDENT")
+    if secretStr == "" {
+        secretStr = "password123" // Fallback for development
         log.Println("WARNING: Using default JWT secret - configure JWT_SECRET_STUDENT for production")
     }
+    secret = []byte(secretStr)
+    log.Printf("JWT secret initialized (length: %d)", len(secret))
 }
 
 
