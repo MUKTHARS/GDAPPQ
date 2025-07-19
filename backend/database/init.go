@@ -242,7 +242,26 @@ _, err = db.Exec(
 if err != nil {
     log.Printf("Error inserting test student: %v", err)
 }
-  
+  _, err = db.Exec(`
+	INSERT IGNORE INTO survey_responses
+	(id, question_text, weight, applicable_levels) VALUES 
+	('q1', 'Clarity of arguments', 1.5, '[1,2]'),
+	('q2', 'Teamwork and collaboration', 1.2, '[1,2]'),
+	('q3', 'Logical reasoning', 1.3, '[1,2]')`)
+if err != nil {
+	log.Printf("Error inserting survey questions: %v", err)
+}
+
+// Add sample qualification data
+_, err = db.Exec(`
+	INSERT IGNORE INTO qualifications 
+	(session_id, student_id, final_score, qualified_for_level, feedback) VALUES 
+	('session1', 'student1', 
+	 '{"leadership": 4.2, "communication": 3.8, "teamwork": 4.0}', 
+	 2, 'Good participation but needs to work on time management')`)
+if err != nil {
+	log.Printf("Error inserting qualification data: %v", err)
+}
     log.Println("Database initialization completed successfully!")
     return nil
 }

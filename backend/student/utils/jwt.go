@@ -1,14 +1,14 @@
 package jwt
 
 import (
-	"log"
+	// "log"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var secret = []byte(os.Getenv("JWT_SECRET"))
+var secret = []byte(os.Getenv("JWT_SECRET_STUDENT"))
 
 type StudentClaims struct {
 	UserID string `json:"user_id"`
@@ -16,6 +16,7 @@ type StudentClaims struct {
 	Level  int    `json:"level"`
 	jwt.RegisteredClaims
 }
+
 
 func GenerateStudentToken(id string, level int) (string, error) {
 	claims := &StudentClaims{
@@ -26,7 +27,6 @@ func GenerateStudentToken(id string, level int) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 		},
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)
 }
@@ -37,7 +37,6 @@ func VerifyStudentToken(tokenString string) (*StudentClaims, error) {
 	})
 	
 	if err != nil {
-		log.Printf("JWT verification error: %v", err)
 		return nil, err
 	}
 	
@@ -47,6 +46,38 @@ func VerifyStudentToken(tokenString string) (*StudentClaims, error) {
 	
 	return nil, jwt.ErrInvalidKey
 }
+
+
+// func GenerateStudentToken(id string, level int) (string, error) {
+// 	claims := &StudentClaims{
+// 		UserID: id,
+// 		Role:   "student",
+// 		Level:  level,
+// 		RegisteredClaims: jwt.RegisteredClaims{
+// 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+// 		},
+// 	}
+
+// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+// 	return token.SignedString(secret)
+// }
+
+// func VerifyStudentToken(tokenString string) (*StudentClaims, error) {
+// 	token, err := jwt.ParseWithClaims(tokenString, &StudentClaims{}, func(t *jwt.Token) (interface{}, error) {
+// 		return secret, nil
+// 	})
+	
+// 	if err != nil {
+// 		log.Printf("JWT verification error: %v", err)
+// 		return nil, err
+// 	}
+	
+// 	if claims, ok := token.Claims.(*StudentClaims); ok && token.Valid {
+// 		return claims, nil
+// 	}
+	
+// 	return nil, jwt.ErrInvalidKey
+// }
 
 // package jwt
 
