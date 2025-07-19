@@ -39,6 +39,7 @@ func InitDB(db *sql.DB) error {
             year INT NOT NULL,
             photo_url VARCHAR(255),
             current_gd_level INT DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
 
@@ -151,10 +152,9 @@ func InitDB(db *sql.DB) error {
         ('staff1', 'staff@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'admin1')`,
 
         // Students
-        `INSERT IGNORE INTO student_users (id, email, password_hash, full_name, department, year) VALUES 
-        ('student1', 'student1@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'John Doe', 'CS', 3),
-        ('student2', 'student2@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'Jane Smith', 'ECE', 2)`,
-
+`INSERT IGNORE INTO student_users (id, email, password_hash, full_name, department, year, is_active) VALUES 
+('student1', 'student1@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'John Doe', 'CS', 3, TRUE),
+('student2', 'student2@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'Jane Smith', 'ECE', 2, TRUE)`,
         // Venues
         `INSERT IGNORE INTO venues (id, name, capacity, qr_secret, created_by) VALUES 
         ('venue1', 'Table 1-A', 10, 'venue1_secret123', 'admin1'),
@@ -195,6 +195,29 @@ if err != nil {
     log.Printf("Warning: inserting admin user: %v", err)
 }
 
+hashedStudentPassword, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+if err != nil {
+    log.Printf("Error hashing password: %v", err)
+    // return
+}
+
+_, err = db.Exec(
+    `INSERT INTO student_users 
+    (id, email, password_hash, full_name, department, year, is_active) 
+    VALUES (?, ?, ?, ?, ?, ?, ?) 
+    ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)`,
+    "student1",
+    "student1@example.com",
+    string(hashedStudentPassword),
+    "Test Student",
+    "CS",
+    3,
+    true,
+)
+if err != nil {
+    log.Printf("Error inserting test student: %v", err)
+}
+  
     log.Println("Database initialization completed successfully!")
     return nil
 }

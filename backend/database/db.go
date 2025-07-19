@@ -15,7 +15,7 @@ var DB *sql.DB
 // Initialize handles all database setup
 func Initialize() error {
 	// Load .env file
-	err := godotenv.Load("admin/.env")
+	err := godotenv.Load("../.env")
 	if err != nil {
 		return err
 	}
@@ -47,19 +47,3 @@ func GetDB() *sql.DB {
 	return DB
 }
 
-// package database
-
-// import "database/sql"
-
-// // DB is the global database connection
-// var DB *sql.DB
-
-// // SetDB sets the global database connection
-// func SetDB(database *sql.DB) {
-//     DB = database
-// }
-
-// // GetDB returns the global database connection
-// func GetDB() *sql.DB {
-//     return DB
-// }

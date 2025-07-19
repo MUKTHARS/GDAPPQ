@@ -13,12 +13,10 @@ import (
 
 func SetupAdminRoutes() *http.ServeMux {
 	router := http.NewServeMux()
-	
+
 	// Auth routes
 	router.Handle("/admin/login", http.HandlerFunc(controllers.AdminLogin))
 
-	
-	
 	// QR routes
     router.Handle("/admin/qr", middleware.AdminOnly(http.HandlerFunc(controllers.GenerateQR)))
     
@@ -38,6 +36,7 @@ func SetupAdminRoutes() *http.ServeMux {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
 })))
+
 router.Handle("/admin/venues/", middleware.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPut {
         controllers.UpdateVenue(w, r)
@@ -45,7 +44,6 @@ router.Handle("/admin/venues/", middleware.AdminOnly(http.HandlerFunc(func(w htt
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
 })))
-
 
 router.Handle("/admin/rules", middleware.AdminOnly(
 	http.HandlerFunc(controllers.UpdateSessionRules)))
