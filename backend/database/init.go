@@ -133,6 +133,31 @@ func InitDB(db *sql.DB) error {
         FROM student_users
         JOIN qualifications ON student_users.id = qualifications.student_id
         GROUP BY department`,
+
+        `CREATE TABLE IF NOT EXISTS gd_session_topics (
+    session_id VARCHAR(36) PRIMARY KEY,
+    topic TEXT NOT NULL,
+    prep_materials JSON,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
+)`,
+
+`CREATE TABLE IF NOT EXISTS session_phase_tracking (
+    session_id VARCHAR(36),
+    student_id VARCHAR(36),
+    phase ENUM('prep', 'discussion', 'survey') NOT NULL,
+    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, student_id, phase),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
+)`,
+
+// Insert sample session topic
+`INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
+('session1', 'The impact of AI on modern education')`,
+
+// Insert sample phase tracking
+`INSERT IGNORE INTO session_phase_tracking (session_id, student_id, phase) VALUES 
+('session1', 'student1', 'prep')`,
     }
 
     for _, query := range createTables {
