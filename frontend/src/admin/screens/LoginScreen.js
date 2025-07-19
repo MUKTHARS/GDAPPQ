@@ -1,8 +1,9 @@
+// src/admin/screens/LoginScreen.js
 import React, { useState } from 'react';
 import { View, TextInput, Button, Alert, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import auth from '../services/auth';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, onLoginSuccess, onCancel }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -16,7 +17,9 @@ export default function LoginScreen({ navigation }) {
     setIsLoading(true);
     try {
       await auth.login(email.trim(), password);
-      navigation.replace('Dashboard');
+      if (onLoginSuccess) {
+        onLoginSuccess();
+      }
     } catch (error) {
       Alert.alert(
         'Login Failed',
@@ -52,13 +55,22 @@ export default function LoginScreen({ navigation }) {
       {isLoading ? (
         <ActivityIndicator size="large" color="#2e86de" style={styles.loader} />
       ) : (
-        <TouchableOpacity 
-          style={styles.loginButton} 
-          onPress={handleLogin}
-          disabled={isLoading}
-        >
-          <Text style={styles.loginButtonText}>Login</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity 
+            style={styles.loginButton} 
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.cancelButton} 
+            onPress={onCancel}
+            disabled={isLoading}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </>
       )}
     </View>
   );
@@ -96,7 +108,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 10,
   },
+  cancelButton: {
+    backgroundColor: '#e74c3c',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
   loginButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  cancelButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
