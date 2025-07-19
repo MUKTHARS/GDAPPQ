@@ -48,7 +48,7 @@ export default function SessionConfig() {
       });
       Alert.alert('Success', 'Session created successfully');
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to create session');
+      error.message('Error', error.message || 'Failed to create session');
     } finally {
       setIsLoading(false);
     }
