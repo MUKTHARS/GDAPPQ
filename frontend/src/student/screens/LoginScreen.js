@@ -16,7 +16,7 @@ export default function LoginScreen({ navigation }) {
     setIsLoading(true);
     try {
       await auth.login(email.trim(), password);
-      navigation.replace('SessionBooking'); // Changed to student dashboard
+      navigation.replace('StudentStack'); // Changed to student dashboard
     } catch (error) {
       Alert.alert(
         'Login Failed',
