@@ -46,6 +46,7 @@ api.interceptors.response.use(response => {
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
+  bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   joinSession: (qrData) => api.post('/student/sessions/join', { qr_data: qrData })
 };
 
