@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
-import CalendarPicker from 'react-native-calendar-picker';
+// import CalendarPicker from 'react-native-calendar-picker';
 import api from '../services/api';
 import HeaderWithMenu from '../components/HeaderWithMenu';
 export default function SessionCalendar() {

@@ -30,7 +30,7 @@ func GetVenues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query("SELECT id, name, capacity, session_timing,table_details FROM venues WHERE is_active = TRUE")
+	rows, err := db.Query("SELECT id, name, capacity, FROM venues WHERE is_active = TRUE")
 	if err != nil {
 		log.Printf("Error fetching venues: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -42,7 +42,7 @@ func GetVenues(w http.ResponseWriter, r *http.Request) {
 	var venues []models.Venue
 	for rows.Next() {
 		var v models.Venue
-		if err := rows.Scan(&v.ID, &v.Name, &v.Capacity, &v.SessionTiming, &v.TableDetails); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Capacity); err != nil {
 			log.Printf("Error scanning venue: %v", err)
 			continue
 		}
@@ -72,8 +72,6 @@ func UpdateVenue(w http.ResponseWriter, r *http.Request) {
         ID       string `json:"id"`
         Name     string `json:"name"`
         Capacity int    `json:"capacity"`
-        SessionTiming string `json:"session_timing"`
-        TableDetails string `json: table_details`
     }
     
     if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -95,9 +93,9 @@ func UpdateVenue(w http.ResponseWriter, r *http.Request) {
 
     _, err := db.Exec(
         `UPDATE venues 
-        SET name = ?, capacity = ? , session_timing = ?, table_details = ?
+        SET name = ?, capacity = ? 
         WHERE id = ? AND is_active = TRUE`,
-        requestBody.Name, requestBody.Capacity, requestBody.ID,requestBody.SessionTiming, requestBody.TableDetails,)
+        requestBody.Name, requestBody.Capacity, requestBody.ID)
     
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)

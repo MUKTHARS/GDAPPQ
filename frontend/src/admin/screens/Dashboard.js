@@ -5,7 +5,13 @@ import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
+
 export default function Dashboard({ navigation }) {
+    const [startDateTime, setStartDateTime] = useState(new Date());
+  const [endDateTime, setEndDateTime] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [venues, setVenues] = useState([]);
   const [editingVenue, setEditingVenue] = useState(null);
   const [venueName, setVenueName] = useState('');
@@ -13,25 +19,7 @@ export default function Dashboard({ navigation }) {
   const [showQRModal, setShowQRModal] = useState(false);
   const [currentQR, setCurrentQR] = useState(null);
   const [expiryTime, setExpiryTime] = useState('');
-  const [showSideMenu, setShowSideMenu] = useState(false);
-  const [slideAnim] = useState(new Animated.Value(-250));
 const isFocused = useIsFocused();
-// const toggleSideMenu = () => {
-//   if (showSideMenu) {
-//     Animated.timing(slideAnim, {
-//       toValue: -250,
-//       duration: 300,
-//       useNativeDriver: true,
-//     }).start(() => setShowSideMenu(false));
-//   } else {
-//     setShowSideMenu(true);
-//     Animated.timing(slideAnim, {
-//       toValue: 0,
-//       duration: 300,
-//       useNativeDriver: true,
-//     }).start();
-//   }
-// };
 
 const menuItems = [
   { title: 'Dashboard', screen: 'Dashboard' },
@@ -88,6 +76,54 @@ const handleGenerateQR = async (venueId) => {
   }
 };
 
+ const formatDate = (date) => {
+    const day = date.getDate();
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const formatTime = (date) => {
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours}:${minutes < 10 ? '0' + minutes : minutes} ${period}`;
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      const newStartDate = new Date(selectedDate);
+      newStartDate.setHours(startDateTime.getHours(), startDateTime.getMinutes());
+      setStartDateTime(newStartDate);
+      
+      const newEndDate = new Date(selectedDate);
+      newEndDate.setHours(endDateTime.getHours(), endDateTime.getMinutes());
+      setEndDateTime(newEndDate);
+    }
+  };
+
+  const handleStartTimeChange = (event, selectedDate) => {
+    setShowStartTimePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setStartDateTime(selectedDate);
+      if (endDateTime <= selectedDate) {
+        const newEndDate = new Date(selectedDate);
+        newEndDate.setHours(newEndDate.getHours() + 1);
+        setEndDateTime(newEndDate);
+      }
+    }
+  };
+
+  const handleEndTimeChange = (event, selectedDate) => {
+    setShowEndTimePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setEndDateTime(selectedDate);
+    }
+  };
+
   const handleUpdateVenue = async () => {
     try {
       const updatedVenue = {
@@ -120,51 +156,94 @@ const handleGenerateQR = async (venueId) => {
 
                       {/* Edit Venue Modal */}
                       <Modal
-        visible={!!editingVenue}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditingVenue(null)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Venue</Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Venue Name"
-              value={venueName}
-              onChangeText={setVenueName}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Capacity"
-              value={venueCapacity}
-              onChangeText={setVenueCapacity}
-              keyboardType="numeric"
-            />
+    visible={!!editingVenue}
+    animationType="slide"
+    transparent={true}
+    onRequestClose={() => setEditingVenue(null)}
+  >
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Edit Venue</Text>
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Venue Name"
+          value={venueName}
+          onChangeText={setVenueName}
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Capacity"
+          value={venueCapacity}
+          onChangeText={setVenueCapacity}
+          keyboardType="numeric"
+        />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Session Timing (e.g., 09:00 AM - 05:00 PM)"
-              value={editingVenue?.session_timing || ''}
-              onChangeText={(text) => setEditingVenue({...editingVenue, session_timing: text})}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Table Details (e.g., Table 2)"
-              value={editingVenue?.table_details || ''}
-              onChangeText={(text) => setEditingVenue({...editingVenue, table_details: text})}
-            />
-            
-            <View style={styles.modalButtons}>
-              <Button title="Cancel" onPress={() => setEditingVenue(null)} />
-              <Button title="Save" onPress={handleUpdateVenue} />
-            </View>
-          </View>
+        <Text style={styles.label}>Session Date:</Text>
+        <Button 
+          title={formatDate(startDateTime)}
+          onPress={() => setShowDatePicker(true)}
+        />
+        
+        <Text style={styles.label}>Session Timing:</Text>
+        <View style={styles.timePickerContainer}>
+          <Button 
+            title={`Start: ${formatTime(startDateTime)}`}
+            onPress={() => setShowStartTimePicker(true)}
+          />
+          <Text style={styles.timeSeparator}>to</Text>
+          <Button 
+            title={`End: ${formatTime(endDateTime)}`}
+            onPress={() => setShowEndTimePicker(true)}
+          />
         </View>
-      </Modal>
+        
+        {showDatePicker && (
+          <DateTimePicker
+            value={startDateTime}
+            mode="date"
+            display="default"
+            onChange={handleDateChange}
+            minimumDate={new Date()}
+          />
+        )}
+        
+        {showStartTimePicker && (
+          <DateTimePicker
+            value={startDateTime}
+            mode="time"
+            is24Hour={false}
+            display="default"
+            onChange={handleStartTimeChange}
+          />
+        )}
+        
+        {showEndTimePicker && (
+          <DateTimePicker
+            value={endDateTime}
+            mode="time"
+            is24Hour={false}
+            display="default"
+            onChange={handleEndTimeChange}
+            minimumDate={startDateTime}
+          />
+        )}
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Table Details (e.g., Table 2)"
+          value={editingVenue?.table_details || ''}
+          onChangeText={(text) => setEditingVenue({...editingVenue, table_details: text})}
+        />
+        
+        <View style={styles.modalButtons}>
+          <Button title="Cancel" onPress={() => setEditingVenue(null)} />
+          <Button title="Save" onPress={handleUpdateVenue} />
+        </View>
+      </View>
+    </View>
+  </Modal>
 
                       {/* QR Code Modal */}
                       <Modal
@@ -243,6 +322,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center'
+  },
+   label: {
+    marginBottom: 8,
+    marginTop: 12,
+    fontWeight: 'bold',
+  },
+  timePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  timeSeparator: {
+    marginHorizontal: 10,
   },
   sectionTitle: {
     fontSize: 18,

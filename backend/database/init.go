@@ -50,6 +50,8 @@ func InitDB(db *sql.DB) error {
             capacity INT DEFAULT 10,
             qr_secret VARCHAR(255) NOT NULL,
             is_active BOOLEAN DEFAULT TRUE,
+            session_timing VARCHAR(50) NOT NULL,
+            table_details VARCHAR(50) NOT NULL,,
             created_by VARCHAR(36),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (created_by) REFERENCES admin_users(id) ON DELETE SET NULL
