@@ -30,7 +30,7 @@ func GetVenues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query("SELECT id, name, capacity FROM venues WHERE is_active = TRUE")
+	rows, err := db.Query("SELECT id, name, capacity, session_timing,table_details FROM venues WHERE is_active = TRUE")
 	if err != nil {
 		log.Printf("Error fetching venues: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -42,7 +42,7 @@ func GetVenues(w http.ResponseWriter, r *http.Request) {
 	var venues []models.Venue
 	for rows.Next() {
 		var v models.Venue
-		if err := rows.Scan(&v.ID, &v.Name, &v.Capacity); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Capacity, &v.SessionTiming, &v.TableDetails); err != nil {
 			log.Printf("Error scanning venue: %v", err)
 			continue
 		}
@@ -72,6 +72,8 @@ func UpdateVenue(w http.ResponseWriter, r *http.Request) {
         ID       string `json:"id"`
         Name     string `json:"name"`
         Capacity int    `json:"capacity"`
+        SessionTiming string `json:"session_timing"`
+        TableDetails string `json: table_details`
     }
     
     if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -93,9 +95,9 @@ func UpdateVenue(w http.ResponseWriter, r *http.Request) {
 
     _, err := db.Exec(
         `UPDATE venues 
-        SET name = ?, capacity = ? 
+        SET name = ?, capacity = ? , session_timing = ?, table_details = ?
         WHERE id = ? AND is_active = TRUE`,
-        requestBody.Name, requestBody.Capacity, requestBody.ID)
+        requestBody.Name, requestBody.Capacity, requestBody.ID,requestBody.SessionTiming, requestBody.TableDetails,)
     
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
@@ -106,53 +108,6 @@ func UpdateVenue(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"message": "Venue updated successfully"})
 }
-
-
-// func UpdateVenue(w http.ResponseWriter, r *http.Request) {
-//     db := database.GetDB()
-//     if db == nil {
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database connection error"})
-//         return
-//     }
-
-//     // Parse the request body
-//     var venue models.Venue
-//     if err := json.NewDecoder(r.Body).Decode(&venue); err != nil {
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request data"})
-//         return
-//     }
-
-//     if venue.ID == "" {
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Venue ID is required"})
-//         return
-//     }
-
-//     _, err := db.Exec(
-//         `UPDATE venues 
-//         SET name = ?, capacity = ? 
-//         WHERE id = ? AND is_active = TRUE`,
-//         venue.Name, venue.Capacity, venue.ID)
-    
-//     if err != nil {
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update venue"})
-//         return
-//     }
-
-//     // Return the updated venue
-//     updatedVenue := models.Venue{
-//         ID:       venue.ID,
-//         Name:     venue.Name,
-//         Capacity: venue.Capacity,
-//     }
-
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(updatedVenue)
-// }
-
 
 func CreateVenue(w http.ResponseWriter, r *http.Request) {
     db := database.GetDB()

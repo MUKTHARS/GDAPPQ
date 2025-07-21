@@ -16,22 +16,22 @@ export default function Dashboard({ navigation }) {
   const [showSideMenu, setShowSideMenu] = useState(false);
   const [slideAnim] = useState(new Animated.Value(-250));
 const isFocused = useIsFocused();
-const toggleSideMenu = () => {
-  if (showSideMenu) {
-    Animated.timing(slideAnim, {
-      toValue: -250,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setShowSideMenu(false));
-  } else {
-    setShowSideMenu(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }
-};
+// const toggleSideMenu = () => {
+//   if (showSideMenu) {
+//     Animated.timing(slideAnim, {
+//       toValue: -250,
+//       duration: 300,
+//       useNativeDriver: true,
+//     }).start(() => setShowSideMenu(false));
+//   } else {
+//     setShowSideMenu(true);
+//     Animated.timing(slideAnim, {
+//       toValue: 0,
+//       duration: 300,
+//       useNativeDriver: true,
+//     }).start();
+//   }
+// };
 
 const menuItems = [
   { title: 'Dashboard', screen: 'Dashboard' },
@@ -120,37 +120,51 @@ const handleGenerateQR = async (venueId) => {
 
                       {/* Edit Venue Modal */}
                       <Modal
-                        visible={!!editingVenue}
-                        animationType="slide"
-                        transparent={true}
-                        onRequestClose={() => setEditingVenue(null)}
-                      >
-                        <View style={styles.modalContainer}>
-                          <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Edit Venue</Text>
-                            
-                            <TextInput
-                              style={styles.input}
-                              placeholder="Venue Name"
-                              value={venueName}
-                              onChangeText={setVenueName}
-                            />
-                            
-                            <TextInput
-                              style={styles.input}
-                              placeholder="Capacity"
-                              value={venueCapacity}
-                              onChangeText={setVenueCapacity}
-                              keyboardType="numeric"
-                            />
-                            
-                            <View style={styles.modalButtons}>
-                              <Button title="Cancel" onPress={() => setEditingVenue(null)} />
-                              <Button title="Save" onPress={handleUpdateVenue} />
-                            </View>
-                          </View>
-                        </View>
-                      </Modal>
+        visible={!!editingVenue}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditingVenue(null)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Venue</Text>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Venue Name"
+              value={venueName}
+              onChangeText={setVenueName}
+            />
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Capacity"
+              value={venueCapacity}
+              onChangeText={setVenueCapacity}
+              keyboardType="numeric"
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Session Timing (e.g., 09:00 AM - 05:00 PM)"
+              value={editingVenue?.session_timing || ''}
+              onChangeText={(text) => setEditingVenue({...editingVenue, session_timing: text})}
+            />
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Table Details (e.g., Table 2)"
+              value={editingVenue?.table_details || ''}
+              onChangeText={(text) => setEditingVenue({...editingVenue, table_details: text})}
+            />
+            
+            <View style={styles.modalButtons}>
+              <Button title="Cancel" onPress={() => setEditingVenue(null)} />
+              <Button title="Save" onPress={handleUpdateVenue} />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
                       {/* QR Code Modal */}
                       <Modal
@@ -187,32 +201,34 @@ const handleGenerateQR = async (venueId) => {
                       </Modal>
 
                       {venues.map(venue => (
-                     <View key={venue.id} style={styles.venueCard}>
-                      <View style={styles.venueInfo}>
-                      <Text style={styles.venueName}>{venue.name}</Text>
-                      <Text>Capacity: {venue.capacity}</Text>
-                      </View>
-                    
-                      <View style={styles.venueActions}>
-                      <TouchableOpacity 
-                        onPress={() => {
-                          setEditingVenue(venue);
-                          setVenueName(venue.name);
-                          setVenueCapacity(venue.capacity.toString());
-                        }}
-                      >
-                        <Icon name="edit" size={24} color="#555" />
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity 
-                onPress={() => navigation.navigate('QrScreen', { venue })}
-                style={styles.qrButton}
-              >
-                <Icon name="qr-code-2" size={24} color="#2e86de" />
-      </TouchableOpacity>
-    </View>
-  </View>
-))}
+        <View key={venue.id} style={styles.venueCard}>
+          <View style={styles.venueInfo}>
+            <Text style={styles.venueName}>{venue.name}</Text>
+            <Text>Capacity: {venue.capacity}</Text>
+            <Text>Timing: {venue.session_timing || 'Not specified'}</Text>
+            <Text>Table: {venue.table_details || 'Not specified'}</Text>
+          </View>
+          
+          <View style={styles.venueActions}>
+            <TouchableOpacity 
+              onPress={() => {
+                setEditingVenue(venue);
+                setVenueName(venue.name);
+                setVenueCapacity(venue.capacity.toString());
+              }}
+            >
+              <Icon name="edit" size={24} color="#555" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('QrScreen', { venue })}
+              style={styles.qrButton}
+            >
+              <Icon name="qr-code-2" size={24} color="#2e86de" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
     </ScrollView>
   );
 }

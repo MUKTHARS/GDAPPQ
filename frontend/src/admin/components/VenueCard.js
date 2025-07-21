@@ -9,6 +9,8 @@ const VenueCard = ({ venue, onEdit, onGenerateQR }) => {
     <View style={{ flex: 1 }}>
       <Text style={styles.venueName}>{venue.name}</Text>
       <Text>Capacity: {venue.capacity}</Text>
+       <Text>Timing: {venue.session_timing}</Text>
+          <Text>Table: {venue.table_details}</Text>
     </View>
 
     <View style={styles.iconContainer}>

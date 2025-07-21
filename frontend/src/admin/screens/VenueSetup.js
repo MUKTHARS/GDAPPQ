@@ -8,12 +8,16 @@ export default function VenueSetup({ route, navigation }) {
   const [capacity, setCapacity] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [venueId, setVenueId] = useState(null);
+  const [sessionTiming, setSessionTiming] = useState('');
+  const [tableDetails, setTableDetails] = useState('');
 
   useEffect(() => {
     if (route.params?.venue) {
       const { venue } = route.params;
       setName(venue.name);
       setCapacity(venue.capacity.toString());
+       setSessionTiming(venue.session_timing || '');
+      setTableDetails(venue.table_details || '');
       setVenueId(venue.id);
       setIsEditing(true);
     }
@@ -23,6 +27,8 @@ const handleSubmit = async () => {
   const venueData = {
     name,
     capacity: parseInt(capacity),
+    session_timing: sessionTiming,
+    table_details: tableDetails,
     id: isEditing ? venueId : undefined,
   };
 
@@ -63,6 +69,21 @@ const handleSubmit = async () => {
         value={capacity}
         onChangeText={setCapacity}
       />
+      
+       <TextInput
+        style={styles.input}
+        placeholder="Session Timing (e.g., 09:00 AM - 05:00 PM)"
+        value={sessionTiming}
+        onChangeText={setSessionTiming}
+      />
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Table Details (e.g., Table 2)"
+        value={tableDetails}
+        onChangeText={setTableDetails}
+      />
+      
       
       <Button
         title={isEditing ? 'Update Venue' : 'Create Venue'}
