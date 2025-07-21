@@ -6,7 +6,6 @@ import (
 	"gd/database"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -46,49 +45,3 @@ func CreateBulkSessions(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"message": "Sessions created successfully"})
 }
 
-func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
-    levelStr := r.URL.Query().Get("level")
-    level, err := strconv.Atoi(levelStr)
-    if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
-        return
-    }
-
-    rows, err := database.GetDB().Query(
-        `SELECT s.id, v.id as venue_id, v.name as venue_name, s.start_time 
-        FROM gd_sessions s
-        JOIN venues v ON s.venue_id = v.id
-        WHERE s.level = ? AND s.status = 'pending' 
-        AND s.start_time > NOW()`,
-        level,
-    )
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-    defer rows.Close()
-
-    var sessions []map[string]interface{}
-    for rows.Next() {
-        var session struct {
-            ID        string
-            VenueID   string
-            VenueName string
-            StartTime time.Time
-        }
-        if err := rows.Scan(&session.ID, &session.VenueID, &session.VenueName, &session.StartTime); err != nil {
-            continue
-        }
-
-        sessions = append(sessions, map[string]interface{}{
-            "id":         session.ID,
-            "venue_id":    session.VenueID,
-            "venue":       session.VenueName, // Add venue name to response
-            "start_time":  session.StartTime,
-        })
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(sessions)
-}

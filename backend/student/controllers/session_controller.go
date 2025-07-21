@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"gd/database"
 	"gd/student/models"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -83,50 +84,7 @@ type SurveyResponse struct {
 	Rankings map[int]string    `json:"rankings"` 
 }
 
-func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
-	levelStr := r.URL.Query().Get("level")
-	level, err := strconv.Atoi(levelStr)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
-		return
-	}
 
-	// Actual database implementation would go here
-	rows, err := database.GetDB().Query(
-		`SELECT id, venue_id, start_time 
-		FROM gd_sessions 
-		WHERE level = ? AND status = 'pending' 
-		AND start_time > NOW()`,
-		level,
-	)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	var sessions []map[string]interface{}
-	for rows.Next() {
-		var session struct {
-			ID        string
-			VenueID   string
-			StartTime time.Time
-		}
-		if err := rows.Scan(&session.ID, &session.VenueID, &session.StartTime); err != nil {
-			continue
-		}
-
-		sessions = append(sessions, map[string]interface{}{
-			"id":         session.ID,
-			"venue_id":   session.VenueID,
-			"start_time": session.StartTime,
-		})
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(sessions)
-}
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
 	var request struct {
@@ -234,4 +192,63 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
+    levelStr := r.URL.Query().Get("level")
+    level, err := strconv.Atoi(levelStr)
+    if err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
+        return
+    }
+
+    // Debug log
+    log.Printf("Fetching venues for level %d", level)
+
+    // Query to get active venues for the requested level
+    rows, err := database.GetDB().Query(`
+        SELECT id, name, session_timing, table_details
+        FROM venues 
+        WHERE level = ? AND is_active = TRUE`,
+        level,
+    )
+    
+    if err != nil {
+        log.Printf("Database error: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "Database error",
+            "details": err.Error(),
+        })
+        return
+    }
+    defer rows.Close()
+
+    var venues []map[string]interface{}
+    for rows.Next() {
+        var venue struct {
+            ID           string
+            Name         string
+            SessionTiming string
+            TableDetails  string
+        }
+        if err := rows.Scan(&venue.ID, &venue.Name, &venue.SessionTiming, &venue.TableDetails); err != nil {
+            log.Printf("Error scanning venue row: %v", err)
+            continue
+        }
+
+        venues = append(venues, map[string]interface{}{
+            "id":            venue.ID,
+            "venue_name":    venue.Name,
+            "session_timing": venue.SessionTiming,
+            "table_details":  venue.TableDetails,
+        })
+    }
+
+    // Debug log
+    log.Printf("Found %d venues for level %d", len(venues), level)
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(venues)
 }
