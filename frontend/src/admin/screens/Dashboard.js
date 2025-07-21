@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Button, Modal,Animated, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Button, Modal, Animated, TextInput, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
 export default function Dashboard({ navigation }) {
-    const [startDateTime, setStartDateTime] = useState(new Date());
+  const [startDateTime, setStartDateTime] = useState(new Date());
   const [endDateTime, setEndDateTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
@@ -19,13 +19,13 @@ export default function Dashboard({ navigation }) {
   const [showQRModal, setShowQRModal] = useState(false);
   const [currentQR, setCurrentQR] = useState(null);
   const [expiryTime, setExpiryTime] = useState('');
-const isFocused = useIsFocused();
-
-const menuItems = [
-  { title: 'Dashboard', screen: 'Dashboard' },
-  { title: 'Venue Management', screen: 'VenueSetup' },
-   { title: 'Session Config', screen: 'SessionConfig' },
-   { title: 'Session Rules', screen: 'SessionRules' },
+  const isFocused = useIsFocused();
+  const [venueLevel, setVenueLevel] = useState('1');
+  const menuItems = [
+    { title: 'Dashboard', screen: 'Dashboard' },
+    { title: 'Venue Management', screen: 'VenueSetup' },
+    { title: 'Session Config', screen: 'SessionConfig' },
+    { title: 'Session Rules', screen: 'SessionRules' },
     { title: 'Session Calendar', screen: 'SessionCalendar' },
     { title: 'Student Progress', screen: 'StudentProgress' },
     { title: 'Question Bank', screen: 'QuestionBank' },
@@ -52,31 +52,31 @@ const menuItems = [
     if (isFocused) {
       fetchVenues();
     }
-  }, [isFocused]); 
+  }, [isFocused]);
 
-const handleGenerateQR = async (venueId) => {
-  try {
-    const response = await api.get('/admin/qr', {
-      params: { venue_id: venueId },
-      timeout: 15000
-    });
-    
-    if (response.data?.qr_string) {
-      setCurrentQR(response.data.qr_string);
-      const expiry = new Date();
-      expiry.setMinutes(expiry.getMinutes() + 15);
-      setExpiryTime(expiry.toLocaleTimeString());
-      setShowQRModal(true);
-    } else {
-      throw new Error(response.data?.error || 'Invalid QR data');
+  const handleGenerateQR = async (venueId) => {
+    try {
+      const response = await api.get('/admin/qr', {
+        params: { venue_id: venueId },
+        timeout: 15000
+      });
+
+      if (response.data?.qr_string) {
+        setCurrentQR(response.data.qr_string);
+        const expiry = new Date();
+        expiry.setMinutes(expiry.getMinutes() + 15);
+        setExpiryTime(expiry.toLocaleTimeString());
+        setShowQRModal(true);
+      } else {
+        throw new Error(response.data?.error || 'Invalid QR data');
+      }
+    } catch (error) {
+      console.error('QR Generation Error:', error.message);
+      Alert.alert('Error', 'Failed to generate QR code. Please try again.');
     }
-  } catch (error) {
-    console.error('QR Generation Error:', error.message);
-    Alert.alert('Error', 'Failed to generate QR code. Please try again.');
-  }
-};
+  };
 
- const formatDate = (date) => {
+  const formatDate = (date) => {
     const day = date.getDate();
     const month = date.getMonth() + 1;
     const year = date.getFullYear();
@@ -98,7 +98,7 @@ const handleGenerateQR = async (venueId) => {
       const newStartDate = new Date(selectedDate);
       newStartDate.setHours(startDateTime.getHours(), startDateTime.getMinutes());
       setStartDateTime(newStartDate);
-      
+
       const newEndDate = new Date(selectedDate);
       newEndDate.setHours(endDateTime.getHours(), endDateTime.getMinutes());
       setEndDateTime(newEndDate);
@@ -129,167 +129,197 @@ const handleGenerateQR = async (venueId) => {
       const updatedVenue = {
         name: venueName,
         capacity: parseInt(venueCapacity),
+        level: parseInt(venueLevel),
       };
-      
+
       await api.put(`/admin/venues/${editingVenue.id}`, updatedVenue, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
         }
       });
-      
+
       // Refresh the venues list
       const response = await api.get('/admin/venues');
       setVenues(response.data);
-      
+
       // Close the modal
       setEditingVenue(null);
     } catch (error) {
       console.error('Error updating venue:', error);
     }
-};
+  };
   return (
     <ScrollView style={styles.container}>
 
-                      <Text style={styles.title}>GD Session Manager</Text>
-                      <Text style={styles.sectionTitle}>Your Venues</Text>
+      <Text style={styles.title}>GD Session Manager</Text>
+      <Text style={styles.sectionTitle}>Your Venues</Text>
 
-                      {/* Edit Venue Modal */}
-                      <Modal
-    visible={!!editingVenue}
-    animationType="slide"
-    transparent={true}
-    onRequestClose={() => setEditingVenue(null)}
-  >
-    <View style={styles.modalContainer}>
-      <View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>Edit Venue</Text>
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Venue Name"
-          value={venueName}
-          onChangeText={setVenueName}
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Capacity"
-          value={venueCapacity}
-          onChangeText={setVenueCapacity}
-          keyboardType="numeric"
-        />
+      {/* Edit Venue Modal */}
+      <Modal
+        visible={!!editingVenue}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditingVenue(null)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Venue</Text>
 
-        <Text style={styles.label}>Session Date:</Text>
-        <Button 
-          title={formatDate(startDateTime)}
-          onPress={() => setShowDatePicker(true)}
-        />
-        
-        <Text style={styles.label}>Session Timing:</Text>
-        <View style={styles.timePickerContainer}>
-          <Button 
-            title={`Start: ${formatTime(startDateTime)}`}
-            onPress={() => setShowStartTimePicker(true)}
-          />
-          <Text style={styles.timeSeparator}>to</Text>
-          <Button 
-            title={`End: ${formatTime(endDateTime)}`}
-            onPress={() => setShowEndTimePicker(true)}
-          />
+            <TextInput
+              style={styles.input}
+              placeholder="Venue Name"
+              value={venueName}
+              onChangeText={setVenueName}
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Capacity"
+              value={venueCapacity}
+              onChangeText={setVenueCapacity}
+              keyboardType="numeric"
+            />
+
+
+            <TextInput
+              style={styles.input}
+              placeholder="Level (1, 2, or 3)"
+              value={venueLevel}
+              onChangeText={setVenueLevel}
+              keyboardType="numeric"
+            />
+
+
+            <Text style={styles.label}>Session Date:</Text>
+            <Button
+              title={formatDate(startDateTime)}
+              onPress={() => setShowDatePicker(true)}
+            />
+
+            <Text style={styles.label}>Session Timing:</Text>
+            <View style={styles.timePickerContainer}>
+              <Button
+                title={`Start: ${formatTime(startDateTime)}`}
+                onPress={() => setShowStartTimePicker(true)}
+              />
+              <Text style={styles.timeSeparator}>to</Text>
+              <Button
+                title={`End: ${formatTime(endDateTime)}`}
+                onPress={() => setShowEndTimePicker(true)}
+              />
+            </View>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={startDateTime}
+                mode="date"
+                display="default"
+                onChange={handleDateChange}
+                minimumDate={new Date()}
+              />
+            )}
+
+            {showStartTimePicker && (
+              <DateTimePicker
+                value={startDateTime}
+                mode="time"
+                is24Hour={false}
+                display="default"
+                onChange={handleStartTimeChange}
+              />
+            )}
+
+            {showEndTimePicker && (
+              <DateTimePicker
+                value={endDateTime}
+                mode="time"
+                is24Hour={false}
+                display="default"
+                onChange={handleEndTimeChange}
+                minimumDate={startDateTime}
+              />
+            )}
+
+            <TextInput
+              style={styles.input}
+              placeholder="Table Details (e.g., Table 2)"
+              value={editingVenue?.table_details || ''}
+              onChangeText={(text) => setEditingVenue({ ...editingVenue, table_details: text })}
+            />
+
+            <View style={styles.modalButtons}>
+              <Button title="Cancel" onPress={() => setEditingVenue(null)} />
+              <Button title="Save" onPress={handleUpdateVenue} />
+            </View>
+          </View>
         </View>
-        
-        {showDatePicker && (
-          <DateTimePicker
-            value={startDateTime}
-            mode="date"
-            display="default"
-            onChange={handleDateChange}
-            minimumDate={new Date()}
-          />
-        )}
-        
-        {showStartTimePicker && (
-          <DateTimePicker
-            value={startDateTime}
-            mode="time"
-            is24Hour={false}
-            display="default"
-            onChange={handleStartTimeChange}
-          />
-        )}
-        
-        {showEndTimePicker && (
-          <DateTimePicker
-            value={endDateTime}
-            mode="time"
-            is24Hour={false}
-            display="default"
-            onChange={handleEndTimeChange}
-            minimumDate={startDateTime}
-          />
-        )}
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Table Details (e.g., Table 2)"
-          value={editingVenue?.table_details || ''}
-          onChangeText={(text) => setEditingVenue({...editingVenue, table_details: text})}
-        />
-        
-        <View style={styles.modalButtons}>
-          <Button title="Cancel" onPress={() => setEditingVenue(null)} />
-          <Button title="Save" onPress={handleUpdateVenue} />
+      </Modal>
+
+      {/* QR Code Modal */}
+      <Modal
+        visible={showQRModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQRModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Venue QR Code</Text>
+
+            {currentQR ? (
+              <>
+                <View style={styles.qrContainer}>
+                  <QRCode
+                    value={currentQR}
+                    size={200}
+                    color="black"
+                    backgroundColor="white"
+                  />
+                </View>
+                <Text style={styles.expiryText}>Valid until: {expiryTime}</Text>
+              </>
+            ) : (
+              <Text>Generating QR code...</Text>
+            )}
+
+            <View style={styles.modalButtons}>
+              <Button title="Close" onPress={() => setShowQRModal(false)} />
+            </View>
+          </View>
         </View>
-      </View>
-    </View>
-  </Modal>
+      </Modal>
 
-                      {/* QR Code Modal */}
-                      <Modal
-                        visible={showQRModal}
-                        animationType="slide"
-                        transparent={true}
-                        onRequestClose={() => setShowQRModal(false)}
-                      >
-                        <View style={styles.modalContainer}>
-                          <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Venue QR Code</Text>
-                            
-                            {currentQR ? (
-                              <>
-                                <View style={styles.qrContainer}>
-                                  <QRCode
-                                    value={currentQR}
-                                    size={200}
-                                    color="black"
-                                    backgroundColor="white"
-                                  />
-                                </View>
-                                <Text style={styles.expiryText}>Valid until: {expiryTime}</Text>
-                              </>
-                            ) : (
-                              <Text>Generating QR code...</Text>
-                            )}
-                            
-                            <View style={styles.modalButtons}>
-                              <Button title="Close" onPress={() => setShowQRModal(false)} />
-                            </View>
-                          </View>
-                        </View>
-                      </Modal>
-
-                      {venues.map(venue => (
+      {venues.map(venue => (
         <View key={venue.id} style={styles.venueCard}>
+          {/* <View style={styles.venueInfo}>
+            <Text style={styles.venueName}>{venue.name}</Text>
+            <Text>Capacity: {venue.capacity}</Text>
+            <Text>Timing: {venue.session_timing || 'Not specified'}</Text>
+            <Text>Table: {venue.table_details || 'Not specified'}</Text>
+          </View> */}
+
+          <View style={[
+            styles.levelTag,
+            {
+              backgroundColor:
+                venue.level === 1 ? '#2e86de' :
+                  venue.level === 2 ? '#10ac84' :
+                    '#ee5253'
+            }
+          ]}>
+            <Text style={styles.levelTagText}>Level {venue.level}</Text>
+          </View>
+
           <View style={styles.venueInfo}>
             <Text style={styles.venueName}>{venue.name}</Text>
             <Text>Capacity: {venue.capacity}</Text>
             <Text>Timing: {venue.session_timing || 'Not specified'}</Text>
             <Text>Table: {venue.table_details || 'Not specified'}</Text>
           </View>
-          
+
           <View style={styles.venueActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 setEditingVenue(venue);
                 setVenueName(venue.name);
@@ -298,8 +328,8 @@ const handleGenerateQR = async (venueId) => {
             >
               <Icon name="edit" size={24} color="#555" />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               onPress={() => navigation.navigate('QrScreen', { venue })}
               style={styles.qrButton}
             >
@@ -323,7 +353,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center'
   },
-   label: {
+  label: {
     marginBottom: 8,
     marginTop: 12,
     fontWeight: 'bold',
@@ -345,7 +375,23 @@ const styles = StyleSheet.create({
   button: {
     marginVertical: 10
   },
+
+  levelTag: {
+    position: 'absolute',
+    top: -10,
+    right: 10,
+    backgroundColor: '#2e86de', // Default blue color
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  levelTagText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
   venueCard: {
+    position: 'relative',
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 15,
@@ -413,8 +459,8 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 10,
   },
- 
- header: {
+
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 15,

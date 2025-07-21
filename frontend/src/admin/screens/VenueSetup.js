@@ -7,6 +7,7 @@ import api from '../services/api';
 export default function VenueSetup({ route, navigation }) {
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [level, setLevel] = useState('');
   const [startDateTime, setStartDateTime] = useState(new Date());
   const [endDateTime, setEndDateTime] = useState(new Date());
   const [tableDetails, setTableDetails] = useState('Table 1');
@@ -21,7 +22,10 @@ export default function VenueSetup({ route, navigation }) {
       const { venue } = route.params;
       setName(venue.name);
       setCapacity(venue.capacity.toString());
+      setLevel(venue.level.toString()); 
       setTableDetails(venue.table_details);
+      setVenueId(venue.id);
+      setIsEditing(true);
       
       // Parse existing timing if available
       if (venue.session_timing) {
@@ -111,6 +115,7 @@ export default function VenueSetup({ route, navigation }) {
     const venueData = {
       name,
       capacity: parseInt(capacity),
+      level: parseInt(level),
       session_timing: `${formatDate(startDateTime)} | ${formatTime(startDateTime)} - ${formatTime(endDateTime)}`,
       table_details: tableDetails,
       id: isEditing ? venueId : undefined,
@@ -151,6 +156,15 @@ export default function VenueSetup({ route, navigation }) {
         keyboardType="numeric"
         value={capacity}
         onChangeText={setCapacity}
+      />
+
+
+      <TextInput
+        style={styles.input}
+        placeholder="Level (1, 2, or 3)"
+        keyboardType="numeric"
+        value={level}
+        onChangeText={setLevel}
       />
       
       <Text style={styles.label}>Session Date:</Text>
