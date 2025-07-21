@@ -85,7 +85,6 @@ type SurveyResponse struct {
 }
 
 
-
 func JoinSession(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		QRData string `json:"qr_data"`
@@ -194,6 +193,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+
 func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
     levelStr := r.URL.Query().Get("level")
     level, err := strconv.Atoi(levelStr)
@@ -203,12 +203,9 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Debug log
-    log.Printf("Fetching venues for level %d", level)
-
-    // Query to get active venues for the requested level
+    // Query to get active venues for the requested level with capacity
     rows, err := database.GetDB().Query(`
-        SELECT id, name, session_timing, table_details
+        SELECT id, name, capacity, session_timing, table_details
         FROM venues 
         WHERE level = ? AND is_active = TRUE`,
         level,
@@ -230,10 +227,11 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
         var venue struct {
             ID           string
             Name         string
+            Capacity     int
             SessionTiming string
             TableDetails  string
         }
-        if err := rows.Scan(&venue.ID, &venue.Name, &venue.SessionTiming, &venue.TableDetails); err != nil {
+        if err := rows.Scan(&venue.ID, &venue.Name, &venue.Capacity, &venue.SessionTiming, &venue.TableDetails); err != nil {
             log.Printf("Error scanning venue row: %v", err)
             continue
         }
@@ -241,13 +239,11 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
         venues = append(venues, map[string]interface{}{
             "id":            venue.ID,
             "venue_name":    venue.Name,
+            "capacity":      venue.Capacity,
             "session_timing": venue.SessionTiming,
             "table_details":  venue.TableDetails,
         })
     }
-
-    // Debug log
-    log.Printf("Found %d venues for level %d", len(venues), level)
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(venues)

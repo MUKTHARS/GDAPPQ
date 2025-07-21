@@ -87,12 +87,13 @@ export default function SessionBooking() {
           data={venues}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <View style={styles.venueCard}>
-              <Text style={styles.venueName}>{item.venue_name}</Text>
-              <Text style={styles.detailText}>Timing: {item.session_timing || 'Not specified'}</Text>
-              <Text style={styles.detailText}>Table: {item.table_details || 'Not specified'}</Text>
-            </View>
-          )}
+    <View style={styles.venueCard}>
+        <Text style={styles.venueName}>{item.venue_name}</Text>
+        <Text style={styles.detailText}>Timing: {item.session_timing || 'Not specified'}</Text>
+        <Text style={styles.detailText}>Table: {item.table_details || 'Not specified'}</Text>
+        <Text style={styles.detailText}>Capacity: {item.capacity || 'N/A'}</Text>
+    </View>
+)}
         />
       )}
     </View>
@@ -137,3 +138,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 });
+
