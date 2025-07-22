@@ -17,6 +17,7 @@ const AdminMenuModal = ({ visible, onClose, navigation }) => {
     { name: 'QuestionBank', title: 'Question Bank', icon: 'library-books' },
     { name: 'Analytics', title: 'Analytics', icon: 'analytics' },
     { name: 'Bulk Session', title: 'Bulk Session', icon: 'post-add' },
+    { name: 'BookedStudents', title: 'Booked Students', icon: 'check-circle' },
   ];
 
   const handleNavigation = (screenName) => {

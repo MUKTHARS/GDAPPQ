@@ -36,7 +36,8 @@ api.admin = {
     timeout: 15000
   }),
   updateVenue: (id, data) => api.put(`/admin/venues/${id}`, data),
-  createVenue: (data) => api.post('/admin/venues', data)
+  createVenue: (data) => api.post('/admin/venues', data),
+  getBookings: () => api.get('/admin/bookings')
 };
 
 export default api;
