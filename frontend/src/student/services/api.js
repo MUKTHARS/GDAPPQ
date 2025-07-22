@@ -35,7 +35,8 @@ api.interceptors.response.use(response => {
   });
   return response;
 }, error => {
- if (error.response?.status !== 409) {
+  // Skip logging for 403 errors on booking attempts
+  if (error.response?.status !== 403 || !error.config.url.includes('/student/sessions/book')) {
     console.error('API Error:', {
       message: error.message,
       response: error.response?.data,
