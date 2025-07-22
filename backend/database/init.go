@@ -193,13 +193,6 @@ func InitDB(db *sql.DB) error {
         ('venue2', 'Room 3B', 15, 'venue2_secret456', 'admin1')`,
 
         // Sessions
-        `INSERT IGNORE INTO gd_sessions (id, venue_id, level, start_time, end_time, agenda, survey_weights, created_by) VALUES 
-        ('session1', 'venue1', 1, 
-         DATE_ADD(NOW(), INTERVAL 1 DAY), 
-         DATE_ADD(NOW(), INTERVAL 1 DAY) + INTERVAL 30 MINUTE,
-         '{"prep_time": 5, "discussion": 20, "survey": 5}',
-         '{"question1": 1.5, "question2": 1.0, "question3": 1.2}',
-         'admin1')`,
 
         // Participants
         `INSERT IGNORE INTO session_participants (session_id, student_id) VALUES 

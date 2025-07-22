@@ -62,6 +62,5 @@ router.Handle("/admin/questions", middleware.AdminOnly(
 	log.Println("Venue routes setup complete")
 	return router
 
-    
 
 }
