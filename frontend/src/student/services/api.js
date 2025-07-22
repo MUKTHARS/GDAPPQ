@@ -35,19 +35,21 @@ api.interceptors.response.use(response => {
   });
   return response;
 }, error => {
-  console.error('API Error:', {
-    message: error.message,
-    response: error.response?.data,
-    status: error.response?.status
-  });
+ if (error.response?.status !== 409) {
+    console.error('API Error:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+  }
   return Promise.reject(error);
 });
 
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
+  joinSession: (qrData) => api.post('/student/sessions/join', { qr_data: qrData }),
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
-  joinSession: (qrData) => api.post('/student/sessions/join', { qr_data: qrData })
 };
 
 export default api;

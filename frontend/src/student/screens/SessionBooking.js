@@ -39,14 +39,13 @@ export default function SessionBooking() {
     }
   };
 
-  const handleBookVenue = async (venueId) => {
+
+const handleBookVenue = async (venueId) => {
     try {
       setLoading(true);
       const authData = await auth.getAuthData();
       
-      const response = await api.student.post('/student/sessions/book', {
-        venue_id: venueId,
-      });
+      const response = await api.student.bookVenue(venueId);
 
       Alert.alert(
         'Booking Successful',
@@ -54,15 +53,49 @@ export default function SessionBooking() {
         [{ text: 'OK', onPress: () => fetchVenues(level) }]
       );
     } catch (error) {
-      console.error('Booking error:', error);
-      Alert.alert(
-        'Booking Failed',
-        error.response?.data?.error || error.message || 'Failed to book venue'
-      );
+      // Skip logging for 409 errors
+      if (error.response?.status !== 409) {
+        console.error('Booking error:', error);
+      }
+      
+      let errorMessage = 'Failed to book venue';
+      if (error.response?.status === 409) {
+        errorMessage = 'You have already booked this venue';
+        Alert.alert('Info', errorMessage);
+      } else {
+        errorMessage = error.response?.data?.error || error.message || errorMessage;
+        Alert.alert('Booking Failed', errorMessage);
+      }
     } finally {
       setLoading(false);
     }
-  };
+};
+
+
+  // const handleBookVenue = async (venueId) => {
+  //   try {
+  //     setLoading(true);
+  //     const authData = await auth.getAuthData();
+      
+  //     const response = await api.student.post('/student/sessions/book', {
+  //       venue_id: venueId,
+  //     });
+
+  //     Alert.alert(
+  //       'Booking Successful',
+  //       `You have successfully booked the venue. Session ID: ${response.data.session_id}`,
+  //       [{ text: 'OK', onPress: () => fetchVenues(level) }]
+  //     );
+  //   } catch (error) {
+  //     console.error('Booking error:', error);
+  //     Alert.alert(
+  //       'Booking Failed',
+  //       error.response?.data?.error || error.message || 'Failed to book venue'
+  //     );
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   useEffect(() => {
     fetchVenues(level);
