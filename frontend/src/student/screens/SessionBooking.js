@@ -76,6 +76,18 @@ export default function SessionBooking() {
   const handleBookVenue = async () => {
     try {
       setLoading(true);
+      const authData = await auth.getAuthData();
+    const studentLevel = parseInt(authData.level || 1);
+    
+    // Check if student is trying to book a venue of their level
+    if (studentLevel !== selectedVenue.level) {
+      Alert.alert(
+        'Booking Failed',
+        `You can only book venues for your current level (Level ${studentLevel})`
+      );
+      return;
+    }
+      
       const response = await api.student.bookVenue(selectedVenue.id);
       
       Alert.alert(

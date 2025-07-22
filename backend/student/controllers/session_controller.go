@@ -3,13 +3,15 @@ package controllers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"gd/database"
 	"gd/student/models"
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 	"strings"
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -219,7 +221,37 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
-    defer tx.Rollback() // This will be ignored if tx.Commit() succeeds
+    defer tx.Rollback() 
+
+
+	var studentLevel int
+    err = tx.QueryRow("SELECT current_gd_level FROM student_users WHERE id = ?", studentID).Scan(&studentLevel)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify student level"})
+        return
+    }
+
+    // Get venue level
+    var venueLevel int
+    err = tx.QueryRow("SELECT level FROM venues WHERE id = ?", req.VenueID).Scan(&venueLevel)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify venue level"})
+        return
+    }
+
+    // Check if student is trying to book a venue of their level
+    if studentLevel != venueLevel {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": fmt.Sprintf("You can only book venues for your current level (Level %d)", studentLevel),
+        })
+        return
+    }
+
+
+
 
 	 var activeBookingCount int
     err = tx.QueryRow(`
@@ -348,7 +380,7 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
     }
 
     rows, err := database.GetDB().Query(`
-        SELECT v.id, v.name, v.capacity, v.session_timing, v.table_details,
+        SELECT v.id, v.name, v.capacity, v.session_timing, v.table_details, v.level,
                (SELECT COUNT(*) FROM session_participants sp 
                 JOIN gd_sessions s ON sp.session_id = s.id 
                 WHERE s.venue_id = v.id) as booked
@@ -371,10 +403,11 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
             Capacity     int
             SessionTiming string
             TableDetails  string
+			Level        int
             Booked       int
         }
         if err := rows.Scan(&venue.ID, &venue.Name, &venue.Capacity, 
-                          &venue.SessionTiming, &venue.TableDetails, &venue.Booked); err != nil {
+                          &venue.SessionTiming, &venue.TableDetails,&venue.Level, &venue.Booked); err != nil {
             log.Printf("Error scanning venue row: %v", err)
             continue
         }
@@ -387,6 +420,7 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
             "remaining":    venue.Capacity - venue.Booked,
             "session_timing": venue.SessionTiming,
             "table_details":  venue.TableDetails,
+			"level":        venue.Level,
         })
     }
 
