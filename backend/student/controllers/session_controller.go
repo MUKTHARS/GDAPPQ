@@ -221,6 +221,29 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback() // This will be ignored if tx.Commit() succeeds
 
+	 var activeBookingCount int
+    err = tx.QueryRow(`
+        SELECT COUNT(*) 
+        FROM session_participants sp
+        JOIN gd_sessions s ON sp.session_id = s.id
+        WHERE sp.student_id = ? AND s.status = 'pending'`, 
+        studentID).Scan(&activeBookingCount)
+
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    if activeBookingCount > 0 {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "You already have an active booking. Complete or cancel it before booking another venue",
+        })
+        return
+    }
+
+
     // Check if venue exists and get capacity
     var capacity, booked int
     err = tx.QueryRow(`
@@ -314,95 +337,6 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
     })
 }
 
-// Add this new function
-// func BookVenue(w http.ResponseWriter, r *http.Request) {
-//     studentID := r.Context().Value("studentID").(string)
-    
-//     var req BookingRequest
-//     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
-//         return
-//     }
-//     req.StudentID = studentID
-
-//     // Check if venue exists and get capacity
-//     var capacity, booked int
-//     err := database.GetDB().QueryRow(`
-//         SELECT v.capacity, 
-//                (SELECT COUNT(*) FROM session_participants sp 
-//                 JOIN gd_sessions s ON sp.session_id = s.id 
-//                 WHERE s.venue_id = v.id) as booked
-//         FROM venues v 
-//         WHERE v.id = ? AND v.is_active = TRUE`, req.VenueID).Scan(&capacity, &booked)
-    
-//     if err != nil {
-//         if err == sql.ErrNoRows {
-//             w.WriteHeader(http.StatusNotFound)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Venue not found"})
-//         } else {
-//             w.WriteHeader(http.StatusInternalServerError)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         }
-//         return
-//     }
-
-//     // Check capacity
-//     if booked >= capacity {
-//         w.WriteHeader(http.StatusConflict)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Venue is full"})
-//         return
-//     }
-
-//     // Create a new session if needed or add to existing one
-//     var sessionID string
-//     err = database.GetDB().QueryRow(`
-//         SELECT id FROM gd_sessions 
-//         WHERE venue_id = ? AND status = 'pending' 
-//         ORDER BY start_time ASC LIMIT 1`, req.VenueID).Scan(&sessionID)
-
-//     if err == sql.ErrNoRows {
-//         // Create new session
-//         sessionID = uuid.New().String()
-//         _, err = database.GetDB().Exec(`
-//             INSERT INTO gd_sessions 
-//             (id, venue_id, status, start_time, end_time) 
-//             VALUES (?, ?, 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
-//             sessionID, req.VenueID)
-//         if err != nil {
-//             w.WriteHeader(http.StatusInternalServerError)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session"})
-//             return
-//         }
-//     } else if err != nil {
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         return
-//     }
-
-//     // Add student to session
-//     _, err = database.GetDB().Exec(`
-//         INSERT INTO session_participants 
-//         (id, session_id, student_id, is_dummy) 
-//         VALUES (UUID(), ?, ?, FALSE)`,
-//         sessionID, req.StudentID)
-    
-//     if err != nil {
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Booking failed"})
-//         return
-//     }
-
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(map[string]interface{}{
-//         "status": "booked",
-//         "session_id": sessionID,
-//         "venue_id": req.VenueID,
-//         "booked_seats": booked + 1,
-//         "remaining_seats": capacity - (booked + 1),
-//     })
-// }
-
 // Update GetAvailableSessions to include booking info
 func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
     levelStr := r.URL.Query().Get("level")
@@ -460,58 +394,60 @@ func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(venues)
 }
 
+func CheckBooking(w http.ResponseWriter, r *http.Request) {
+    studentID := r.Context().Value("studentID").(string)
+    venueID := r.URL.Query().Get("venue_id")
 
-// func GetAvailableSessions(w http.ResponseWriter, r *http.Request) {
-//     levelStr := r.URL.Query().Get("level")
-//     level, err := strconv.Atoi(levelStr)
-//     if err != nil {
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
-//         return
-//     }
+    var isBooked bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants sp
+            JOIN gd_sessions s ON sp.session_id = s.id
+            WHERE sp.student_id = ? AND s.venue_id = ? AND s.status = 'pending'
+        )`, studentID, venueID).Scan(&isBooked)
 
-//     // Query to get active venues for the requested level with capacity
-//     rows, err := database.GetDB().Query(`
-//         SELECT id, name, capacity, session_timing, table_details
-//         FROM venues 
-//         WHERE level = ? AND is_active = TRUE`,
-//         level,
-//     )
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]bool{"is_booked": isBooked})
+}
+
+
+func CancelBooking(w http.ResponseWriter, r *http.Request) {
+    studentID := r.Context().Value("studentID").(string)
     
-//     if err != nil {
-//         log.Printf("Database error: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{
-//             "error": "Database error",
-//             "details": err.Error(),
-//         })
-//         return
-//     }
-//     defer rows.Close()
+    var req struct {
+        VenueID string `json:"venue_id"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+        return
+    }
 
-//     var venues []map[string]interface{}
-//     for rows.Next() {
-//         var venue struct {
-//             ID           string
-//             Name         string
-//             Capacity     int
-//             SessionTiming string
-//             TableDetails  string
-//         }
-//         if err := rows.Scan(&venue.ID, &venue.Name, &venue.Capacity, &venue.SessionTiming, &venue.TableDetails); err != nil {
-//             log.Printf("Error scanning venue row: %v", err)
-//             continue
-//         }
+    result, err := database.GetDB().Exec(`
+        DELETE sp FROM session_participants sp
+        JOIN gd_sessions s ON sp.session_id = s.id
+        WHERE sp.student_id = ? AND s.venue_id = ? AND s.status = 'pending'`,
+        studentID, req.VenueID)
 
-//         venues = append(venues, map[string]interface{}{
-//             "id":            venue.ID,
-//             "venue_name":    venue.Name,
-//             "capacity":      venue.Capacity,
-//             "session_timing": venue.SessionTiming,
-//             "table_details":  venue.TableDetails,
-//         })
-//     }
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
 
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(venues)
-// }
+    rowsAffected, _ := result.RowsAffected()
+    if rowsAffected == 0 {
+        w.WriteHeader(http.StatusNotFound)
+        json.NewEncoder(w).Encode(map[string]string{"error": "No active booking found"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
+}

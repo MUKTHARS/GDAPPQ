@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, FlatList, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, FlatList, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth'; 
 import { globalStyles, colors } from '../assets/globalStyles';
@@ -10,6 +10,10 @@ export default function SessionBooking() {
   const [level, setLevel] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedVenue, setSelectedVenue] = useState(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [cancelText, setCancelText] = useState('');
+  const [isBooked, setIsBooked] = useState(false);
   const navigation = useNavigation();
 
   const fetchVenues = async (lvl) => {
@@ -39,59 +43,112 @@ export default function SessionBooking() {
     }
   };
 
+  const openVenueDetails = (venue) => {
+    setSelectedVenue(venue);
+    checkIfBooked(venue.id);
+    setIsModalVisible(true);
+  };
 
-const handleBookVenue = async (venueId) => {
+  const checkIfBooked = async (venueId) => {
+  try {
+    const authData = await auth.getAuthData();
+    const response = await api.student.checkBooking(venueId);
+    setIsBooked(response.data.is_booked);
+  } catch (error) {
+    console.error('Check booking error:', error);
+    setIsBooked(false);
+  }
+};
+
+  // const checkIfBooked = async (venueId) => {
+  //   try {
+  //     const authData = await auth.getAuthData();
+  //     const response = await api.student.get('/student/session/check', {
+  //       params: { venue_id: venueId }
+  //     });
+  //     setIsBooked(response.data.is_booked);
+  //   } catch (error) {
+  //     console.error('Check booking error:', error);
+  //     setIsBooked(false);
+  //   }
+  // };
+
+  const handleBookVenue = async () => {
     try {
       setLoading(true);
-      const authData = await auth.getAuthData();
+      const response = await api.student.bookVenue(selectedVenue.id);
       
-      const response = await api.student.bookVenue(venueId);
-
       Alert.alert(
         'Booking Successful',
-        `You have successfully booked the venue. Session ID: ${response.data.session_id}`,
-        [{ text: 'OK', onPress: () => fetchVenues(level) }]
+        `You have successfully booked ${selectedVenue.venue_name}`,
+        [{ text: 'OK', onPress: () => {
+          fetchVenues(level);
+          setIsModalVisible(false);
+        }}]
       );
     } catch (error) {
-      // Skip logging for 409 errors
-      if (error.response?.status !== 409) {
-        console.error('Booking error:', error);
-      }
-      
       let errorMessage = 'Failed to book venue';
       if (error.response?.status === 409) {
         errorMessage = 'You have already booked this venue';
-        Alert.alert('Info', errorMessage);
-      } else {
-        errorMessage = error.response?.data?.error || error.message || errorMessage;
-        Alert.alert('Booking Failed', errorMessage);
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You can only have one active booking at a time';
       }
+      Alert.alert('Booking Failed', errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelBooking = async () => {
+  if (cancelText.toLowerCase() !== 'cancel') {
+    Alert.alert('Invalid Input', 'Please type "cancel" to confirm');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const response = await api.student.cancelBooking(selectedVenue.id);
+    
+    Alert.alert(
+      'Booking Cancelled',
+      `Your booking for ${selectedVenue.venue_name} has been cancelled`,
+      [{ text: 'OK', onPress: () => {
+        fetchVenues(level);
+        setIsModalVisible(false);
+        setCancelText('');
+      }}]
+    );
+  } catch (error) {
+    Alert.alert('Cancellation Failed', 'Failed to cancel booking. Please try again.');
+  } finally {
+    setLoading(false);
+  }
 };
 
 
-  // const handleBookVenue = async (venueId) => {
+  // const handleCancelBooking = async () => {
+  //   if (cancelText.toLowerCase() !== 'cancel') {
+  //     Alert.alert('Invalid Input', 'Please type "cancel" to confirm');
+  //     return;
+  //   }
+
   //   try {
   //     setLoading(true);
-  //     const authData = await auth.getAuthData();
-      
-  //     const response = await api.student.post('/student/sessions/book', {
-  //       venue_id: venueId,
+  //     const response = await api.student.delete('/student/session/cancel', {
+  //       data: { venue_id: selectedVenue.id }
   //     });
-
+      
   //     Alert.alert(
-  //       'Booking Successful',
-  //       `You have successfully booked the venue. Session ID: ${response.data.session_id}`,
-  //       [{ text: 'OK', onPress: () => fetchVenues(level) }]
+  //       'Booking Cancelled',
+  //       `Your booking for ${selectedVenue.venue_name} has been cancelled`,
+  //       [{ text: 'OK', onPress: () => {
+  //         fetchVenues(level);
+  //         setIsModalVisible(false);
+  //         setCancelText('');
+  //       }}]
   //     );
   //   } catch (error) {
-  //     console.error('Booking error:', error);
-  //     Alert.alert(
-  //       'Booking Failed',
-  //       error.response?.data?.error || error.message || 'Failed to book venue'
-  //     );
+  //     Alert.alert('Cancellation Failed', 'Failed to cancel booking. Please try again.');
   //   } finally {
   //     setLoading(false);
   //   }
@@ -108,23 +165,13 @@ const handleBookVenue = async (venueId) => {
   const renderVenueItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.venueCard}
-      onPress={() => handleBookVenue(item.id)}
-      disabled={loading || item.remaining <= 0}
+      onPress={() => openVenueDetails(item)}
+      disabled={loading}
     >
       <Text style={styles.venueName}>{item.venue_name}</Text>
       <Text style={styles.detailText}>Timing: {item.session_timing || 'Not specified'}</Text>
-      <Text style={styles.detailText}>Table: {item.table_details || 'Not specified'}</Text>
       <Text style={styles.detailText}>Capacity: {item.capacity}</Text>
-      <Text style={styles.detailText}>Booked: {item.booked}</Text>
-      <Text style={[
-        styles.detailText, 
-        item.remaining <= 0 ? styles.fullText : styles.availableText
-      ]}>
-        Remaining: {item.remaining}
-      </Text>
-      {item.remaining <= 0 && (
-        <Text style={styles.fullText}>This venue is fully booked</Text>
-      )}
+      <Text style={styles.detailText}>Remaining: {item.remaining}</Text>
     </TouchableOpacity>
   );
 
@@ -172,6 +219,66 @@ const handleBookVenue = async (venueId) => {
           renderItem={renderVenueItem}
         />
       )}
+
+      {/* Venue Details Modal */}
+      <Modal
+        visible={isModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            {selectedVenue && (
+              <>
+                <Text style={styles.modalTitle}>{selectedVenue.venue_name}</Text>
+                <Text style={styles.modalText}>Timing: {selectedVenue.session_timing}</Text>
+                <Text style={styles.modalText}>Table: {selectedVenue.table_details}</Text>
+                <Text style={styles.modalText}>Capacity: {selectedVenue.capacity}</Text>
+                <Text style={styles.modalText}>Available: {selectedVenue.remaining}</Text>
+                
+                {isBooked ? (
+                  <>
+                    <Text style={styles.bookedText}>You have booked this venue</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Type 'cancel' to confirm"
+                      value={cancelText}
+                      onChangeText={setCancelText}
+                    />
+                    <TouchableOpacity
+                      style={[globalStyles.button, styles.cancelButton]}
+                      onPress={handleCancelBooking}
+                      disabled={loading}
+                    >
+                      <Text style={globalStyles.buttonText}>Cancel Booking</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={[globalStyles.button, styles.bookButton]}
+                    onPress={handleBookVenue}
+                    disabled={loading || selectedVenue.remaining <= 0}
+                  >
+                    <Text style={globalStyles.buttonText}>
+                      {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Now'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setIsModalVisible(false);
+                setCancelText('');
+              }}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -199,13 +306,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 4,
   },
-  availableText: {
-    color: colors.success,
-  },
-  fullText: {
-    color: colors.error,
-    fontWeight: 'bold',
-  },
   errorContainer: {
     alignItems: 'center',
     padding: 20,
@@ -220,8 +320,58 @@ const styles = StyleSheet.create({
     marginTop: 20,
     color: colors.textSecondary,
   },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: '90%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: colors.primary,
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  bookedText: {
+    fontSize: 16,
+    color: colors.success,
+    fontWeight: 'bold',
+    marginVertical: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    marginVertical: 10,
+  },
+  bookButton: {
+    marginTop: 20,
+    backgroundColor: colors.primary,
+  },
+  cancelButton: {
+    marginTop: 10,
+    backgroundColor: colors.error,
+  },
+  closeButton: {
+    marginTop: 15,
+    alignSelf: 'center',
+  },
+  closeButtonText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+  },
 });
-
 
 
 // import React, { useState, useEffect } from 'react';

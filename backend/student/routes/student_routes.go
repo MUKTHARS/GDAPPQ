@@ -29,7 +29,11 @@ func SetupStudentRoutes() *http.ServeMux {
     // Results
     router.Handle("/student/results", middleware.StudentOnly(
         http.HandlerFunc(controllers.GetResults)))
-    
+
+   router.Handle("/student/session/check", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CheckBooking)))
+router.Handle("/student/session/cancel", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CancelBooking)))
     return router
 }
 

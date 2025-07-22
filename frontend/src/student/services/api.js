@@ -50,6 +50,8 @@ api.student = {
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
   joinSession: (qrData) => api.post('/student/sessions/join', { qr_data: qrData }),
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
+  checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
+  cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } })
 };
 
 export default api;
