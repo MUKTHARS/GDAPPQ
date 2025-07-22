@@ -42,7 +42,7 @@ api.interceptors.response.use(response => {
   });
   return Promise.reject(error);
 });
-
+///////
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
