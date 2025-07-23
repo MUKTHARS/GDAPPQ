@@ -77,10 +77,12 @@ func InitDB(db *sql.DB) error {
 
         // Participant tables
         `CREATE TABLE IF NOT EXISTS session_participants (
+            id VARCHAR(36) PRIMARY KEY,
             session_id VARCHAR(36),
             student_id VARCHAR(36),
             is_dummy BOOLEAN DEFAULT FALSE,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (session_id, student_id),
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
             FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
@@ -158,6 +160,16 @@ func InitDB(db *sql.DB) error {
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
 )`,
 
+`CREATE TABLE IF NOT EXISTS venue_qr_codes (
+    id VARCHAR(36) PRIMARY KEY,
+    venue_id VARCHAR(36) NOT NULL,
+    qr_data VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
+)`,
+
 // Insert sample session topic
 `INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
 ('session1', 'The impact of AI on modern education')`,
@@ -192,12 +204,8 @@ func InitDB(db *sql.DB) error {
         ('venue1', 'Table 1-A', 10, 'venue1_secret123', 'admin1'),
         ('venue2', 'Room 3B', 15, 'venue2_secret456', 'admin1')`,
 
-        // Sessions
 
-        // Participants
-        `INSERT IGNORE INTO session_participants (session_id, student_id) VALUES 
-        ('session1', 'student1'),
-        ('session1', 'student2')`,
+    
     }
 
     for _, query := range sampleData {
