@@ -27,15 +27,18 @@ api.interceptors.request.use(async (config) => {
   return Promise.reject(error);
 });
 
-
 api.interceptors.response.use(response => {
   console.log('Response received:', {
     status: response.status,
     url: response.config.url
   });
-  if (response.data?.error?.includes('Database')) {
+  
+  // Handle database errors more safely
+  if (response.data?.error && typeof response.data.error === 'string' && 
+      response.data.error.includes('Database')) {
     return Promise.reject(new Error('Database operation failed'));
   }
+  
   return response;
 }, error => {
   // Skip logging for 403 errors on booking attempts
@@ -47,11 +50,38 @@ api.interceptors.response.use(response => {
     });
   }
 
-   if (!error.message.includes('Database')) {
+  // Handle error message more safely
+  if (error.response?.data?.error && typeof error.response.data.error === 'string' && 
+      !error.response.data.error.includes('Database')) {
     console.error('API Error:', error);
   }
+  
   return Promise.reject(error);
 });
+// api.interceptors.response.use(response => {
+//   console.log('Response received:', {
+//     status: response.status,
+//     url: response.config.url
+//   });
+//   if (response.data?.error?.includes('Database')) {
+//     return Promise.reject(new Error('Database operation failed'));
+//   }
+//   return response;
+// }, error => {
+//   // Skip logging for 403 errors on booking attempts
+//   if (error.response?.status !== 403 || !error.config.url.includes('/student/sessions/book')) {
+//     console.error('API Error:', {
+//       message: error.message,
+//       response: error.response?.data,
+//       status: error.response?.status
+//     });
+//   }
+
+//    if (!error.message.includes('Database')) {
+//     console.error('API Error:', error);
+//   }
+//   return Promise.reject(error);
+// });
 
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),

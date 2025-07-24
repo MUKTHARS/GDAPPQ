@@ -164,7 +164,7 @@ func InitDB(db *sql.DB) error {
     id VARCHAR(36) PRIMARY KEY,
     venue_id VARCHAR(36) NOT NULL,
     qr_data VARCHAR(255) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
+    expires_at DATETIME NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE

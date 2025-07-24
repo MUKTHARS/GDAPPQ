@@ -92,18 +92,20 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(session)
 }
+
 func JoinSession(w http.ResponseWriter, r *http.Request) {
     var request struct {
         QRData string `json:"qr_data"`
     }
     
-     if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+    if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
         log.Printf("JoinSession decode error: %v", err)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
         return
     }
-       if request.QRData == "" {
+
+    if request.QRData == "" {
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "QR data is required"})
         return
@@ -117,21 +119,46 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         venueID    string
         expiryTime time.Time
     )
+    
+    // First try scanning directly into time.Time
     err := database.GetDB().QueryRow(`
-    SELECT venue_id, expires_at 
-    FROM venue_qr_codes 
-    WHERE qr_data = ? 
-    AND is_active = TRUE 
-    AND expires_at > UTC_TIMESTAMP()`,
-    request.QRData,
-).Scan(&venueID, &expiryTime)
-    // log.Printf("Validating QR - DB Server NOW(): %v", time.Now())
-    // log.Printf("Validating QR - QR expires_at: %v", expiryTime)
+        SELECT venue_id, expires_at 
+        FROM venue_qr_codes 
+        WHERE qr_data = ? 
+        AND is_active = TRUE 
+        AND expires_at > NOW()`,
+        request.QRData,
+    ).Scan(&venueID, &expiryTime)
+
+    // If that fails with scan error, try scanning as string and parsing
+    if err != nil && strings.Contains(err.Error(), "unsupported Scan") {
+        var expiryStr string
+        err = database.GetDB().QueryRow(`
+            SELECT venue_id, expires_at 
+            FROM venue_qr_codes 
+            WHERE qr_data = ? 
+            AND is_active = TRUE 
+            AND expires_at > NOW()`,
+            request.QRData,
+        ).Scan(&venueID, &expiryStr)
+        
+        if err == nil {
+            expiryTime, err = time.Parse("2006-01-02 15:04:05", expiryStr)
+            if err != nil {
+                log.Printf("Error parsing expiry time: %v", err)
+                w.WriteHeader(http.StatusInternalServerError)
+                json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+                return
+            }
+        }
+    }
+
     if err != nil {
         if err == sql.ErrNoRows {
             w.WriteHeader(http.StatusUnauthorized)
             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired QR code"})
         } else {
+            log.Printf("Database error in QR validation: %v", err)
             w.WriteHeader(http.StatusInternalServerError)
             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         }
@@ -176,13 +203,107 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to activate session"})
         return
     }
-log.Printf("Successfully joined session %s for student %s", sessionID, studentID)
+
+    log.Printf("Successfully joined session %s for student %s", sessionID, studentID)
     w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(map[string]string{
         "status":     "joined",
         "session_id": sessionID,
     })
 }
+
+// func JoinSession(w http.ResponseWriter, r *http.Request) {
+//     var request struct {
+//         QRData string `json:"qr_data"`
+//     }
+    
+//      if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+//         log.Printf("JoinSession decode error: %v", err)
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+//         return
+//     }
+//        if request.QRData == "" {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "QR data is required"})
+//         return
+//     }
+
+//     log.Printf("JoinSession request for QR: %s", request.QRData)
+//     studentID := r.Context().Value("studentID").(string)
+    
+//     // Verify QR code
+//     var (
+//         venueID    string
+//         expiryTime time.Time
+//     )
+//     err := database.GetDB().QueryRow(`
+//     SELECT venue_id, expires_at 
+//     FROM venue_qr_codes 
+//     WHERE qr_data = ? 
+//     AND is_active = TRUE 
+//     AND expires_at > NOW()`,
+//     request.QRData,
+// ).Scan(&venueID, &expiryTime)
+//     // log.Printf("Validating QR - DB Server NOW(): %v", time.Now())
+//     // log.Printf("Validating QR - QR expires_at: %v", expiryTime)
+//     if err != nil {
+//         if err == sql.ErrNoRows {
+//             w.WriteHeader(http.StatusUnauthorized)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired QR code"})
+//         } else {
+//              log.Printf("Database error in QR validation: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         }
+//         return
+//     }
+
+//     // Check if student has booked this venue
+//     var sessionID string
+//     err = database.GetDB().QueryRow(`
+//         SELECT s.id 
+//         FROM gd_sessions s
+//         JOIN session_participants sp ON s.id = sp.session_id
+//         WHERE s.venue_id = ? 
+//         AND sp.student_id = ? 
+//         AND s.status IN ('pending', 'active')
+//         AND sp.is_dummy = FALSE`,
+//         venueID, studentID,
+//     ).Scan(&sessionID)
+    
+//     if err != nil {
+//         if err == sql.ErrNoRows {
+//             w.WriteHeader(http.StatusForbidden)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "You haven't booked this venue"})
+//         } else {
+//             log.Printf("Database error in booking check: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         }
+//         return
+//     }
+
+//     // Update session status to active if not already
+//     _, err = database.GetDB().Exec(`
+//         UPDATE gd_sessions 
+//         SET status = 'active' 
+//         WHERE id = ? AND status = 'pending'`,
+//         sessionID,
+//     )
+//     if err != nil {
+//         log.Printf("Failed to activate session: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to activate session"})
+//         return
+//     }
+// log.Printf("Successfully joined session %s for student %s", sessionID, studentID)
+//     w.WriteHeader(http.StatusOK)
+//     json.NewEncoder(w).Encode(map[string]string{
+//         "status":     "joined",
+//         "session_id": sessionID,
+//     })
+// }
 
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("studentID").(string)
