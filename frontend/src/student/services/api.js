@@ -33,6 +33,9 @@ api.interceptors.response.use(response => {
     status: response.status,
     url: response.config.url
   });
+  if (response.data?.error?.includes('Database')) {
+    return Promise.reject(new Error('Database operation failed'));
+  }
   return response;
 }, error => {
   // Skip logging for 403 errors on booking attempts
@@ -42,6 +45,10 @@ api.interceptors.response.use(response => {
       response: error.response?.data,
       status: error.response?.status
     });
+  }
+
+   if (!error.message.includes('Database')) {
+    console.error('API Error:', error);
   }
   return Promise.reject(error);
 });

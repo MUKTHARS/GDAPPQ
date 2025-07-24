@@ -122,7 +122,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     FROM venue_qr_codes 
     WHERE qr_data = ? 
     AND is_active = TRUE 
-    AND expires_at > CONVERT_TZ(NOW(), @@session.time_zone, '+00:00')`,
+    AND expires_at > UTC_TIMESTAMP()`,
     request.QRData,
 ).Scan(&venueID, &expiryTime)
     // log.Printf("Validating QR - DB Server NOW(): %v", time.Now())
@@ -146,7 +146,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         JOIN session_participants sp ON s.id = sp.session_id
         WHERE s.venue_id = ? 
         AND sp.student_id = ? 
-        AND s.status = 'pending'
+        AND s.status IN ('pending', 'active')
         AND sp.is_dummy = FALSE`,
         venueID, studentID,
     ).Scan(&sessionID)
@@ -156,6 +156,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
             w.WriteHeader(http.StatusForbidden)
             json.NewEncoder(w).Encode(map[string]string{"error": "You haven't booked this venue"})
         } else {
+            log.Printf("Database error in booking check: %v", err)
             w.WriteHeader(http.StatusInternalServerError)
             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         }
@@ -170,6 +171,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         sessionID,
     )
     if err != nil {
+        log.Printf("Failed to activate session: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to activate session"})
         return
