@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform } from 'react-native';
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform, Alert } from 'react-native';
+import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
 import auth from '../services/auth';
 import api from '../services/api';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function QrScannerScreen({ navigation }) {
   const [hasPermission, setHasPermission] = useState(false);
@@ -11,32 +12,222 @@ export default function QrScannerScreen({ navigation }) {
   const camera = useRef(null);
   const device = useCameraDevice('back');
   const { hasPermission: cameraPermission, requestPermission } = useCameraPermission();
+  const isFocused = useIsFocused();
 
-  const handleBarCodeScanned = async ({ nativeEvent }) => {
-    if (!isActive) return;
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+onCodeScanned: async (codes) => {
+  if (codes.length > 0 && isActive && isFocused) {
     setIsActive(false);
+    const qrData = codes[0].value;
     
     try {
       const authData = await auth.getAuthData();
-      if (!authData.token) {
-        throw new Error('Authentication required');
+      if (!authData?.token) {
+        throw new Error('Authentication required - please login again');
       }
 
-      const response = await api.student.joinSession({ qr_data: nativeEvent.code });
-      
-      if (response.data.session_id) {
-        navigation.navigate('GdSession', {
-          sessionId: response.data.session_id,
-        });
-      } else {
-        throw new Error('Invalid session ID received');
+      const response = await api.student.joinSession({ qr_data: qrData });
+
+      // Handle different error cases
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
+
+      if (!response.data?.session_id) {
+        throw new Error('Session information not found in response');
+      }
+
+      navigation.navigate('GdSession', { 
+        sessionId: response.data.session_id 
+      });
+      
     } catch (error) {
       console.error('QR Scan Error:', error);
-      setError(error.response?.data?.error || error.message || 'Invalid QR code');
-      setIsActive(true); // Allow scanning again after error
+      setError(error.message || 'Failed to join session');
+      setIsActive(true);
+      
+      // Show appropriate alert
+      Alert.alert(
+        'Session Error',
+        error.message || 'Failed to join session',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              if (error.message.includes('Authentication')) {
+                navigation.navigate('Login');
+              } else {
+                setIsActive(true);
+              }
+            }
+          }
+        ]
+      );
     }
-  };
+  }
+}
+// onCodeScanned: async (codes) => {
+//   if (codes.length > 0 && isActive && isFocused) {
+//     setIsActive(false);
+//     const qrData = codes[0].value;
+    
+//     try {
+//       const authData = await auth.getAuthData();
+//       if (!authData?.token) {
+//         throw new Error('Authentication required - please login again');
+//       }
+
+//       const response = await api.student.joinSession({ qr_data: qrData });
+
+//       // Handle 401 Unauthorized specifically
+//       if (response.status === 401) {
+//         throw new Error(response.data?.error || 'Invalid or expired QR code');
+//       }
+
+//       // Handle case where session ID might be in different field
+//       const sessionId = response.data?.session_id || 
+//                        response.data?.id || 
+//                        response.data?.data?.session_id;
+
+//       if (!sessionId) {
+//         throw new Error('Session information not found in response');
+//       }
+
+//       navigation.navigate('GdSession', { sessionId });
+      
+//     } catch (error) {
+//       console.error('QR Scan Error:', error);
+//       setError(error.message || 'Failed to join session');
+//       setIsActive(true);
+      
+//       // Handle 401 by prompting re-login
+//       if (error.message.includes('Invalid or expired QR code') || 
+//           error.response?.status === 401) {
+//         Alert.alert(
+//           'Session Error',
+//           'The QR code is invalid or expired. Please try again or contact support.',
+//           [
+//             { text: 'OK', onPress: () => navigation.goBack() }
+//           ]
+//         );
+//       }
+//     }
+//   }
+// }
+
+//     onCodeScanned: async (codes) => {
+//   if (codes.length > 0 && isActive && isFocused) {
+//     setIsActive(false);
+//     const qrData = codes[0].value;
+    
+//     try {
+//       // Get auth data including the JWT token
+//       const authData = await auth.getAuthData();
+//       if (!authData?.token) {
+//         throw new Error('Authentication required - please login again');
+//       }
+
+//       // Make the API request with proper error handling
+//       const response = await api.student.joinSession({ 
+//         qr_data: qrData 
+//       });
+
+//       // Check for 400 status specifically
+//       if (response.status === 400) {
+//         throw new Error(response.data?.error || 'Invalid QR code or session data');
+//       }
+
+//       if (!response.data?.session_id) {
+//         throw new Error('Invalid session ID received from server');
+//       }
+      
+//       navigation.navigate('GdSession', {
+//         sessionId: response.data.session_id,
+//       });
+//     } catch (error) {
+//       console.error('QR Scan Error:', error);
+      
+//       let errorMessage = 'Failed to join session';
+//       if (error.response) {
+//         // Handle specific error statuses
+//         if (error.response.status === 400) {
+//           errorMessage = error.response.data?.error || 'Invalid QR code';
+//         } else if (error.response.status === 401) {
+//           errorMessage = 'Session expired - please login again';
+//         } else if (error.response.status === 403) {
+//           errorMessage = 'You need to book this venue first';
+//         }
+//       } else if (error.message) {
+//         errorMessage = error.message;
+//       }
+      
+//       setError(errorMessage);
+//       setIsActive(true); // Allow scanning again after error
+      
+//       // Show alert for important errors
+//       if (error.response?.status === 401) {
+//         Alert.alert('Session Expired', errorMessage, [
+//           { text: 'OK', onPress: () => navigation.navigate('Login') }
+//         ]);
+//       }
+//     }
+//   }
+// }
+    // onCodeScanned: async (codes) => {
+    //   if (codes.length > 0 && isActive && isFocused) {
+    //     setIsActive(false);
+    //     const qrData = codes[0].value;
+        
+    //     try {
+    //       // Get auth data including the JWT token
+    //       const authData = await auth.getAuthData();
+    //       if (!authData?.token) {
+    //         throw new Error('Authentication required - please login again');
+    //       }
+
+    //       // Make sure to send the QR data in the correct format
+    //       const response = await api.student.joinSession({ 
+    //         qr_data: qrData 
+    //       }, {
+    //         headers: {
+    //           'Authorization': `Bearer ${authData.token}`
+    //         }
+    //       });
+          
+    //       if (response.data?.session_id) {
+    //         navigation.navigate('GdSession', {
+    //           sessionId: response.data.session_id,
+    //         });
+    //       } else {
+    //         throw new Error('Invalid session ID received from server');
+    //       }
+    //     } catch (error) {
+    //       console.error('QR Scan Error:', error);
+          
+    //       let errorMessage = 'Failed to join session';
+    //       if (error.response) {
+    //         // Handle 400 Bad Request specifically
+    //         if (error.response.status === 400) {
+    //           errorMessage = error.response.data?.error || 'Invalid QR code or session data';
+    //         } else if (error.response.status === 401) {
+    //           errorMessage = 'Session expired - please login again';
+    //         }
+    //       }
+          
+    //       setError(errorMessage);
+    //       setIsActive(true); // Allow scanning again after error
+          
+    //       // Show alert for important errors
+    //       if (error.response?.status === 401) {
+    //         Alert.alert('Session Expired', errorMessage, [
+    //           { text: 'OK', onPress: () => navigation.navigate('Login') }
+    //         ]);
+    //       }
+    //     }
+    //   }
+    // }
+  });
 
   useEffect(() => {
     const requestCameraPermission = async () => {
@@ -86,8 +277,8 @@ export default function QrScannerScreen({ navigation }) {
         ref={camera}
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive={isActive}
-        onBarCodeScanned={handleBarCodeScanned}
+        isActive={isActive && isFocused}
+        codeScanner={codeScanner}
         torch={'off'}
         zoom={1}
       />
@@ -171,21 +362,12 @@ const styles = StyleSheet.create({
   },
 });
 
+
 // import React, { useState, useEffect, useRef } from 'react';
 // import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform } from 'react-native';
-// import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor } from 'react-native-vision-camera';
-// import { runOnJS } from 'react-native-reanimated';
+// import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 // import auth from '../services/auth';
 // import api from '../services/api';
-
-// // QR Code scanning function
-// function scanQRCode(frame) {
-//   'worklet';
-//   // This is a simplified QR code scanner - you might want to implement a proper one
-//   // For production, consider using a proper QR scanning library or backend verification
-//   const qrCode = frame.toString(); // Simplified - replace with actual scanning logic
-//   return qrCode;
-// }
 
 // export default function QrScannerScreen({ navigation }) {
 //   const [hasPermission, setHasPermission] = useState(false);
@@ -195,15 +377,7 @@ const styles = StyleSheet.create({
 //   const device = useCameraDevice('back');
 //   const { hasPermission: cameraPermission, requestPermission } = useCameraPermission();
 
-//   const frameProcessor = useFrameProcessor((frame) => {
-//     'worklet';
-//     const qrCode = scanQRCode(frame);
-//     if (qrCode) {
-//       runOnJS(handleQRCodeDetected)(qrCode);
-//     }
-//   }, []);
-
-//   const handleQRCodeDetected = async (qrData) => {
+//   const handleBarCodeScanned = async ({ nativeEvent }) => {
 //     if (!isActive) return;
 //     setIsActive(false);
     
@@ -213,7 +387,7 @@ const styles = StyleSheet.create({
 //         throw new Error('Authentication required');
 //       }
 
-//       const response = await api.student.joinSession({ qr_data: qrData });
+//       const response = await api.student.joinSession({ qr_data: nativeEvent.code });
       
 //       if (response.data.session_id) {
 //         navigation.navigate('GdSession', {
@@ -278,7 +452,7 @@ const styles = StyleSheet.create({
 //         style={StyleSheet.absoluteFill}
 //         device={device}
 //         isActive={isActive}
-//         frameProcessor={frameProcessor}
+//         onBarCodeScanned={handleBarCodeScanned}
 //         torch={'off'}
 //         zoom={1}
 //       />
@@ -362,114 +536,3 @@ const styles = StyleSheet.create({
 //   },
 // });
 
-// import React, { useState, useEffect } from 'react';
-// import { View, Text, StyleSheet, Button, PermissionsAndroid, Platform } from 'react-native';
-// import QRCodeScanner from 'react-native-qrcode-scanner';
-// import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-// import api from '../services/api';
-
-// export default function QrScannerScreen({ navigation }) {
-//   const [hasPermission, setHasPermission] = useState(null);
-//   const [scanned, setScanned] = useState(false);
-
-//   useEffect(() => {
-//     const requestCameraPermission = async () => {
-//       if (Platform.OS === 'android') {
-//         const granted = await PermissionsAndroid.request(
-//           PermissionsAndroid.PERMISSIONS.CAMERA,
-//           {
-//             title: "Camera Permission",
-//             message: "App needs access to your camera",
-//             buttonNeutral: "Ask Me Later",
-//             buttonNegative: "Cancel",
-//             buttonPositive: "OK"
-//           }
-//         );
-//         setHasPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
-//       } else {
-//         const status = await check(PERMISSIONS.IOS.CAMERA);
-//         if (status !== RESULTS.GRANTED) {
-//           const res = await request(PERMISSIONS.IOS.CAMERA);
-//           setHasPermission(res === RESULTS.GRANTED);
-//         } else {
-//           setHasPermission(true);
-//         }
-//       }
-//     };
-//     requestCameraPermission();
-//   }, []);
-
-//   const onSuccess = async (e) => {
-//     if (scanned) return;
-//     setScanned(true);
-//     try {
-//       const response = await api.student.joinSession({ qr_data: e.data });
-//       if (response.data.session_id) {
-//         navigation.navigate('GdSession', {
-//           sessionId: response.data.session_id,
-//         });
-//       }
-//     } catch (error) {
-//       alert(error.response?.data?.message || 'Invalid QR code or session full');
-//       setScanned(false);
-//     }
-//   };
-
-//   if (hasPermission === null) {
-//     return (
-//       <View style={styles.loading}>
-//         <Text>Requesting camera permission...</Text>
-//       </View>
-//     );
-//   }
-//   if (hasPermission === false) {
-//     return (
-//       <View style={styles.loading}>
-//         <Text>No access to camera</Text>
-//       </View>
-//     );
-//   }
-
-//   return (
-//     <View style={styles.container}>
-//       {!scanned && (
-//         <QRCodeScanner
-//           onRead={onSuccess}
-//           fadeIn={true}
-//           showMarker={true}
-//           topContent={<Text style={styles.centerText}>Align QR code within the frame</Text>}
-//           bottomContent={
-//             <Text style={{ color: 'white', marginTop: 20 }}>
-//               Point your camera at a QR code.
-//             </Text>
-//           }
-//         />
-//       )}
-
-//       {scanned && (
-//         <View style={styles.overlay}>
-//           <Button title={'Tap to Scan Again'} onPress={() => setScanned(false)} />
-//         </View>
-//       )}
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1 },
-//   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-//   overlay: {
-//     position: 'absolute',
-//     bottom: 50,
-//     alignSelf: 'center',
-//     backgroundColor: 'rgba(0,0,0,0.7)',
-//     padding: 20,
-//     borderRadius: 10,
-//   },
-//   centerText: {
-//     fontSize: 18,
-//     padding: 32,
-//     color: '#fff',
-//     textAlign: 'center',
-//   },
-// });

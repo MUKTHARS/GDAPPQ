@@ -26,47 +26,85 @@ export default function QrScreen({ route, navigation }) {
   }
 
   const { venue } = route.params;
-
-  const fetchQR = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Add validation for venue ID
-      if (!venue?.id || typeof venue.id !== 'string' || venue.id.trim() === '') {
-        throw new Error('Invalid venue information');
-      }
-
-      const response = await api.get('/admin/qr', {
-        params: { venue_id: venue.id.toString() },
-        timeout: 15000
-      });
-      
-      if (response.data?.qr_string) {
-        setQrData(response.data.qr_string);
-        const expiry = new Date();
-        expiry.setMinutes(expiry.getMinutes() + 15);
-        setExpiryTime(expiry.toLocaleTimeString());
-        setRetryCount(0); // Reset retry count on success
-      } else {
-        throw new Error(response.data?.error || 'Invalid QR data received');
-      }
-    } catch (error) {
-      console.error('QR Generation Error:', error.message);
-      setError(error.message);
-      
-      // Only retry if it's a network error and we haven't exceeded max retries
-      if (retryCount < 3 && error.message !== 'Invalid venue information') {
-        const delay = Math.min(2000 * Math.pow(2, retryCount), 30000);
-        setTimeout(() => {
-          setRetryCount(c => c + 1);
-          fetchQR();
-        }, delay);
-      }
-    } finally {
-      setIsLoading(false);
+const fetchQR = async () => {
+  try {
+    setIsLoading(true);
+    setError(null);
+    
+    if (!venue?.id || typeof venue.id !== 'string' || venue.id.trim() === '') {
+      throw new Error('Invalid venue information');
     }
-  };
+
+    const response = await api.get('/admin/qr', {
+      params: { venue_id: venue.id.toString() },
+      timeout: 15000
+    });
+    
+    if (response.data?.qr_string) {
+      setQrData(response.data.qr_string);
+      const expiry = response.data.expires_at 
+        ? new Date(response.data.expires_at) 
+        : new Date(Date.now() + (response.data.expires_in || 15) * 60000);
+      setExpiryTime(expiry.toLocaleTimeString());
+      setRetryCount(0);
+    } else {
+      throw new Error(response.data?.error || 'Invalid QR data received');
+    }
+  } catch (error) {
+    console.error('QR Generation Error:', error.message);
+    setError(error.message);
+    
+    if (retryCount < 3 && error.message !== 'Invalid venue information') {
+      const delay = Math.min(2000 * Math.pow(2, retryCount), 30000);
+      setTimeout(() => {
+        setRetryCount(c => c + 1);
+        fetchQR();
+      }, delay);
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
+  // const fetchQR = async () => {
+  //   try {
+  //     setIsLoading(true);
+  //     setError(null);
+      
+  //     // Add validation for venue ID
+  //     if (!venue?.id || typeof venue.id !== 'string' || venue.id.trim() === '') {
+  //       throw new Error('Invalid venue information');
+  //     }
+
+  //     const response = await api.get('/admin/qr', {
+  //       params: { venue_id: venue.id.toString() },
+  //       timeout: 15000
+  //     });
+      
+  //     if (response.data?.qr_string) {
+  //       setQrData(response.data.qr_string);
+  //       const expiry = new Date();
+  //       expiry.setMinutes(expiry.getMinutes() + 15);
+  //       setExpiryTime(expiry.toLocaleTimeString());
+  //       setRetryCount(0); // Reset retry count on success
+  //     } else {
+  //       throw new Error(response.data?.error || 'Invalid QR data received');
+  //     }
+  //   } catch (error) {
+  //     console.error('QR Generation Error:', error.message);
+  //     setError(error.message);
+      
+  //     // Only retry if it's a network error and we haven't exceeded max retries
+  //     if (retryCount < 3 && error.message !== 'Invalid venue information') {
+  //       const delay = Math.min(2000 * Math.pow(2, retryCount), 30000);
+  //       setTimeout(() => {
+  //         setRetryCount(c => c + 1);
+  //         fetchQR();
+  //       }, delay);
+  //     }
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
   useEffect(() => {
     fetchQR();

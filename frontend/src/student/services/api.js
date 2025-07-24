@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.0.2.2:8080' 
+    ? 'http://10.150.249.242:8080' 
     : 'http://localhost:8080',
 });
 
@@ -49,7 +49,25 @@ api.interceptors.response.use(response => {
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
-  joinSession: (qrData) => api.post('/student/sessions/join', { qr_data: qrData }),
+    joinSession: (data) => api.post('/student/sessions/join', data, {
+    validateStatus: function (status) {
+      return true; // Always resolve to handle all status codes
+    },
+    transformResponse: [
+      function (data) {
+        try {
+          // Handle case where backend might return plain text error
+          if (typeof data === 'string' && data.includes('error')) {
+            return { error: data };
+          }
+          return JSON.parse(data);
+        } catch (e) {
+          return { error: 'Invalid server response' };
+        }
+      }
+    ]
+  }),
+  // joinSession: (qrData) => api.post('/student/sessions/join', { qr_data: qrData }),
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } })
