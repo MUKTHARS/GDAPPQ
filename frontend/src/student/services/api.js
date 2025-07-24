@@ -86,6 +86,7 @@ api.interceptors.response.use(response => {
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
+   getSession: (sessionId) => api.get(`/student/session?session_id=${sessionId}`),
     joinSession: (data) => api.post('/student/sessions/join', data, {
     validateStatus: function (status) {
       return true; // Always resolve to handle all status codes
