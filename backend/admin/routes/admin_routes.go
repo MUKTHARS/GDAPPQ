@@ -44,8 +44,8 @@ router.Handle("/admin/venues/", middleware.AdminOnly(http.HandlerFunc(func(w htt
     }
 })))
 
-router.Handle("/admin/rules", middleware.AdminOnly(
-	http.HandlerFunc(controllers.UpdateSessionRules)))
+// router.Handle("/admin/rules", middleware.AdminOnly(
+	// http.HandlerFunc(controllers.UpdateSessionRules)))
 
 router.Handle("/admin/analytics/qualifications", middleware.AdminOnly(
 	http.HandlerFunc(controllers.GetQualificationRates)))
@@ -59,9 +59,11 @@ router.Handle("/admin/students", middleware.AdminOnly(
 router.Handle("/admin/questions", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetQuestions)))
 
+router.Handle("/admin/bookings", middleware.AdminOnly(
+    http.HandlerFunc(controllers.GetStudentBookings)))
+
 	log.Println("Venue routes setup complete")
 	return router
 
-    
 
 }

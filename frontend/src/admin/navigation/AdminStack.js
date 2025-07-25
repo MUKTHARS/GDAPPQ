@@ -12,6 +12,8 @@ import StudentProgress from '../screens/StudentProgress';
 import QuestionBank from '../screens/QuestionBank';
 import BulkSessions from '../screens/BulkSessions';
 import AdminHamburgerHeader from '../components/AdminHamburgerHeader';
+import BookingsScreen from '../screens/BookingsScreen';
+
 const Stack = createStackNavigator();
 
 const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
@@ -60,6 +62,7 @@ const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
       <Stack.Screen name="SessionCalendar" component={SessionCalendar} />
       <Stack.Screen name="StudentProgress" component={StudentProgress} />
       <Stack.Screen name="QuestionBank" component={QuestionBank} />
+    <Stack.Screen name="BookedStudents" component={BookingsScreen} />
     </Stack.Navigator>
   );
 }
@@ -87,6 +90,8 @@ const getHeaderTitle = (route) => {
       return 'Question Bank';
     case 'Bulk Session':
       return 'Bulk Session Setup';
+    case 'BookedStudents':
+      return 'Booked Students';
     default:
       return '';
   }

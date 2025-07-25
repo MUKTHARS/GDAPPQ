@@ -61,12 +61,13 @@ func InitDB(db *sql.DB) error {
         // Session tables
         `CREATE TABLE IF NOT EXISTS gd_sessions (
             id VARCHAR(36) PRIMARY KEY,
+            topic TEXT NOT NULL,
             venue_id VARCHAR(36),
             level INT NOT NULL,
             start_time TIMESTAMP NOT NULL,
             end_time TIMESTAMP NOT NULL,
-            agenda JSON NOT NULL,
-            survey_weights JSON NOT NULL,
+            agenda JSON DEFAULT (JSON_OBJECT()),
+            survey_weights JSON DEFAULT (JSON_OBJECT()),
             max_capacity INT DEFAULT 10,
             status ENUM('pending','active','completed','cancelled') DEFAULT 'pending',
             created_by VARCHAR(36),
@@ -77,10 +78,12 @@ func InitDB(db *sql.DB) error {
 
         // Participant tables
         `CREATE TABLE IF NOT EXISTS session_participants (
+            id VARCHAR(36) PRIMARY KEY,
             session_id VARCHAR(36),
             student_id VARCHAR(36),
             is_dummy BOOLEAN DEFAULT FALSE,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (session_id, student_id),
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
             FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
@@ -95,6 +98,9 @@ func InitDB(db *sql.DB) error {
             first_place VARCHAR(36),
             second_place VARCHAR(36),
             third_place VARCHAR(36),
+            question_text VARCHAR(255),
+            weight DECIMAL(3,2),
+            applicable_levels JSON,
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
             FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
@@ -111,6 +117,7 @@ func InitDB(db *sql.DB) error {
             qualified_for_level INT NOT NULL,
             is_approved BOOLEAN DEFAULT FALSE,
             approved_by VARCHAR(36),
+            feedback TEXT,
             approved_at TIMESTAMP,
             PRIMARY KEY (session_id, student_id),
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
@@ -154,10 +161,21 @@ func InitDB(db *sql.DB) error {
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
 )`,
 
-// Insert sample session topic
-`INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
-('session1', 'The impact of AI on modern education')`,
+`CREATE TABLE IF NOT EXISTS venue_qr_codes (
+    id VARCHAR(36) PRIMARY KEY,
+    venue_id VARCHAR(36) NOT NULL,
+    qr_data VARCHAR(255) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
+)`,
 
+// Insert sample session topic
+// `INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
+// ('session1', 'The impact of AI on modern education')`,
+`INSERT IGNORE INTO gd_session_topics (session_id, topic, prep_materials) VALUES 
+('session1', 'The impact of AI on modern education', '{"articles": ["url1", "url2"]}')`,
 // Insert sample phase tracking
 `INSERT IGNORE INTO session_phase_tracking (session_id, student_id, phase) VALUES 
 ('session1', 'student1', 'prep')`,
@@ -188,19 +206,8 @@ func InitDB(db *sql.DB) error {
         ('venue1', 'Table 1-A', 10, 'venue1_secret123', 'admin1'),
         ('venue2', 'Room 3B', 15, 'venue2_secret456', 'admin1')`,
 
-        // Sessions
-        `INSERT IGNORE INTO gd_sessions (id, venue_id, level, start_time, end_time, agenda, survey_weights, created_by) VALUES 
-        ('session1', 'venue1', 1, 
-         DATE_ADD(NOW(), INTERVAL 1 DAY), 
-         DATE_ADD(NOW(), INTERVAL 1 DAY) + INTERVAL 30 MINUTE,
-         '{"prep_time": 5, "discussion": 20, "survey": 5}',
-         '{"question1": 1.5, "question2": 1.0, "question3": 1.2}',
-         'admin1')`,
 
-        // Participants
-        `INSERT IGNORE INTO session_participants (session_id, student_id) VALUES 
-        ('session1', 'student1'),
-        ('session1', 'student2')`,
+    
     }
 
     for _, query := range sampleData {

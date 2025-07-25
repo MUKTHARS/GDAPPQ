@@ -1,12 +1,157 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Button, PermissionsAndroid, Platform } from 'react-native';
-import QRCodeScanner from 'react-native-qrcode-scanner';
-import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform, Alert } from 'react-native';
+import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
+import auth from '../services/auth';
 import api from '../services/api';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function QrScannerScreen({ navigation }) {
-  const [hasPermission, setHasPermission] = useState(null);
-  const [scanned, setScanned] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const [error, setError] = useState(null);
+  const camera = useRef(null);
+  const device = useCameraDevice('back');
+  const { hasPermission: cameraPermission, requestPermission } = useCameraPermission();
+  const isFocused = useIsFocused();
+
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+// QrScannerScreen.js
+onCodeScanned: async (codes) => {
+  console.log('QR Code scanned:', codes);
+  if (codes.length > 0 && isActive && isFocused) {
+    console.log('Processing QR code...');
+    setIsActive(false);
+    const qrData = codes[0].value;
+    
+    try {
+      console.log('Getting auth data...');
+      const authData = await auth.getAuthData();
+      console.log('Auth data:', authData);
+      
+      if (!authData?.token) {
+        console.error('No token found in auth data');
+        throw new Error('Authentication required - please login again');
+      }
+
+      console.log('Attempting to join session with QR data:', qrData);
+      const response = await api.student.joinSession({ qr_data: qrData });
+      console.log('Join session response:', response);
+
+      if (response?.data?.error) {
+        console.error('Error in response:', response.data.error);
+        throw new Error(response.data.error);
+      }
+
+      if (!response?.data?.session_id) {
+        console.error('Invalid session ID in response');
+        throw new Error('Failed to join session - invalid response');
+      }
+
+      console.log('Successfully joined session:', response.data.session_id);
+      navigation.navigate('GdSession', { 
+        sessionId: response.data.session_id 
+      });
+      
+    } catch (error) {
+      console.error('QR Scan Error:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      });
+      
+      let errorMessage = error.message || 'Failed to join session';
+      
+      if (errorMessage.includes('Database')) {
+        errorMessage = 'System error - please try again later';
+      }
+
+      setError(errorMessage);
+      setIsActive(true);
+      
+      Alert.alert(
+        'Session Error',
+        errorMessage,
+        [{ 
+          text: 'OK', 
+          onPress: () => {
+            if (errorMessage.includes('Authentication')) {
+              navigation.navigate('Login');
+            } else {
+              setIsActive(true);
+            }
+          }
+        }]
+      );
+    }
+  }
+}
+// onCodeScanned: async (codes) => {
+//    console.log('QR Code scanned:', codes);
+//   if (codes.length > 0 && isActive && isFocused) {
+//      console.log('Processing QR code...');
+//     setIsActive(false);
+//     const qrData = codes[0].value;
+    
+//     try {
+//        console.log('Getting auth data...');
+//       const authData = await auth.getAuthData();
+//       if (!authData?.token) {
+//         throw new Error('Authentication required - please login again');
+//       }
+//        console.log('Auth data:', authData);
+//  console.log('Attempting to join session with QR data:', qrData);
+//       const response = await api.student.joinSession({ qr_data: qrData });
+//  console.log('Join session response:', response);
+//       if (response?.data?.error) {
+//         throw new Error(response.data.error);
+//       }
+
+//       if (!response.data) {
+//         throw new Error('Invalid server response format');
+//       }
+
+//       if (!response?.data?.session_id) {
+//         throw new Error('Failed to join session - invalid response');
+//       }
+
+//       navigation.navigate('GdSession', { 
+//         sessionId: response.data.session_id 
+//       });
+      
+//     } catch (error) {
+//       console.error('QR Scan Error:', error);
+//       let errorMessage = error.message || 'Failed to join session';
+       
+//       if (error.response?.data?.error) {
+//         errorMessage = error.response.data.error;
+//       }
+//       // Handle specific database errors
+//       if (errorMessage.includes('Database')) {
+//         errorMessage = 'System error - please try again later';
+//       }
+
+//       setError(errorMessage);
+//       setIsActive(true);
+      
+//       Alert.alert(
+//         'Session Error',
+//         errorMessage,
+//         [{ 
+//           text: 'OK', 
+//           onPress: () => {
+//             if (errorMessage.includes('Authentication')) {
+//               navigation.navigate('Login');
+//             } else {
+//               setIsActive(true);
+//             }
+//           }
+//         }]
+//       );
+//     }
+//   }
+// }
+  });
 
   useEffect(() => {
     const requestCameraPermission = async () => {
@@ -23,89 +168,121 @@ export default function QrScannerScreen({ navigation }) {
         );
         setHasPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
       } else {
-        const status = await check(PERMISSIONS.IOS.CAMERA);
-        if (status !== RESULTS.GRANTED) {
-          const res = await request(PERMISSIONS.IOS.CAMERA);
-          setHasPermission(res === RESULTS.GRANTED);
+        if (!cameraPermission) {
+          const permission = await requestPermission();
+          setHasPermission(permission);
         } else {
           setHasPermission(true);
         }
       }
     };
     requestCameraPermission();
-  }, []);
+  }, [cameraPermission]);
 
-  const onSuccess = async (e) => {
-    if (scanned) return;
-    setScanned(true);
-    try {
-      const response = await api.student.joinSession({ qr_data: e.data });
-      if (response.data.session_id) {
-        navigation.navigate('GdSession', {
-          sessionId: response.data.session_id,
-        });
-      }
-    } catch (error) {
-      alert(error.response?.data?.message || 'Invalid QR code or session full');
-      setScanned(false);
-    }
-  };
-
-  if (hasPermission === null) {
+  if (!hasPermission) {
     return (
       <View style={styles.loading}>
-        <Text>Requesting camera permission...</Text>
+        <Text>Camera permission not granted</Text>
       </View>
     );
   }
-  if (hasPermission === false) {
+
+  if (!device) {
     return (
       <View style={styles.loading}>
-        <Text>No access to camera</Text>
+        <Text>Camera device not found</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {!scanned && (
-        <QRCodeScanner
-          onRead={onSuccess}
-          fadeIn={true}
-          showMarker={true}
-          topContent={<Text style={styles.centerText}>Align QR code within the frame</Text>}
-          bottomContent={
-            <Text style={{ color: 'white', marginTop: 20 }}>
-              Point your camera at a QR code.
-            </Text>
-          }
-        />
-      )}
+      <Camera
+        ref={camera}
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={isActive && isFocused}
+        codeScanner={codeScanner}
+        torch={'off'}
+        zoom={1}
+      />
 
-      {scanned && (
-        <View style={styles.overlay}>
-          <Button title={'Tap to Scan Again'} onPress={() => setScanned(false)} />
-        </View>
-      )}
+      <View style={styles.overlay}>
+        <View style={styles.border} />
+        <Text style={styles.instructionText}>
+          Align QR code within the frame
+        </Text>
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                setIsActive(true);
+              }}
+            >
+              <Text style={styles.retryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'white',
+  },
   overlay: {
-    position: 'absolute',
-    bottom: 50,
-    alignSelf: 'center',
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  border: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: 'white',
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+  },
+  instructionText: {
+    color: 'white',
+    fontSize: 16,
+    marginTop: 20,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  errorContainer: {
     backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 20,
     borderRadius: 10,
+    marginTop: 20,
+    alignItems: 'center',
   },
-  centerText: {
-    fontSize: 18,
-    padding: 32,
-    color: '#fff',
+  errorText: {
+    color: 'red',
+    fontSize: 16,
     textAlign: 'center',
+    marginBottom: 10,
+  },
+  retryButton: {
+    backgroundColor: 'white',
+    padding: 10,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: 'black',
+    fontWeight: 'bold',
   },
 });
+
