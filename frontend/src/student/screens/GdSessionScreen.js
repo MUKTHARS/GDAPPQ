@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import api from '../services/api';
 import Timer from '../components/Timer';
 import auth from '../services/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function GdSessionScreen({ navigation, route }) {
   const { sessionId } = route.params;
@@ -10,6 +11,7 @@ export default function GdSessionScreen({ navigation, route }) {
   const [phase, setPhase] = useState('prep');
   const [timerActive, setTimerActive] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState(0);
 
   useEffect(() => {
     console.log('GdSessionScreen mounted with sessionId:', sessionId);
