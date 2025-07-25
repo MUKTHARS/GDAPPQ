@@ -10,40 +10,7 @@ export default function GdSessionScreen({ navigation, route }) {
   const [phase, setPhase] = useState('prep');
   const [timerActive, setTimerActive] = useState(true);
   const [loading, setLoading] = useState(true);
-useEffect(() => {
-    const fetchSession = async () => {
-      try {
-        console.log('Fetching session details for:', sessionId);
-        const authData = await auth.getAuthData();
-        
-        if (!authData?.token) {
-          throw new Error('Authentication required');
-        }
 
-        const response = await api.student.getSession(sessionId);
-        console.log('Session response:', response);
-        
-        if (response.status === 404) {
-          throw new Error('Session not found');
-        }
-
-        if (!response.data) {
-          throw new Error('Invalid session data');
-        }
-
-        setSession(response.data);
-      } catch (error) {
-        console.error('Failed to load session:', error);
-        Alert.alert(
-          'Session Error',
-          error.message || 'Failed to load session details',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
-      }
-    };
-
-    fetchSession();
-}, [sessionId]);
   useEffect(() => {
     console.log('GdSessionScreen mounted with sessionId:', sessionId);
     
@@ -59,17 +26,42 @@ useEffect(() => {
         const response = await api.student.getSession(sessionId);
         console.log('Session response:', response);
         
-        if (!response.data) {
-          throw new Error('Invalid session data');
+        // Check for error in response data
+        if (response.data?.error) {
+          throw new Error(response.data.error);
+        }
+
+        // Validate required session data
+        if (!response.data || 
+            !response.data.id || 
+            typeof response.data.prep_time === 'undefined' || 
+            typeof response.data.discussion_time === 'undefined') {
+          throw new Error('Invalid session data received');
         }
 
         setSession(response.data);
       } catch (error) {
         console.error('Failed to load session:', error);
+        let errorMessage = error.message;
+        
+        // Handle specific error cases
+        if (error.response) {
+          if (error.response.status === 404) {
+            errorMessage = 'Session not found';
+          } else if (error.response.status === 403) {
+            errorMessage = 'Not authorized to view this session';
+          } else if (error.response.status === 500) {
+            errorMessage = 'Server error - please try again later';
+          }
+        }
+        
         Alert.alert(
           'Session Error',
-          error.message || 'Failed to load session details',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          errorMessage,
+          [{ 
+            text: 'OK', 
+            onPress: () => navigation.goBack()
+          }]
         );
       } finally {
         setLoading(false);
@@ -77,7 +69,7 @@ useEffect(() => {
     };
 
     fetchSession();
-  }, [sessionId]);
+  }, [sessionId, navigation]);
 
   const handlePhaseComplete = () => {
     if (phase === 'prep') {

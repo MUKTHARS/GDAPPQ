@@ -37,7 +37,27 @@ api.admin = {
   }),
   updateVenue: (id, data) => api.put(`/admin/venues/${id}`, data),
   createVenue: (data) => api.post('/admin/venues', data),
-  getBookings: () => api.get('/admin/bookings')
+  getBookings: () => api.get('/admin/bookings'),
+createBulkSessions: (data) => {
+        console.log("Creating bulk sessions with data:", data);
+        return api.post('/admin/sessions/bulk', data, {
+            validateStatus: function (status) {
+                return status < 500; // Reject only if status is 500 or higher
+            },
+            transformRequest: [(data) => {
+                // Ensure proper date formatting
+                const sessions = data.sessions.map(session => ({
+                    ...session,
+                    start_time: new Date(session.start_time).toISOString()
+                }));
+                return JSON.stringify({ sessions });
+            }]
+        }).catch(error => {
+            console.error("Error creating sessions:", error);
+            throw error;
+        });
+    },
+  getVenues: () => api.get('/admin/venues'),
 };
 
 export default api;

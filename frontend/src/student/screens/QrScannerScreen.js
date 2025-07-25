@@ -16,37 +16,52 @@ export default function QrScannerScreen({ navigation }) {
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr'],
-
+// QrScannerScreen.js
 onCodeScanned: async (codes) => {
+  console.log('QR Code scanned:', codes);
   if (codes.length > 0 && isActive && isFocused) {
+    console.log('Processing QR code...');
     setIsActive(false);
     const qrData = codes[0].value;
     
     try {
+      console.log('Getting auth data...');
       const authData = await auth.getAuthData();
+      console.log('Auth data:', authData);
+      
       if (!authData?.token) {
+        console.error('No token found in auth data');
         throw new Error('Authentication required - please login again');
       }
 
+      console.log('Attempting to join session with QR data:', qrData);
       const response = await api.student.joinSession({ qr_data: qrData });
+      console.log('Join session response:', response);
 
       if (response?.data?.error) {
+        console.error('Error in response:', response.data.error);
         throw new Error(response.data.error);
       }
 
       if (!response?.data?.session_id) {
+        console.error('Invalid session ID in response');
         throw new Error('Failed to join session - invalid response');
       }
 
+      console.log('Successfully joined session:', response.data.session_id);
       navigation.navigate('GdSession', { 
         sessionId: response.data.session_id 
       });
       
     } catch (error) {
-      console.error('QR Scan Error:', error);
+      console.error('QR Scan Error:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      });
+      
       let errorMessage = error.message || 'Failed to join session';
       
-      // Handle specific database errors
       if (errorMessage.includes('Database')) {
         errorMessage = 'System error - please try again later';
       }
@@ -71,36 +86,33 @@ onCodeScanned: async (codes) => {
     }
   }
 }
-
-    // onCodeScanned: async (codes) => {
+// onCodeScanned: async (codes) => {
+//    console.log('QR Code scanned:', codes);
 //   if (codes.length > 0 && isActive && isFocused) {
+//      console.log('Processing QR code...');
 //     setIsActive(false);
 //     const qrData = codes[0].value;
     
 //     try {
+//        console.log('Getting auth data...');
 //       const authData = await auth.getAuthData();
 //       if (!authData?.token) {
 //         throw new Error('Authentication required - please login again');
 //       }
-
+//        console.log('Auth data:', authData);
+//  console.log('Attempting to join session with QR data:', qrData);
 //       const response = await api.student.joinSession({ qr_data: qrData });
-
-//        if (!response || !response.data) {
-//         throw new Error('Invalid server response');
-//       }
-       
-//       if (!response) {
-//         throw new Error('No response from server');
-//       }
-
-
-//       // Handle different error cases
-//       if (response.data?.error) {
+//  console.log('Join session response:', response);
+//       if (response?.data?.error) {
 //         throw new Error(response.data.error);
 //       }
 
-//       if (!response.data?.session_id) {
-//         throw new Error('Session information not found in response');
+//       if (!response.data) {
+//         throw new Error('Invalid server response format');
+//       }
+
+//       if (!response?.data?.session_id) {
+//         throw new Error('Failed to join session - invalid response');
 //       }
 
 //       navigation.navigate('GdSession', { 
@@ -109,35 +121,32 @@ onCodeScanned: async (codes) => {
       
 //     } catch (error) {
 //       console.error('QR Scan Error:', error);
-//        let errorMessage = 'Failed to join session';
-      
-//       if (error.message) {
-//         errorMessage = error.message;
-//       } else if (error.response?.data?.error) {
+//       let errorMessage = error.message || 'Failed to join session';
+       
+//       if (error.response?.data?.error) {
 //         errorMessage = error.response.data.error;
 //       }
-      
+//       // Handle specific database errors
+//       if (errorMessage.includes('Database')) {
+//         errorMessage = 'System error - please try again later';
+//       }
+
 //       setError(errorMessage);
 //       setIsActive(true);
-//       // setError(error.message || 'Failed to join session');
-//       // setIsActive(true);
       
-//       // Show appropriate alert
 //       Alert.alert(
 //         'Session Error',
-//         error.message || 'Failed to join session',
-//         [
-//           { 
-//             text: 'OK', 
-//             onPress: () => {
-//               if (error.message.includes('Authentication')) {
-//                 navigation.navigate('Login');
-//               } else {
-//                 setIsActive(true);
-//               }
+//         errorMessage,
+//         [{ 
+//           text: 'OK', 
+//           onPress: () => {
+//             if (errorMessage.includes('Authentication')) {
+//               navigation.navigate('Login');
+//             } else {
+//               setIsActive(true);
 //             }
 //           }
-//         ]
+//         }]
 //       );
 //     }
 //   }

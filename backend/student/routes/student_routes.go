@@ -34,8 +34,6 @@ func SetupStudentRoutes() *http.ServeMux {
     http.HandlerFunc(controllers.CheckBooking)))
 router.Handle("/student/session/cancel", middleware.StudentOnly(
     http.HandlerFunc(controllers.CancelBooking)))
-    // router.HandleFunc("/student/sessions/details", middlewares.AuthMiddleware(controllers.GetSessionDetails)).Methods("GET")
-
     
     return router
 }

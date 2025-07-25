@@ -44,8 +44,8 @@ router.Handle("/admin/venues/", middleware.AdminOnly(http.HandlerFunc(func(w htt
     }
 })))
 
-router.Handle("/admin/rules", middleware.AdminOnly(
-	http.HandlerFunc(controllers.UpdateSessionRules)))
+// router.Handle("/admin/rules", middleware.AdminOnly(
+	// http.HandlerFunc(controllers.UpdateSessionRules)))
 
 router.Handle("/admin/analytics/qualifications", middleware.AdminOnly(
 	http.HandlerFunc(controllers.GetQualificationRates)))

@@ -37,7 +37,6 @@ type SurveyResponse struct {
 func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
-        log.Println("GetSessionDetails: missing session_id parameter")
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
         return
@@ -45,21 +44,43 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 
     studentID := r.Context().Value("studentID").(string)
     log.Printf("Fetching session %s for student %s", sessionID, studentID)
-
-    var session struct {
-        ID           string    `json:"id"`
-        Venue        string    `json:"venue"`
-        Topic        string    `json:"topic"`
-        PrepTime     int       `json:"prep_time"`
-        Discussion   int       `json:"discussion_time"`
-        StartTime    time.Time `json:"start_time"`
+    
+    // First verify the student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, studentID).Scan(&isParticipant)
+    
+    if err != nil {
+        log.Printf("Database error checking participant: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
     }
 
-    // Get session basics
-    err := database.GetDB().QueryRow(`
+    if !isParticipant {
+        log.Printf("Student %s not authorized for session %s", studentID, sessionID)
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view this session"})
+        return
+    }
+
+    // Get session details with proper error handling
+    var session struct {
+        ID         string    `json:"id"`
+        Venue      string    `json:"venue"`
+        Topic      string    `json:"topic"`
+        PrepTime   int       `json:"prep_time"`
+        Discussion int       `json:"discussion_time"`
+        StartTime  time.Time `json:"start_time"`
+    }
+
+    err = database.GetDB().QueryRow(`
         SELECT s.id, v.name, s.topic, 
-            JSON_EXTRACT(s.agenda, '$.prep_time') as prep_time,
-            JSON_EXTRACT(s.agenda, '$.discussion') as discussion,
+            COALESCE(JSON_EXTRACT(s.agenda, '$.prep_time'), 5) as prep_time,
+            COALESCE(JSON_EXTRACT(s.agenda, '$.discussion'), 15) as discussion,
             s.start_time
         FROM gd_sessions s
         JOIN venues v ON s.venue_id = v.id
@@ -69,7 +90,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
     )
 
     if err != nil {
-        log.Printf("Error getting session: %v", err)
+        log.Printf("Database error fetching session: %v", err)
         if err == sql.ErrNoRows {
             w.WriteHeader(http.StatusNotFound)
             json.NewEncoder(w).Encode(map[string]string{"error": "Session not found"})
@@ -80,110 +101,17 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    log.Printf("Successfully fetched session %s", sessionID)
     w.Header().Set("Content-Type", "application/json")
     if err := json.NewEncoder(w).Encode(session); err != nil {
-        log.Printf("Error encoding response: %v", err)
+        log.Printf("Error encoding session response: %v", err)
     }
 }
-// func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
-//     sessionID := r.URL.Query().Get("session_id")
-//     if sessionID == "" {
-//         log.Println("GetSessionDetails: missing session_id parameter")
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
-//         return
-//     }
 
-//     studentID := r.Context().Value("studentID").(string)
-//     log.Printf("Fetching session %s for student %s", sessionID, studentID)
-
-//     var session struct {
-//         ID           string    `json:"id"`
-//         VenueName    string    `json:"venue"`
-//         Topic        string    `json:"topic"`
-//         PrepTime     int       `json:"prep_time"`
-//         Discussion   int       `json:"discussion_time"`
-//         StartTime    time.Time `json:"start_time"`
-//         Participants []struct {
-//             ID       string `json:"id"`
-//             Name     string `json:"name"`
-//             PhotoURL string `json:"photo_url"`
-//         } `json:"participants"`
-//     }
-
-//     // Verify student is part of this session
-//     var isParticipant bool
-//     err := database.GetDB().QueryRow(`
-//         SELECT EXISTS(
-//             SELECT 1 FROM session_participants 
-//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
-//         )`, sessionID, studentID).Scan(&isParticipant)
-    
-//     if err != nil || !isParticipant {
-//         log.Printf("Student %s is not part of session %s", studentID, sessionID)
-//         w.WriteHeader(http.StatusForbidden)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view this session"})
-//         return
-//     }
-
-//     // Get session basics
-//     err = database.GetDB().QueryRow(`
-//         SELECT s.id, v.name, s.topic, 
-//             JSON_EXTRACT(s.agenda, '$.prep_time') as prep_time,
-//             JSON_EXTRACT(s.agenda, '$.discussion') as discussion,
-//             s.start_time
-//         FROM gd_sessions s
-//         JOIN venues v ON s.venue_id = v.id
-//         WHERE s.id = ?`, sessionID).Scan(
-//         &session.ID, &session.VenueName, &session.Topic,
-//         &session.PrepTime, &session.Discussion, &session.StartTime,
-//     )
-
-//     if err != nil {
-//         log.Printf("Error getting session basics: %v", err)
-//         if err == sql.ErrNoRows {
-//             w.WriteHeader(http.StatusNotFound)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Session not found"})
-//         } else {
-//             w.WriteHeader(http.StatusInternalServerError)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         }
-//         return
-//     }
-
-//     // Get participants
-//     rows, err := database.GetDB().Query(`
-//         SELECT su.id, su.full_name, su.photo_url
-//         FROM session_participants sp
-//         JOIN student_users su ON sp.student_id = su.id
-//         WHERE sp.session_id = ? AND sp.is_dummy = FALSE`, sessionID)
-//     if err != nil {
-//         log.Printf("Error getting participants: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         return
-//     }
-//     defer rows.Close()
-
-//     for rows.Next() {
-//         var participant struct {
-//             ID       string `json:"id"`
-//             Name     string `json:"name"`
-//             PhotoURL string `json:"photo_url"`
-//         }
-//         if err := rows.Scan(&participant.ID, &participant.Name, &participant.PhotoURL); err == nil {
-//             session.Participants = append(session.Participants, participant)
-//         }
-//     }
-
-//     log.Printf("Successfully fetched session %s", sessionID)
-    
-//     w.Header().Set("Content-Type", "application/json")
-//     if err := json.NewEncoder(w).Encode(session); err != nil {
-//         log.Printf("Error encoding session response: %v", err)
-//     }
-// }
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
+    log.Println("JoinSession endpoint hit")
+    
     var request struct {
         QRData string `json:"qr_data"`
     }
@@ -196,55 +124,43 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     }
 
     if request.QRData == "" {
+        log.Println("Empty QR data received")
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "QR data is required"})
         return
     }
 
-    log.Printf("JoinSession request for QR: %s", request.QRData)
     studentID := r.Context().Value("studentID").(string)
+    log.Printf("JoinSession request for student %s", studentID)
     
-    // Verify QR code
-    var (
-        venueID    string
-        expiryTime time.Time
-    )
-    
-    // First try scanning directly into time.Time
+    // Parse QR data (assuming it's JSON)
+    var qrPayload struct {
+        VenueID string `json:"venue_id"`
+        Expiry  string `json:"expiry"`
+    }
+    if err := json.Unmarshal([]byte(request.QRData), &qrPayload); err != nil {
+        log.Printf("QR data parsing error: %v", err)
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid QR code format"})
+        return
+    }
+
+    log.Printf("QR payload parsed - VenueID: %s, Expiry: %s", qrPayload.VenueID, qrPayload.Expiry)
+
+    // Verify QR code against database
+    var dbQRData string
     err := database.GetDB().QueryRow(`
-        SELECT venue_id, expires_at 
+        SELECT qr_data 
         FROM venue_qr_codes 
-        WHERE qr_data = ? 
+        WHERE venue_id = ? 
         AND is_active = TRUE 
         AND expires_at > NOW()`,
-        request.QRData,
-    ).Scan(&venueID, &expiryTime)
-
-    // If that fails with scan error, try scanning as string and parsing
-    if err != nil && strings.Contains(err.Error(), "unsupported Scan") {
-        var expiryStr string
-        err = database.GetDB().QueryRow(`
-            SELECT venue_id, expires_at 
-            FROM venue_qr_codes 
-            WHERE qr_data = ? 
-            AND is_active = TRUE 
-            AND expires_at > NOW()`,
-            request.QRData,
-        ).Scan(&venueID, &expiryStr)
-        
-        if err == nil {
-            expiryTime, err = time.Parse("2006-01-02 15:04:05", expiryStr)
-            if err != nil {
-                log.Printf("Error parsing expiry time: %v", err)
-                w.WriteHeader(http.StatusInternalServerError)
-                json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-                return
-            }
-        }
-    }
+        qrPayload.VenueID,
+    ).Scan(&dbQRData)
 
     if err != nil {
         if err == sql.ErrNoRows {
+            log.Printf("No active QR code found for venue %s", qrPayload.VenueID)
             w.WriteHeader(http.StatusUnauthorized)
             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired QR code"})
         } else {
@@ -252,6 +168,14 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
             w.WriteHeader(http.StatusInternalServerError)
             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         }
+        return
+    }
+
+    // Check if QR data matches
+    if dbQRData != request.QRData {
+        log.Printf("QR code mismatch - stored: %s, received: %s", dbQRData, request.QRData)
+        w.WriteHeader(http.StatusUnauthorized)
+        json.NewEncoder(w).Encode(map[string]string{"error": "QR code verification failed"})
         return
     }
 
@@ -265,11 +189,12 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         AND sp.student_id = ? 
         AND s.status IN ('pending', 'active')
         AND sp.is_dummy = FALSE`,
-        venueID, studentID,
+        qrPayload.VenueID, studentID,
     ).Scan(&sessionID)
     
     if err != nil {
         if err == sql.ErrNoRows {
+            log.Printf("No booking found for student %s at venue %s", studentID, qrPayload.VenueID)
             w.WriteHeader(http.StatusForbidden)
             json.NewEncoder(w).Encode(map[string]string{"error": "You haven't booked this venue"})
         } else {
@@ -279,6 +204,8 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         }
         return
     }
+
+    log.Printf("Found session %s for student %s", sessionID, studentID)
 
     // Update session status to active if not already
     _, err = database.GetDB().Exec(`
@@ -295,12 +222,13 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     }
 
     log.Printf("Successfully joined session %s for student %s", sessionID, studentID)
-    w.WriteHeader(http.StatusOK)
+    w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{
         "status":     "joined",
         "session_id": sessionID,
     })
 }
+
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("studentID").(string)
 	

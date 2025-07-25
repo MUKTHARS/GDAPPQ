@@ -84,8 +84,8 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
 
 
     // No active QR found - proceed with generating a new one
-    expiresAt := time.Now().Add(15 * time.Minute) // Local time (IST)
-    qrData, err := qr.GenerateSecureQR(venueID, 15*time.Minute)
+    expiresAt := time.Now().Add(60 * time.Minute) // Local time (IST)
+    qrData, err := qr.GenerateSecureQR(venueID, 60*time.Minute)
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate QR code"})
@@ -97,7 +97,7 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
     _, err = database.GetDB().Exec(`
         INSERT INTO venue_qr_codes 
         (id, venue_id, qr_data, expires_at, is_active) 
-        VALUES (?, ?, ?, NOW() + INTERVAL 15 MINUTE, TRUE)`,
+        VALUES (?, ?, ?, NOW() + INTERVAL 60 MINUTE, TRUE)`,
         qrID,
         venueID,
         qrData,
@@ -112,7 +112,7 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]interface{}{
         "success":    true,
         "qr_string":  qrData,
-        "expires_in": 15,
+        "expires_in": 60,
         "expires_at": expiresAt.Format(time.RFC3339),
         "qr_id":      qrID,
     })
