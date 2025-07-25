@@ -25,6 +25,8 @@ api.interceptors.request.use(async (config) => {
 
 // Add these API endpoints
 api.admin = {
+  getSessionRules: (level) => api.get('/admin/rules', { params: { level } }),
+  updateSessionRules: (data) => api.post('/admin/rules', data),
   getVenues: () => api.get('/admin/venues'),
    generateQR: (venueId) => api.get('/admin/qr', { 
     params: { 

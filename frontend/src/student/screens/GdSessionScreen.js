@@ -12,6 +12,24 @@ export default function GdSessionScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState(0);
 
+  useEffect(() => {
+  const syncPhaseWithServer = async () => {
+    try {
+      const response = await api.student.getSessionPhase(sessionId);
+      if (response.data.phase !== phase) {
+        setPhase(response.data.phase);
+        const remainingSeconds = Math.max(0, 
+          (new Date(response.data.end_time) - new Date()) / 1000
+        );
+        setTimeRemaining(remainingSeconds);
+      }
+    } catch (error) {
+      console.log("Using local phase state as fallback");
+    }
+  };
+  
+  syncPhaseWithServer();
+}, [sessionId]);
   // Load session state from storage on mount
   useEffect(() => {
     const loadSessionState = async () => {
@@ -135,15 +153,20 @@ export default function GdSessionScreen({ navigation, route }) {
     fetchSession();
   }, [sessionId, navigation]);
 
-  const handlePhaseComplete = () => {
-    if (phase === 'prep') {
-      setPhase('discussion');
-    } else if (phase === 'discussion') {
-      setPhase('survey');
-    } else {
-      navigation.navigate('Survey', { sessionId });
-    }
-  };
+const handlePhaseComplete = () => {
+  if (phase === 'prep') {
+    setPhase('discussion');
+    setTimeRemaining(session.discussion_time * 60); 
+  } else if (phase === 'discussion') {
+    setPhase('survey');
+    setTimeRemaining(session.survey_time * 60);
+  } else {
+    navigation.navigate('Survey', { 
+      sessionId: sessionId,
+      members: [] 
+    });
+  }
+};
 
   if (loading) {
     return (
@@ -170,22 +193,20 @@ export default function GdSessionScreen({ navigation, route }) {
         {phase === 'prep' ? 'Preparation' : 'Discussion'} Phase
       </Text>
       
-      <Timer 
-        duration={phase === 'prep' ? session.prep_time : session.discussion_time}
-        onComplete={handlePhaseComplete}
-        active={timerActive}
-        initialTimeRemaining={timeRemaining}
-        onTick={(remaining) => setTimeRemaining(remaining)}
-      />
+<Timer 
+  duration={
+    phase === 'prep' ? session.prep_time :
+    phase === 'discussion' ? session.discussion_time :
+    session.survey_time 
+  }
+  onComplete={handlePhaseComplete}
+  active={timerActive}
+  initialTimeRemaining={timeRemaining}
+  onTick={(remaining) => setTimeRemaining(remaining)}
+/>
 
       <Text style={styles.topic}>{session.topic}</Text>
-      
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => setTimerActive(!timerActive)}
-      >
-        <Text>{timerActive ? 'Pause' : 'Resume'}</Text>
-      </TouchableOpacity>
+    
     </View>
   );
 }

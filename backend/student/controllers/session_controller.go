@@ -76,7 +76,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         venue      string
         topic      sql.NullString
         agendaJSON []byte
-        startTimeStr string // Changed to string to handle raw database value
+        startTimeStr string
     )
 
     err = database.GetDB().QueryRow(`
@@ -114,9 +114,9 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
     }
     
     // Set default values
-    agenda.PrepTime = 5
-    agenda.Discussion = 20
-    agenda.Survey = 5
+    agenda.PrepTime = 60
+    agenda.Discussion = 60
+    agenda.Survey = 60
     
     if len(agendaJSON) > 0 {
         if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
@@ -141,6 +141,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         log.Printf("Error encoding session response: %v", err)
     }
 }
+
 
 // func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 //     sessionID := r.URL.Query().Get("session_id")
@@ -176,25 +177,20 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 //     }
 
 //     // Get session details with proper error handling
-//     var session struct {
-//         ID         string    `json:"id"`
-//         Venue      string    `json:"venue"`
-//         Topic      string    `json:"topic"`
-//         PrepTime   int       `json:"prep_time"`
-//         Discussion int       `json:"discussion_time"`
-//         StartTime  time.Time `json:"start_time"`
-//     }
+//     var (
+//         id         string
+//         venue      string
+//         topic      sql.NullString
+//         agendaJSON []byte
+//         startTimeStr string // Changed to string to handle raw database value
+//     )
 
 //     err = database.GetDB().QueryRow(`
-//         SELECT s.id, v.name, s.topic, 
-//             COALESCE(JSON_EXTRACT(s.agenda, '$.prep_time'), 5) as prep_time,
-//             COALESCE(JSON_EXTRACT(s.agenda, '$.discussion'), 15) as discussion,
-//             s.start_time
+//         SELECT s.id, v.name, s.topic, s.agenda, s.start_time
 //         FROM gd_sessions s
 //         JOIN venues v ON s.venue_id = v.id
 //         WHERE s.id = ?`, sessionID).Scan(
-//         &session.ID, &session.Venue, &session.Topic,
-//         &session.PrepTime, &session.Discussion, &session.StartTime,
+//         &id, &venue, &topic, &agendaJSON, &startTimeStr,
 //     )
 
 //     if err != nil {
@@ -209,12 +205,49 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 //         return
 //     }
 
+//     // Parse start_time from string
+//     startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
+//     if err != nil {
+//         log.Printf("Error parsing start_time: %v", err)
+//         startTime = time.Now() // Fallback to current time if parsing fails
+//     }
+
+//     // Parse agenda with defaults
+//     var agenda struct {
+//         PrepTime   int `json:"prep_time"`
+//         Discussion int `json:"discussion"`
+//         Survey     int `json:"survey"`
+//     }
+    
+//     // Set default values
+//     agenda.PrepTime = 5
+//     agenda.Discussion = 20
+//     agenda.Survey = 5
+    
+//     if len(agendaJSON) > 0 {
+//         if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
+//             log.Printf("Error parsing agenda JSON: %v", err)
+//             // Use defaults if parsing fails
+//         }
+//     }
+
+//     response := map[string]interface{}{
+//         "id":            id,
+//         "venue":         venue,
+//         "topic":        topic.String,
+//         "prep_time":    agenda.PrepTime,
+//         "discussion_time": agenda.Discussion,
+//         "survey_time":   agenda.Survey,
+//         "start_time":   startTime,
+//     }
+
 //     log.Printf("Successfully fetched session %s", sessionID)
 //     w.Header().Set("Content-Type", "application/json")
-//     if err := json.NewEncoder(w).Encode(session); err != nil {
+//     if err := json.NewEncoder(w).Encode(response); err != nil {
 //         log.Printf("Error encoding session response: %v", err)
 //     }
 // }
+
 
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
@@ -345,40 +378,67 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 		Responses map[int]map[int]string   `json:"responses"` // question -> rank -> student_id
 	}
 	
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+	 if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
+
 
 	tx, err := database.GetDB().Begin()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer tx.Rollback()
 
-	for q, rankings := range req.Responses {
-		_, err := tx.Exec(`
-			INSERT INTO survey_responses 
-			(id, session_id, responder_id, question_number, 
-			 first_place, second_place, third_place)
-			VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
-			req.SessionID, studentID, q,
-			rankings[1], rankings[2], rankings[3],
-		)
-		if err != nil {
-			tx.Rollback()
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	 for q, rankings := range req.Responses {
+        _, err := tx.Exec(`
+            INSERT INTO survey_responses 
+            (id, session_id, responder_id, question_number, 
+             first_place, second_place, third_place)
+            VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
+            req.SessionID, 
+            studentID, 
+            q,
+            rankings[1], 
+            rankings[2], 
+            rankings[3],
+        )
+        if err != nil {
+            tx.Rollback()
+            log.Printf("Error saving survey response: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
+            return
+        }
+    }
+  _, err = tx.Exec(`
+        UPDATE session_participants
+        SET completed_at = NOW()
+        WHERE session_id = ? AND student_id = ?`,
+        req.SessionID,
+        studentID,
+    )
+    if err != nil {
+        tx.Rollback()
+        log.Printf("Error updating participant status: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update session status"})
+        return
+    }
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	 if err := tx.Commit(); err != nil {
+        log.Printf("Error committing transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
 func GetResults(w http.ResponseWriter, r *http.Request) {
