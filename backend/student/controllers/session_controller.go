@@ -34,6 +34,9 @@ type SurveyResponse struct {
 	Question int               `json:"question"`
 	Rankings map[int]string    `json:"rankings"` 
 }
+
+// backend/student/controllers/session_controller.go
+
 func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
@@ -68,25 +71,20 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
     }
 
     // Get session details with proper error handling
-    var session struct {
-        ID         string    `json:"id"`
-        Venue      string    `json:"venue"`
-        Topic      string    `json:"topic"`
-        PrepTime   int       `json:"prep_time"`
-        Discussion int       `json:"discussion_time"`
-        StartTime  time.Time `json:"start_time"`
-    }
+    var (
+        id         string
+        venue      string
+        topic      sql.NullString
+        agendaJSON []byte
+        startTimeStr string // Changed to string to handle raw database value
+    )
 
     err = database.GetDB().QueryRow(`
-        SELECT s.id, v.name, s.topic, 
-            COALESCE(JSON_EXTRACT(s.agenda, '$.prep_time'), 5) as prep_time,
-            COALESCE(JSON_EXTRACT(s.agenda, '$.discussion'), 15) as discussion,
-            s.start_time
+        SELECT s.id, v.name, s.topic, s.agenda, s.start_time
         FROM gd_sessions s
         JOIN venues v ON s.venue_id = v.id
         WHERE s.id = ?`, sessionID).Scan(
-        &session.ID, &session.Venue, &session.Topic,
-        &session.PrepTime, &session.Discussion, &session.StartTime,
+        &id, &venue, &topic, &agendaJSON, &startTimeStr,
     )
 
     if err != nil {
@@ -101,12 +99,122 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Parse start_time from string
+    startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
+    if err != nil {
+        log.Printf("Error parsing start_time: %v", err)
+        startTime = time.Now() // Fallback to current time if parsing fails
+    }
+
+    // Parse agenda with defaults
+    var agenda struct {
+        PrepTime   int `json:"prep_time"`
+        Discussion int `json:"discussion"`
+        Survey     int `json:"survey"`
+    }
+    
+    // Set default values
+    agenda.PrepTime = 5
+    agenda.Discussion = 20
+    agenda.Survey = 5
+    
+    if len(agendaJSON) > 0 {
+        if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
+            log.Printf("Error parsing agenda JSON: %v", err)
+            // Use defaults if parsing fails
+        }
+    }
+
+    response := map[string]interface{}{
+        "id":            id,
+        "venue":         venue,
+        "topic":        topic.String,
+        "prep_time":    agenda.PrepTime,
+        "discussion_time": agenda.Discussion,
+        "survey_time":   agenda.Survey,
+        "start_time":   startTime,
+    }
+
     log.Printf("Successfully fetched session %s", sessionID)
     w.Header().Set("Content-Type", "application/json")
-    if err := json.NewEncoder(w).Encode(session); err != nil {
+    if err := json.NewEncoder(w).Encode(response); err != nil {
         log.Printf("Error encoding session response: %v", err)
     }
 }
+
+// func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
+//     sessionID := r.URL.Query().Get("session_id")
+//     if sessionID == "" {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+//         return
+//     }
+
+//     studentID := r.Context().Value("studentID").(string)
+//     log.Printf("Fetching session %s for student %s", sessionID, studentID)
+    
+//     // First verify the student is part of this session
+//     var isParticipant bool
+//     err := database.GetDB().QueryRow(`
+//         SELECT EXISTS(
+//             SELECT 1 FROM session_participants 
+//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+//         )`, sessionID, studentID).Scan(&isParticipant)
+    
+//     if err != nil {
+//         log.Printf("Database error checking participant: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+
+//     if !isParticipant {
+//         log.Printf("Student %s not authorized for session %s", studentID, sessionID)
+//         w.WriteHeader(http.StatusForbidden)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view this session"})
+//         return
+//     }
+
+//     // Get session details with proper error handling
+//     var session struct {
+//         ID         string    `json:"id"`
+//         Venue      string    `json:"venue"`
+//         Topic      string    `json:"topic"`
+//         PrepTime   int       `json:"prep_time"`
+//         Discussion int       `json:"discussion_time"`
+//         StartTime  time.Time `json:"start_time"`
+//     }
+
+//     err = database.GetDB().QueryRow(`
+//         SELECT s.id, v.name, s.topic, 
+//             COALESCE(JSON_EXTRACT(s.agenda, '$.prep_time'), 5) as prep_time,
+//             COALESCE(JSON_EXTRACT(s.agenda, '$.discussion'), 15) as discussion,
+//             s.start_time
+//         FROM gd_sessions s
+//         JOIN venues v ON s.venue_id = v.id
+//         WHERE s.id = ?`, sessionID).Scan(
+//         &session.ID, &session.Venue, &session.Topic,
+//         &session.PrepTime, &session.Discussion, &session.StartTime,
+//     )
+
+//     if err != nil {
+//         log.Printf("Database error fetching session: %v", err)
+//         if err == sql.ErrNoRows {
+//             w.WriteHeader(http.StatusNotFound)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Session not found"})
+//         } else {
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         }
+//         return
+//     }
+
+//     log.Printf("Successfully fetched session %s", sessionID)
+//     w.Header().Set("Content-Type", "application/json")
+//     if err := json.NewEncoder(w).Encode(session); err != nil {
+//         log.Printf("Error encoding session response: %v", err)
+//     }
+// }
 
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
