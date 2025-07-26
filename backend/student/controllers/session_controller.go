@@ -114,9 +114,9 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
     }
     
     // Set default values
-    agenda.PrepTime = 60
-    agenda.Discussion = 60
-    agenda.Survey = 60
+    agenda.PrepTime = 1
+    agenda.Discussion = 1
+    agenda.Survey = 1
     
     if len(agendaJSON) > 0 {
         if err := json.Unmarshal(agendaJSON, &agenda); err != nil {

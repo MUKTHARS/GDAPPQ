@@ -11,6 +11,8 @@ import (
 	// "time"
 
 	"gd/database"
+
+	"github.com/google/uuid"
 )
 
 type SessionConfig struct {
@@ -21,131 +23,222 @@ type SessionConfig struct {
 	VenueID      string `json:"venue_id"`
 	SurveyWeights map[string]float64 `json:"survey_weights"`
 }
-
-func CreateBulkSessions(w http.ResponseWriter, r *http.Request) {
-    log.Println("CreateBulkSessions endpoint hit")
-    
-    var request struct {
-        Sessions []struct {
-            VenueID      string                 `json:"venue_id"`
-            Level        int                    `json:"level"`
-            StartTime    string                 `json:"start_time"`
-            Agenda       map[string]interface{} `json:"agenda"`
-            SurveyWeights map[string]float64    `json:"survey_weights"`
-        } `json:"sessions"`
-    }
-
-    if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-        log.Printf("Error decoding request: %v", err)
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
-        return
-    }
-
-    if len(request.Sessions) == 0 {
-        log.Println("No sessions provided in request")
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "No sessions provided"})
-        return
-    }
-
-    tx, err := database.GetDB().Begin()
-    if err != nil {
-        log.Printf("Error starting transaction: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    defer tx.Rollback()
-
-    for _, session := range request.Sessions {
-        log.Printf("Processing session for venue %s", session.VenueID)
-
-        // Validate agenda times
-        prepTime, ok := session.Agenda["prep_time"].(float64)
-        if !ok || prepTime <= 0 {
-            prepTime = 60 // Default value if not provided or invalid
-        }
-        
-        discussionTime, ok := session.Agenda["discussion"].(float64)
-        if !ok || discussionTime <= 0 {
-            discussionTime = 60 // Default value if not provided or invalid
-        }
-        
-        surveyTime, ok := session.Agenda["survey"].(float64)
-        if !ok || surveyTime <= 0 {
-            surveyTime = 60 // Default value if not provided or invalid
-        }
-
-        // Create standardized agenda
-        standardizedAgenda := map[string]int{
-            "prep_time":  int(prepTime),
-            "discussion": int(discussionTime),
-            "survey":     int(surveyTime),
-        }
-
-        // Parse the ISO8601 timestamp into MySQL compatible format
-        startTime, err := time.Parse(time.RFC3339, session.StartTime)
-        if err != nil {
-            log.Printf("Error parsing start time: %v", err)
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Invalid start time format"})
-            return
-        }
-        mysqlTime := startTime.Format("2006-01-02 15:04:05")
-
-        // Convert agenda to JSON
-        agendaJSON, err := json.Marshal(standardizedAgenda)
-        if err != nil {
-            log.Printf("Error marshaling agenda: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to process agenda"})
-            return
-        }
-
-        // Calculate total duration
-         totalSeconds := int(prepTime + discussionTime + surveyTime)
-
-        log.Printf("Inserting session with total duration %d minutes", totalSeconds )
-totalMinutes := totalSeconds / 60
-        // Insert session into gd_sessions table
-        _, err = tx.Exec(`
-            INSERT INTO gd_sessions (
-                id, venue_id, level, start_time, end_time, 
-                agenda, survey_weights, status
-            ) VALUES (
-                UUID(), ?, ?, ?, 
-                DATE_ADD(?, INTERVAL ? MINUTE), 
-                ?, ?, 'pending'
-            )`,
-            session.VenueID,
-            session.Level,
-            mysqlTime, // Use the formatted MySQL time
-            mysqlTime, // Use the formatted MySQL time
-            totalMinutes,
-            string(agendaJSON),
-            // string(weightsJSON),
-        )
-
-        if err != nil {
-            log.Printf("Error inserting session: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session: " + err.Error()})
-            return
-        }
-    }
-
-    if err := tx.Commit(); err != nil {
-        log.Printf("Error committing transaction: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to commit transaction"})
-        return
-    }
-
-    log.Println("Successfully created bulk sessions")
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+type SessionRequest struct {
+	VenueID       string                 `json:"venue_id"`
+	Level         int                    `json:"level"`
+	StartTime     time.Time              `json:"start_time"`
+	EndTime       time.Time              `json:"end_time"`
+	Agenda        map[string]interface{} `json:"agenda"`
+	SurveyWeights map[string]float64     `json:"survey_weights"`
 }
+func CreateBulkSessions(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Sessions []SessionRequest `json:"sessions"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+		return
+	}
+
+	if len(request.Sessions) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "No sessions provided"})
+		return
+	}
+
+	tx, err := database.GetDB().Begin()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+		return
+	}
+	defer tx.Rollback()
+
+	var createdSessions []map[string]interface{}
+
+	for _, session := range request.Sessions {
+		sessionID := uuid.New().String()
+		
+		agendaJSON, err := json.Marshal(session.Agenda)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to marshal agenda"})
+			return
+		}
+
+		surveyWeightsJSON, err := json.Marshal(session.SurveyWeights)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to marshal survey weights"})
+			return
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO gd_sessions 
+			(id, venue_id, level, start_time, end_time, agenda, survey_weights, status) 
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+			sessionID,
+			session.VenueID,
+			session.Level,
+			session.StartTime,
+			session.EndTime,
+			agendaJSON,
+			surveyWeightsJSON,
+		)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session: " + err.Error()})
+			return
+		}
+
+		createdSessions = append(createdSessions, map[string]interface{}{
+			"id":         sessionID,
+			"venue_id":   session.VenueID,
+			"start_time": session.StartTime,
+			"end_time":   session.EndTime,
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to commit transaction"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":   "success",
+		"sessions": createdSessions,
+	})
+}
+
+// func CreateBulkSessions(w http.ResponseWriter, r *http.Request) {
+//     log.Println("CreateBulkSessions endpoint hit")
+    
+//     var request struct {
+//         Sessions []struct {
+//             VenueID      string                 `json:"venue_id"`
+//             Level        int                    `json:"level"`
+//             StartTime    string                 `json:"start_time"`
+//             Agenda       map[string]interface{} `json:"agenda"`
+//             SurveyWeights map[string]float64    `json:"survey_weights"`
+//         } `json:"sessions"`
+//     }
+
+//     if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+//         log.Printf("Error decoding request: %v", err)
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+//         return
+//     }
+
+//     if len(request.Sessions) == 0 {
+//         log.Println("No sessions provided in request")
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "No sessions provided"})
+//         return
+//     }
+
+//     tx, err := database.GetDB().Begin()
+//     if err != nil {
+//         log.Printf("Error starting transaction: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer tx.Rollback()
+
+//     for _, session := range request.Sessions {
+//         log.Printf("Processing session for venue %s", session.VenueID)
+
+//         // Validate agenda times
+//         prepTime, ok := session.Agenda["prep_time"].(float64)
+//         if !ok || prepTime <= 0 {
+//             prepTime = 60 // Default value if not provided or invalid
+//         }
+        
+//         discussionTime, ok := session.Agenda["discussion"].(float64)
+//         if !ok || discussionTime <= 0 {
+//             discussionTime = 60 // Default value if not provided or invalid
+//         }
+        
+//         surveyTime, ok := session.Agenda["survey"].(float64)
+//         if !ok || surveyTime <= 0 {
+//             surveyTime = 60 // Default value if not provided or invalid
+//         }
+
+//         // Create standardized agenda
+//         standardizedAgenda := map[string]int{
+//             "prep_time":  int(prepTime),
+//             "discussion": int(discussionTime),
+//             "survey":     int(surveyTime),
+//         }
+
+//         // Parse the ISO8601 timestamp into MySQL compatible format
+//         startTime, err := time.Parse(time.RFC3339, session.StartTime)
+//         if err != nil {
+//             log.Printf("Error parsing start time: %v", err)
+//             w.WriteHeader(http.StatusBadRequest)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid start time format"})
+//             return
+//         }
+//         mysqlTime := startTime.Format("2006-01-02 15:04:05")
+
+//         // Convert agenda to JSON
+//         agendaJSON, err := json.Marshal(standardizedAgenda)
+//         if err != nil {
+//             log.Printf("Error marshaling agenda: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Failed to process agenda"})
+//             return
+//         }
+
+//         // Calculate total duration
+//          totalSeconds := int(prepTime + discussionTime + surveyTime)
+
+//         log.Printf("Inserting session with total duration %d minutes", totalSeconds )
+// totalMinutes := totalSeconds / 60
+//         // Insert session into gd_sessions table
+//         _, err = tx.Exec(`
+//             INSERT INTO gd_sessions (
+//                 id, venue_id, level, start_time, end_time, 
+//                 agenda, survey_weights, status
+//             ) VALUES (
+//                 UUID(), ?, ?, ?, 
+//                 DATE_ADD(?, INTERVAL ? MINUTE), 
+//                 ?, ?, 'pending'
+//             )`,
+//             session.VenueID,
+//             session.Level,
+//             mysqlTime, // Use the formatted MySQL time
+//             mysqlTime, // Use the formatted MySQL time
+//             totalMinutes,
+//             string(agendaJSON),
+//             // string(weightsJSON),
+//         )
+
+//         if err != nil {
+//             log.Printf("Error inserting session: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session: " + err.Error()})
+//             return
+//         }
+//     }
+
+//     if err := tx.Commit(); err != nil {
+//         log.Printf("Error committing transaction: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to commit transaction"})
+//         return
+//     }
+
+//     log.Println("Successfully created bulk sessions")
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+// }
 
 // func CreateBulkSessions(w http.ResponseWriter, r *http.Request) {
 //     log.Println("CreateBulkSessions endpoint hit")
