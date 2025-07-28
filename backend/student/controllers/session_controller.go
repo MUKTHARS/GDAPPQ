@@ -146,7 +146,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         log.Printf("Error encoding session response: %v", err)
     }
 }
-
+///////////
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
     log.Println("JoinSession endpoint hit")
@@ -229,59 +229,22 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback()
 
-    // Check if student is already in a session for this venue
-    err = tx.QueryRow(`
-        SELECT session_id FROM session_participants 
-        WHERE student_id = ? AND is_dummy = FALSE
-        AND session_id IN (
-            SELECT id FROM gd_sessions 
-            WHERE venue_id = ? AND status IN ('pending', 'active')
-        ) LIMIT 1`,
-        studentID, qrPayload.VenueID).Scan(&sessionID)
-
-    if err == nil {
-        // Student is already in a session for this venue
-        log.Printf("Student %s already in session %s for venue %s", studentID, sessionID, qrPayload.VenueID)
-        
-        // Ensure we have a valid session ID
-        if sessionID == "" {
-            // If for some reason sessionID is empty, find the active session
-            err = tx.QueryRow(`
-                SELECT id FROM gd_sessions 
-                WHERE venue_id = ? AND status IN ('pending', 'active')
-                ORDER BY created_at DESC LIMIT 1`,
-                qrPayload.VenueID).Scan(&sessionID)
-            
-            if err != nil {
-                log.Printf("Error finding active session: %v", err)
-                w.WriteHeader(http.StatusInternalServerError)
-                json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-                return
-            }
-        }
-        
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(map[string]string{
-            "status":     "already_joined",
-            "session_id": sessionID, // Always include the session ID
-        })
-        return
-    } else if err != sql.ErrNoRows {
-        log.Printf("Database error checking existing participation: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-
-    // Find existing active session for this venue
+    // First check if there's an active session for this venue
     err = tx.QueryRow(`
         SELECT id FROM gd_sessions 
         WHERE venue_id = ? AND status IN ('pending', 'active')
         ORDER BY created_at DESC LIMIT 1`,
         qrPayload.VenueID).Scan(&sessionID)
 
+    if err != nil && err != sql.ErrNoRows {
+        log.Printf("Database error finding venue session: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    // If no session exists, create one
     if err == sql.ErrNoRows {
-        // Create new session if none exists
         sessionID = uuid.New().String()
         _, err = tx.Exec(`
             INSERT INTO gd_sessions 
@@ -296,10 +259,30 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
             return
         }
         log.Printf("Created new session %s for venue %s", sessionID, qrPayload.VenueID)
-    } else if err != nil {
-        log.Printf("Database error finding venue session: %v", err)
+    }
+
+    // Check if student is already in this session
+    var isParticipant bool
+    err = tx.QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, studentID).Scan(&isParticipant)
+
+    if err != nil {
+        log.Printf("Database error checking participation: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    if isParticipant {
+        log.Printf("Student %s already in session %s for venue %s", studentID, sessionID, qrPayload.VenueID)
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{
+            "status":     "already_joined",
+            "session_id": sessionID,
+        })
         return
     }
 
