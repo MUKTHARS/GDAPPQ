@@ -15,10 +15,10 @@ export default function AgendaEditor({ agenda, onChange }) {
       <Text style={styles.header}>Session Agenda</Text>
       
       <TimerConfig
-        label="Preparation Time (minutes)"
-        value={agenda.prep_time.toString()}
-        onChange={(val) => updateTime('prep_time', val)}
-      />
+    label="Preparation Time (minutes)"
+    value={agenda.prep_time ? agenda.prep_time.toString() : "0"}
+    onChange={(val) => updateTime('prep_time', val)}
+/>
       
       <TimerConfig
         label="Discussion Time (minutes)"

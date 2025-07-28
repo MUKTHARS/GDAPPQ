@@ -1,44 +1,105 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export default function Timer({ duration, onComplete, active }) {
-  const [timeLeft, setTimeLeft] = useState(duration * 60); // Convert to seconds
+const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTick }) => {
+  const [remaining, setRemaining] = useState(initialTimeRemaining || duration);
+  
+  useEffect(() => {
+    if (initialTimeRemaining) {
+      setRemaining(initialTimeRemaining);
+    } else {
+      setRemaining(duration); 
+    }
+  }, [duration, initialTimeRemaining]);
 
   useEffect(() => {
-    if (!active) return;
-    
+    if (!active || remaining <= 0) return;
+
     const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onComplete();
-          return 0;
-        }
-        return prev - 1;
-      });
+      const newRemaining = remaining - 1;
+      
+      if (onTick) onTick(newRemaining);
+      
+      setRemaining(newRemaining);
+      
+      if (newRemaining <= 0) {
+        clearInterval(interval);
+        onComplete();
+      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [active]);
+  }, [active, remaining, onComplete, onTick]);
 
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
+  // Convert seconds to minutes:seconds format
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.timerText}>
-        {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
-      </Text>
-    </View>
+    <Text style={styles.timerText}>
+      {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
+    </Text>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: {
-    marginVertical: 20,
-  },
   timerText: {
-    fontSize: 48,
+    fontSize: 36,
     fontWeight: 'bold',
   },
 });
+
+export default Timer;
+
+
+// import React, { useEffect, useState } from 'react';
+// import { View, Text, StyleSheet } from 'react-native';
+
+// const Timer = ({ duration, onComplete, active, initialTimeRemaining, onTick }) => {
+//   const [remaining, setRemaining] = useState(initialTimeRemaining || duration * 60);
+  
+//   useEffect(() => {
+//     if (initialTimeRemaining) {
+//       setRemaining(initialTimeRemaining);
+//     } else {
+//       setRemaining(duration * 60);
+//     }
+//   }, [duration, initialTimeRemaining]);
+
+//   useEffect(() => {
+//     if (!active || remaining <= 0) return;
+
+//     const interval = setInterval(() => {
+//       setRemaining(prev => {
+//         const newRemaining = prev - 1;
+//         if (onTick) onTick(newRemaining);
+//         if (newRemaining <= 0) {
+//           clearInterval(interval);
+//           onComplete();
+//           return 0;
+//         }
+//         return newRemaining;
+//       });
+//     }, 1000);
+
+//     return () => clearInterval(interval);
+//   }, [active, remaining, onComplete, onTick]);
+
+//   const minutes = Math.floor(remaining / 60);
+//   const seconds = remaining % 60;
+
+//   return (
+//     <Text style={styles.timerText}>
+//       {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
+//     </Text>
+//   );
+// };
+
+// const styles = StyleSheet.create({
+//   timerText: {
+//     fontSize: 36,
+//     fontWeight: 'bold',
+//   },
+// });
+
+// export default Timer;

@@ -61,7 +61,8 @@ router.Handle("/admin/questions", middleware.AdminOnly(
 
 router.Handle("/admin/bookings", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetStudentBookings)))
-
+router.Handle("/admin/rules", middleware.AdminOnly(
+    http.HandlerFunc(controllers.UpdateSessionRules)))
 	log.Println("Venue routes setup complete")
 	return router
 

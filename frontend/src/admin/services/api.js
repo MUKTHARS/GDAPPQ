@@ -25,6 +25,8 @@ api.interceptors.request.use(async (config) => {
 
 // Add these API endpoints
 api.admin = {
+  getSessionRules: (level) => api.get('/admin/rules', { params: { level } }),
+  updateSessionRules: (data) => api.post('/admin/rules', data),
   getVenues: () => api.get('/admin/venues'),
    generateQR: (venueId) => api.get('/admin/qr', { 
     params: { 
@@ -38,25 +40,41 @@ api.admin = {
   updateVenue: (id, data) => api.put(`/admin/venues/${id}`, data),
   createVenue: (data) => api.post('/admin/venues', data),
   getBookings: () => api.get('/admin/bookings'),
+
 createBulkSessions: (data) => {
-        console.log("Creating bulk sessions with data:", data);
-        return api.post('/admin/sessions/bulk', data, {
-            validateStatus: function (status) {
-                return status < 500; // Reject only if status is 500 or higher
-            },
-            transformRequest: [(data) => {
-                // Ensure proper date formatting
-                const sessions = data.sessions.map(session => ({
-                    ...session,
-                    start_time: new Date(session.start_time).toISOString()
-                }));
-                return JSON.stringify({ sessions });
-            }]
-        }).catch(error => {
-            console.error("Error creating sessions:", error);
-            throw error;
-        });
+  return api.post('/admin/sessions/bulk', data, {
+    validateStatus: function (status) {
+      return status < 500;
     },
+    transformRequest: [(data) => {
+      const sessions = data.sessions.map(session => ({
+        ...session,
+        start_time: new Date(session.start_time).toISOString(),
+        end_time: new Date(session.end_time).toISOString()
+      }));
+      return JSON.stringify({ sessions });
+    }]
+  });
+},
+  // createBulkSessions: (data) => {
+//         console.log("Creating bulk sessions with data:", data);
+//         return api.post('/admin/sessions/bulk', data, {
+//             validateStatus: function (status) {
+//                 return status < 500; // Reject only if status is 500 or higher
+//             },
+//             transformRequest: [(data) => {
+//                 // Ensure proper date formatting
+//                 const sessions = data.sessions.map(session => ({
+//                     ...session,
+//                     start_time: new Date(session.start_time).toISOString()
+//                 }));
+//                 return JSON.stringify({ sessions });
+//             }]
+//         }).catch(error => {
+//             console.error("Error creating sessions:", error);
+//             throw error;
+//         });
+//     },
   getVenues: () => api.get('/admin/venues'),
 };
 

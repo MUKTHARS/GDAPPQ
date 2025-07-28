@@ -200,8 +200,11 @@ func InitDB(db *sql.DB) error {
         // Students
 `INSERT IGNORE INTO student_users (id, email, password_hash, full_name, department, year, is_active) VALUES 
 ('student1', 'student1@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'John Doe', 'CS', 3, TRUE),
-('student2', 'student2@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'Jane Smith', 'ECE', 2, TRUE)`,
-        // Venues
+('student2', 'student2@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'Jane Smith', 'ECE', 2, TRUE)
+`,
+
+
+// Venues
         `INSERT IGNORE INTO venues (id, name, capacity, qr_secret, created_by) VALUES 
         ('venue1', 'Table 1-A', 10, 'venue1_secret123', 'admin1'),
         ('venue2', 'Room 3B', 15, 'venue2_secret456', 'admin1')`,
@@ -251,15 +254,6 @@ _, err = db.Exec(
 )
 if err != nil {
     log.Printf("Error inserting test student: %v", err)
-}
-  _, err = db.Exec(`
-	INSERT IGNORE INTO survey_responses
-	(id, question_text, weight, applicable_levels) VALUES 
-	('q1', 'Clarity of arguments', 1.5, '[1,2]'),
-	('q2', 'Teamwork and collaboration', 1.2, '[1,2]'),
-	('q3', 'Logical reasoning', 1.3, '[1,2]')`)
-if err != nil {
-	log.Printf("Error inserting survey questions: %v", err)
 }
 
 // Add sample qualification data
