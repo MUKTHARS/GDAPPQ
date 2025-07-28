@@ -122,6 +122,11 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
             log.Printf("Error parsing agenda JSON: %v", err)
             // Use defaults if parsing fails
+        } else {
+            // Ensure values are in minutes (not seconds)
+            if agenda.Discussion > 60 { // If somehow seconds got stored
+                agenda.Discussion = agenda.Discussion / 60
+            }
         }
     }
 
