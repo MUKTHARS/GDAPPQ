@@ -148,7 +148,6 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 
-
 func JoinSession(w http.ResponseWriter, r *http.Request) {
     log.Println("JoinSession endpoint hit")
     
@@ -173,7 +172,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
     log.Printf("JoinSession request for student %s", studentID)
     
-    // Parse QR data (assuming it's JSON)
+    // Parse QR data
     var qrPayload struct {
         VenueID string `json:"venue_id"`
         Expiry  string `json:"expiry"`
@@ -219,45 +218,122 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Check if student has booked this venue
+    // Find or create session for this venue
     var sessionID string
-    err = database.GetDB().QueryRow(`
-        SELECT s.id 
-        FROM gd_sessions s
-        JOIN session_participants sp ON s.id = sp.session_id
-        WHERE s.venue_id = ? 
-        AND sp.student_id = ? 
-        AND s.status IN ('pending', 'active')
-        AND sp.is_dummy = FALSE`,
-        qrPayload.VenueID, studentID,
-    ).Scan(&sessionID)
-    
+    tx, err := database.GetDB().Begin()
     if err != nil {
-        if err == sql.ErrNoRows {
-            log.Printf("No booking found for student %s at venue %s", studentID, qrPayload.VenueID)
-            w.WriteHeader(http.StatusForbidden)
-            json.NewEncoder(w).Encode(map[string]string{"error": "You haven't booked this venue"})
-        } else {
-            log.Printf("Database error in booking check: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        log.Printf("Failed to begin transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer tx.Rollback()
+
+    // Check if student is already in a session for this venue
+    err = tx.QueryRow(`
+        SELECT session_id FROM session_participants 
+        WHERE student_id = ? AND is_dummy = FALSE
+        AND session_id IN (
+            SELECT id FROM gd_sessions 
+            WHERE venue_id = ? AND status IN ('pending', 'active')
+        ) LIMIT 1`,
+        studentID, qrPayload.VenueID).Scan(&sessionID)
+
+    if err == nil {
+        // Student is already in a session for this venue
+        log.Printf("Student %s already in session %s for venue %s", studentID, sessionID, qrPayload.VenueID)
+        
+        // Ensure we have a valid session ID
+        if sessionID == "" {
+            // If for some reason sessionID is empty, find the active session
+            err = tx.QueryRow(`
+                SELECT id FROM gd_sessions 
+                WHERE venue_id = ? AND status IN ('pending', 'active')
+                ORDER BY created_at DESC LIMIT 1`,
+                qrPayload.VenueID).Scan(&sessionID)
+            
+            if err != nil {
+                log.Printf("Error finding active session: %v", err)
+                w.WriteHeader(http.StatusInternalServerError)
+                json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+                return
+            }
         }
+        
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{
+            "status":     "already_joined",
+            "session_id": sessionID, // Always include the session ID
+        })
+        return
+    } else if err != sql.ErrNoRows {
+        log.Printf("Database error checking existing participation: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
 
-    log.Printf("Found session %s for student %s", sessionID, studentID)
+    // Find existing active session for this venue
+    err = tx.QueryRow(`
+        SELECT id FROM gd_sessions 
+        WHERE venue_id = ? AND status IN ('pending', 'active')
+        ORDER BY created_at DESC LIMIT 1`,
+        qrPayload.VenueID).Scan(&sessionID)
+
+    if err == sql.ErrNoRows {
+        // Create new session if none exists
+        sessionID = uuid.New().String()
+        _, err = tx.Exec(`
+            INSERT INTO gd_sessions 
+            (id, venue_id, status, start_time, level) 
+            VALUES (?, ?, 'active', NOW(), 
+                   (SELECT level FROM venues WHERE id = ?))`,
+            sessionID, qrPayload.VenueID, qrPayload.VenueID)
+        if err != nil {
+            log.Printf("Failed to create session: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session"})
+            return
+        }
+        log.Printf("Created new session %s for venue %s", sessionID, qrPayload.VenueID)
+    } else if err != nil {
+        log.Printf("Database error finding venue session: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    // Add student to session
+    _, err = tx.Exec(`
+        INSERT INTO session_participants 
+        (id, session_id, student_id, is_dummy) 
+        VALUES (UUID(), ?, ?, FALSE)`,
+        sessionID, studentID)
+    
+    if err != nil {
+        log.Printf("Failed to add participant: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
+        return
+    }
 
     // Update session status to active if not already
-    _, err = database.GetDB().Exec(`
+    _, err = tx.Exec(`
         UPDATE gd_sessions 
         SET status = 'active' 
         WHERE id = ? AND status = 'pending'`,
-        sessionID,
-    )
+        sessionID)
     if err != nil {
         log.Printf("Failed to activate session: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to activate session"})
+        return
+    }
+
+    if err := tx.Commit(); err != nil {
+        log.Printf("Failed to commit transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
         return
     }
 
@@ -268,6 +344,126 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         "session_id": sessionID,
     })
 }
+
+// func JoinSession(w http.ResponseWriter, r *http.Request) {
+//     log.Println("JoinSession endpoint hit")
+    
+//     var request struct {
+//         QRData string `json:"qr_data"`
+//     }
+    
+//     if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+//         log.Printf("JoinSession decode error: %v", err)
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+//         return
+//     }
+
+//     if request.QRData == "" {
+//         log.Println("Empty QR data received")
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "QR data is required"})
+//         return
+//     }
+
+//     studentID := r.Context().Value("studentID").(string)
+//     log.Printf("JoinSession request for student %s", studentID)
+    
+//     // Parse QR data (assuming it's JSON)
+//     var qrPayload struct {
+//         VenueID string `json:"venue_id"`
+//         Expiry  string `json:"expiry"`
+//     }
+//     if err := json.Unmarshal([]byte(request.QRData), &qrPayload); err != nil {
+//         log.Printf("QR data parsing error: %v", err)
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid QR code format"})
+//         return
+//     }
+
+//     log.Printf("QR payload parsed - VenueID: %s, Expiry: %s", qrPayload.VenueID, qrPayload.Expiry)
+
+//     // Verify QR code against database
+//     var dbQRData string
+//     err := database.GetDB().QueryRow(`
+//         SELECT qr_data 
+//         FROM venue_qr_codes 
+//         WHERE venue_id = ? 
+//         AND is_active = TRUE 
+//         AND expires_at > NOW()`,
+//         qrPayload.VenueID,
+//     ).Scan(&dbQRData)
+
+//     if err != nil {
+//         if err == sql.ErrNoRows {
+//             log.Printf("No active QR code found for venue %s", qrPayload.VenueID)
+//             w.WriteHeader(http.StatusUnauthorized)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired QR code"})
+//         } else {
+//             log.Printf("Database error in QR validation: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         }
+//         return
+//     }
+
+//     // Check if QR data matches
+//     if dbQRData != request.QRData {
+//         log.Printf("QR code mismatch - stored: %s, received: %s", dbQRData, request.QRData)
+//         w.WriteHeader(http.StatusUnauthorized)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "QR code verification failed"})
+//         return
+//     }
+
+//     // Check if student has booked this venue
+//     var sessionID string
+//     err = database.GetDB().QueryRow(`
+//         SELECT s.id 
+//         FROM gd_sessions s
+//         JOIN session_participants sp ON s.id = sp.session_id
+//         WHERE s.venue_id = ? 
+//         AND sp.student_id = ? 
+//         AND s.status IN ('pending', 'active')
+//         AND sp.is_dummy = FALSE`,
+//         qrPayload.VenueID, studentID,
+//     ).Scan(&sessionID)
+    
+//     if err != nil {
+//         if err == sql.ErrNoRows {
+//             log.Printf("No booking found for student %s at venue %s", studentID, qrPayload.VenueID)
+//             w.WriteHeader(http.StatusForbidden)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "You haven't booked this venue"})
+//         } else {
+//             log.Printf("Database error in booking check: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         }
+//         return
+//     }
+
+//     log.Printf("Found session %s for student %s", sessionID, studentID)
+
+//     // Update session status to active if not already
+//     _, err = database.GetDB().Exec(`
+//         UPDATE gd_sessions 
+//         SET status = 'active' 
+//         WHERE id = ? AND status = 'pending'`,
+//         sessionID,
+//     )
+//     if err != nil {
+//         log.Printf("Failed to activate session: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to activate session"})
+//         return
+//     }
+
+//     log.Printf("Successfully joined session %s for student %s", sessionID, studentID)
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]string{
+//         "status":     "joined",
+//         "session_id": sessionID,
+//     })
+// }
 
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("studentID").(string)
