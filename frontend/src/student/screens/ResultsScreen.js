@@ -7,6 +7,7 @@ export default function ResultsScreen({ navigation, route }) {
   const { sessionId } = route.params;
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(true);
+ const sortedScores = [...scores].sort((a, b) => b.score - a.score);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -30,109 +31,110 @@ export default function ResultsScreen({ navigation, route }) {
     );
   }
 
-  return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Your GD Results</Text>
+   return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Survey Results</Text>
       
-      {results.qualified ? (
-        <Text style={styles.successText}>Congratulations! You qualified for Level {results.nextLevel}</Text>
-      ) : (
-        <Text style={styles.failureText}>Keep practicing! You did not qualify this time</Text>
-      )}
+      <Text style={styles.subtitle}>Qualified Members:</Text>
+      <View style={styles.qualifiedContainer}>
+        {qualified.map((member, index) => (
+          <View key={member.id} style={styles.qualifiedMember}>
+            <Text style={styles.qualifiedPosition}>
+              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}
+            </Text>
+            <Text style={styles.qualifiedName}>{member.name}</Text>
+            <Text style={styles.qualifiedScore}>{member.score.toFixed(1)} points</Text>
+          </View>
+        ))}
+      </View>
 
-      <ProgressChart
-        data={{
-          labels: ["Leadership", "Communication", "Teamwork"],
-          data: [results.scores.leadership / 5, results.scores.communication / 5, results.scores.teamwork / 5]
-        }}
-        width={300}
-        height={220}
-        chartConfig={{
-          backgroundColor: '#fff',
-          backgroundGradientFrom: '#fff',
-          backgroundGradientTo: '#fff',
-          decimalPlaces: 1,
-          color: (opacity = 1) => `rgba(46, 134, 222, ${opacity})`,
-        }}
-        style={styles.chart}
+      <Text style={styles.subtitle}>All Participants:</Text>
+      <FlatList
+        data={sortedScores}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.scoreCard}>
+            <Text style={styles.memberName}>{item.name}</Text>
+            <View style={styles.scoreDetails}>
+              <Text style={styles.scoreText}>{item.score.toFixed(1)} points</Text>
+              {item.penalties > 0 && (
+                <Text style={styles.penaltyText}>({item.penalties} penalties)</Text>
+              )}
+            </View>
+          </View>
+        )}
       />
-
-      <View style={styles.feedbackSection}>
-        <Text style={styles.sectionTitle}>Faculty Feedback</Text>
-        <Text style={styles.feedbackText}>{results.feedback || "No feedback provided"}</Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your Scores</Text>
-        <View style={styles.scoreRow}>
-          <Text>Leadership:</Text>
-          <Text>{results.scores.leadership}/5</Text>
-        </View>
-        <View style={styles.scoreRow}>
-          <Text>Communication:</Text>
-          <Text>{results.scores.communication}/5</Text>
-        </View>
-        <View style={styles.scoreRow}>
-          <Text>Teamwork:</Text>
-          <Text>{results.scores.teamwork}/5</Text>
-        </View>
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-  },
-  loading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#f5f5f5'
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: 'center'
   },
-  successText: {
-    color: 'green',
+  subtitle: {
     fontSize: 18,
-    textAlign: 'center',
+    fontWeight: '600',
+    marginVertical: 10
+  },
+  qualifiedContainer: {
     marginBottom: 20,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 15,
+    elevation: 3
   },
-  failureText: {
-    color: 'red',
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
+  qualifiedMember: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee'
   },
-  chart: {
-    marginVertical: 20,
-    alignSelf: 'center',
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
+  qualifiedPosition: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    width: 50
   },
-  scoreRow: {
+  qualifiedName: {
+    flex: 1,
+    fontSize: 16
+  },
+  qualifiedScore: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF'
+  },
+  scoreCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    marginVertical: 5,
+    borderRadius: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
+    alignItems: 'center'
   },
-  feedbackSection: {
-    marginBottom: 30,
+  memberName: {
+    fontSize: 16,
+    flex: 1
   },
-  feedbackText: {
-    fontStyle: 'italic',
-    lineHeight: 22,
+  scoreDetails: {
+    alignItems: 'flex-end'
   },
+  scoreText: {
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  penaltyText: {
+    fontSize: 12,
+    color: '#FF3B30'
+  }
 });
