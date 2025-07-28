@@ -140,9 +140,42 @@ getSessionParticipants: (sessionId) => {
     return { data: [] };
   });
 },
+submitSurvey: (data) => {
+    console.log('Submitting survey with data:', data);
+    return api.post('/student/survey', {
+      session_id: data.sessionId,
+      responses: Object.keys(data.responses).reduce((acc, questionIndex) => {
+        const questionNum = parseInt(questionIndex);
+        const rankings = data.responses[questionIndex];
+        
+        // Convert rankings to the expected format (rank -> student_id)
+        const formattedRankings = {};
+        Object.keys(rankings).forEach(rank => {
+          const rankNum = parseInt(rank);
+          if (rankings[rank]) {  // Only include if there's a value
+            formattedRankings[rankNum] = rankings[rank];
+          }
+        });
+        
+        // Only include if there are rankings
+        if (Object.keys(formattedRankings).length > 0) {
+          acc[questionNum] = formattedRankings;
+        }
+        return acc;
+      }, {})
+    }, {
+      validateStatus: function (status) {
+        return status < 500; // Reject only if status is 500 or higher
+      }
+    }).catch(error => {
+      console.error("Error submitting survey:", error);
+      throw error;
+    });
+  },
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
-  cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } })
+  cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
+  
 };
 
 export default api;

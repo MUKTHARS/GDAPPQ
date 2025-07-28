@@ -76,6 +76,7 @@ createBulkSessions: (data) => {
 //         });
 //     },
   getVenues: () => api.get('/admin/venues'),
+  
 };
 
 export default api;

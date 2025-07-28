@@ -155,17 +155,19 @@ export default function SurveyScreen({ navigation, route }) {
     });
   };
 
-  const handleSubmit = async () => {
-    try {
-      await api.student.submitSurvey({
-        sessionId,
-        responses: selections
-      });
-      navigation.navigate('Results', { sessionId });
-    } catch (error) {
-      alert('Failed to submit survey');
-    }
-  };
+const handleSubmit = async () => {
+  try {
+    await api.student.submitSurvey({
+      sessionId,
+      responses: selections
+    });
+    navigation.navigate('Results', { sessionId });
+  } catch (error) {
+    console.error('Failed to submit survey:', error);
+  }
+};
+
+
 
   if (loading) {
     return (
