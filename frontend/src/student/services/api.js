@@ -96,7 +96,50 @@ api.student = {
       throw error;
     });
   },
-
+getSessionParticipants: (sessionId) => {
+  return api.get('/student/session/participants', { 
+    params: { session_id: sessionId },
+    transformResponse: [
+      function (data) {
+        try {
+          // Handle empty responses
+          if (!data) {
+            return { data: [] };
+          }
+          
+          // Handle non-JSON responses (like plain text errors)
+          if (typeof data === 'string') {
+            try {
+              return JSON.parse(data);
+            } catch (e) {
+              return { 
+                error: data,
+                data: [] 
+              };
+            }
+          }
+          
+          // Handle proper JSON responses
+          const parsed = typeof data === 'object' ? data : JSON.parse(data);
+          return {
+            ...parsed,
+            data: parsed.data || []
+          };
+        } catch (e) {
+          console.error('Response parsing error:', e);
+          return { data: [] };
+        }
+      }
+    ],
+    validateStatus: function (status) {
+      // Accept all status codes
+      return true;
+    }
+  }).catch(error => {
+    console.error('Participants API error:', error);
+    return { data: [] };
+  });
+},
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } })
