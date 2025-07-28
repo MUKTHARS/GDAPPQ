@@ -146,7 +146,7 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
         log.Printf("Error encoding session response: %v", err)
     }
 }
-///////////
+////////////////
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
     log.Println("JoinSession endpoint hit")
