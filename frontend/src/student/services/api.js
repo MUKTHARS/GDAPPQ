@@ -179,10 +179,24 @@ submitSurvey: (data) => {
   getSurveyQuestions: (sessionId) => api.get('/student/survey/questions', { params: { session_id: sessionId } }),
   
   submitSurveyResponse: (data) => api.post('/student/survey/response', data),
-  
+   submitSurvey: (data) => api.post('/student/survey', data, {
+    validateStatus: function (status) {
+      return status < 500; // Only reject server errors
+    }
+  }),
   completeSurvey: (sessionId) => api.post('/student/survey/complete', { session_id: sessionId }),
-  
-  getResults: (sessionId) => api.get('/student/results', { params: { session_id: sessionId } }),
+   getResultsStatus: (sessionId) => api.get('/student/results/status', { 
+    params: { session_id: sessionId } 
+  }),
+    getResults: (data) => api.get('/student/results', { 
+    params: {
+      session_id: data.session_id,
+      student_id: data.student_id
+    },
+    validateStatus: function (status) {
+      return status < 500;
+    }
+  }),
 };
 
 export default api;

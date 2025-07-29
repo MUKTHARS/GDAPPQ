@@ -25,7 +25,11 @@ type SurveyCalculator struct {
 func NewSurveyCalculator(db *sql.DB) *SurveyCalculator {
 	return &SurveyCalculator{db: db}
 }
-
+type SurveySubmission struct {
+	SessionID   string                 `json:"session_id"`
+	Responses   map[int]map[int]string `json:"responses"` // question -> rank -> student_id
+	TookTooLong bool                   `json:"tookTooLong"`
+}
 func (sc *SurveyCalculator) CalculateResults(sessionID string) error {
 	tx, err := sc.db.Begin()
 	if err != nil {
