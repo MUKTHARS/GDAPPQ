@@ -36,6 +36,7 @@ func SetupStudentRoutes() *http.ServeMux {
     http.HandlerFunc(controllers.CancelBooking)))
     router.Handle("/student/session/participants", middleware.StudentOnly(
     http.HandlerFunc(controllers.GetSessionParticipants)))
-    
+    router.Handle("/student/session/count", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetSessionParticipantCount)))
     return router
 }

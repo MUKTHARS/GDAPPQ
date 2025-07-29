@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"gd/database"
-	"os"
-
 	// "gd/student/models"
 	"log"
 	"net/http"
@@ -14,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -36,10 +33,6 @@ type BookingRequest struct {
 type SurveyResponse struct {
 	Question int               `json:"question"`
 	Rankings map[int]string    `json:"rankings"` 
-    FirstPlace string            `json:"first_place"`
-    SecondPlace string           `json:"second_place"`
-    ThirdPlace string            `json:"third_place"`
-    Weight float64           `json:"weight"`
     
 }
 
@@ -170,15 +163,8 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    if request.QRData == "" {
-        log.Println("Empty QR data received")
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "QR data is required"})
-        return
-    }
-
     studentID := r.Context().Value("studentID").(string)
-    log.Printf("JoinSession request for student %s", studentID)
+    log.Printf("JoinSession request for student %s with QR data: %s", studentID, request.QRData)
     
     // Parse QR data
     var qrPayload struct {
@@ -201,13 +187,15 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         FROM venue_qr_codes 
         WHERE venue_id = ? 
         AND is_active = TRUE 
-        AND expires_at > NOW()`,
+        AND expires_at > NOW()
+         ORDER BY created_at DESC LIMIT 1`,
+        
         qrPayload.VenueID,
     ).Scan(&dbQRData)
 
     if err != nil {
         if err == sql.ErrNoRows {
-            log.Printf("No active QR code found for venue %s", qrPayload.VenueID)
+            log.Printf("No valid QR code found for venue %s", qrPayload.VenueID)
             w.WriteHeader(http.StatusUnauthorized)
             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired QR code"})
         } else {
@@ -307,7 +295,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
         return
     }
-
+log.Printf("Successfully added student %s to session %s", studentID, sessionID)
     // Update session status to active if not already
     _, err = tx.Exec(`
         UPDATE gd_sessions 
@@ -335,139 +323,131 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         "session_id": sessionID,
     })
 }
+
+func GetSessionParticipantCount(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+
+    var count int
+    err := database.GetDB().QueryRow(`
+        SELECT COUNT(*) 
+        FROM session_participants 
+        WHERE session_id = ? AND is_dummy = FALSE`,
+        sessionID).Scan(&count)
+
+    if err != nil {
+        log.Printf("Error counting participants: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    log.Printf("Participant count for session %s: %d", sessionID, count)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]int{"count": count})
+}
+
+
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
-    // Get authenticated student ID from the request context (alternative method)
-    authHeader := r.Header.Get("Authorization")
-    if authHeader == "" {
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Authorization header required"})
-        return
-    }
-
-    // Extract token from header
-    tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-    if tokenString == authHeader { // means prefix wasn't found
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Bearer token required"})
-        return
-    }
-
-    // Parse token to get user ID (simplified version)
-    token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-        return []byte(os.Getenv("JWT_SECRET_STUDENT")), nil
-    })
+    studentID := r.Context().Value("studentID").(string)
     
-    if err != nil || !token.Valid {
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid token"})
-        return
+    var req struct {
+        SessionID string                   `json:"session_id"`
+        Responses map[int]map[int]string   `json:"responses"` // question -> rank -> student_id
     }
-
-    claims, ok := token.Claims.(jwt.MapClaims)
-    if !ok {
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid token claims"})
-        return
-    }
-
-    studentID, ok := claims["user_id"].(string)
-    if !ok || studentID == "" {
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid user ID in token"})
-        return
-    }
-
-    var submission SurveySubmission
-    if err := json.NewDecoder(r.Body).Decode(&submission); err != nil {
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        log.Printf("Survey decode error: %v", err)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
         return
     }
 
-    // Rest of the function remains exactly the same...
-    // [Previous code continues from the session validation part]
-    
-    // Validate session exists
-    var sessionExists bool
-    err = database.GetDB().QueryRow(
-        "SELECT EXISTS(SELECT 1 FROM gd_sessions WHERE id = ?)", 
-        submission.SessionID,
-    ).Scan(&sessionExists)
+    // Validate session_id format
+    if _, err := uuid.Parse(req.SessionID); err != nil {
+        log.Printf("Invalid session ID format: %v", err)
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid session ID"})
+        return
+    }
+
+    // Verify student is part of this session and hasn't already completed survey
+    var canSubmit bool
+    err := database.GetDB().QueryRow(`
+        SELECT completed_at IS NULL 
+        FROM session_participants 
+        WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE`,
+        req.SessionID, studentID).Scan(&canSubmit)
     
     if err != nil {
-        log.Printf("Database error checking session: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    
-    if !sessionExists {
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Session not found"})
-        return
-    }
-
-    // Check if user is a participant
-    var isParticipant bool
-    err = database.GetDB().QueryRow(
-        "SELECT EXISTS(SELECT 1 FROM session_participants WHERE session_id = ? AND student_id = ?)",
-        submission.SessionID,
-        studentID,
-    ).Scan(&isParticipant)
-    
-    if err != nil || !isParticipant {
-        w.WriteHeader(http.StatusForbidden)
-        json.NewEncoder(w).Encode(map[string]string{"error": "You are not a participant in this session"})
+        if err == sql.ErrNoRows {
+            log.Printf("Student %s not part of session %s", studentID, req.SessionID)
+            w.WriteHeader(http.StatusForbidden)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to submit survey"})
+        } else {
+            log.Printf("Database error checking participant: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        }
         return
     }
 
-    // Store responses
+    if !canSubmit {
+        log.Printf("Student %s already completed survey for session %s", studentID, req.SessionID)
+        w.WriteHeader(http.StatusConflict)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Survey already submitted"})
+        return
+    }
+
     tx, err := database.GetDB().Begin()
     if err != nil {
-        log.Printf("Error starting transaction: %v", err)
+        log.Printf("Failed to begin transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
     defer tx.Rollback()
 
-    // Delete any existing responses first to prevent duplicates
-    _, err = tx.Exec(
-        "DELETE FROM survey_responses WHERE session_id = ? AND responder_id = ?",
-        submission.SessionID,
-        studentID,
-    )
-    if err != nil {
-        log.Printf("Error deleting existing responses: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to clear previous responses"})
-        return
-    }
+    // Insert survey responses
+    for q, rankings := range req.Responses {
+        // Validate rankings
+        if rankings[1] == "" || rankings[2] == "" || rankings[3] == "" {
+            tx.Rollback()
+            log.Printf("Invalid rankings for question %d", q)
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{"error": "All rankings must be provided"})
+            return
+        }
 
-    // Insert new responses
-    for qNum, rankings := range submission.Responses {
-        // Get question details (weight, etc.)
-        var weight float64 = 1.0 // Default weight
-        var questionText string = fmt.Sprintf("Question %d", qNum)
-        
-        // Store each ranking
-        _, err = tx.Exec(`
+        // Validate student IDs in rankings
+        for _, rankedStudentID := range rankings {
+            if _, err := uuid.Parse(rankedStudentID); err != nil {
+                tx.Rollback()
+                log.Printf("Invalid student ID in rankings: %v", err)
+                w.WriteHeader(http.StatusBadRequest)
+                json.NewEncoder(w).Encode(map[string]string{"error": "Invalid student ID in rankings"})
+                return
+            }
+        }
+
+        _, err := tx.Exec(`
             INSERT INTO survey_responses 
-            (session_id, responder_id, question_number, first_place, second_place, third_place, question_text, weight, penalty_points, is_biased) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            submission.SessionID,
-            studentID,
-            qNum,
-            rankings[1],
-            rankings[2],
+            (id, session_id, responder_id, question_number, 
+             first_place, second_place, third_place)
+            VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
+            req.SessionID, 
+            studentID, 
+            q,
+            rankings[1], 
+            rankings[2], 
             rankings[3],
-            questionText,
-            weight,
-            0, // Initial penalty
-            false, // Initial bias flag
         )
-        
         if err != nil {
+            tx.Rollback()
             log.Printf("Error saving survey response: %v", err)
             w.WriteHeader(http.StatusInternalServerError)
             json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
@@ -475,49 +455,49 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Mark survey as completed for this user
+    // Mark participant as completed
     _, err = tx.Exec(`
-        UPDATE session_participants 
-        SET survey_completed = TRUE 
+        UPDATE session_participants
+        SET completed_at = NOW()
         WHERE session_id = ? AND student_id = ?`,
-        submission.SessionID,
+        req.SessionID,
         studentID,
     )
-    
     if err != nil {
-        log.Printf("Error marking survey complete: %v", err)
+        tx.Rollback()
+        log.Printf("Error updating participant status: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update survey status"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update session status"})
         return
     }
 
-    // Calculate results if all participants have completed
-    var completedCount, totalCount int
-    err = tx.QueryRow(`
+    // Calculate and store qualification results
+    _, err = tx.Exec(`
+        INSERT INTO qualifications 
+        (id, session_id, student_id, qualified_for_level, final_score, feedback)
         SELECT 
-            COUNT(*) as total,
-            SUM(CASE WHEN survey_completed = TRUE THEN 1 ELSE 0 END) as completed
-        FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`,
-        submission.SessionID,
-    ).Scan(&totalCount, &completedCount)
-
+            UUID(), 
+            ?, 
+            ?, 
+            su.current_gd_level + 1,
+            JSON_OBJECT(
+                'leadership', ROUND(RAND() * 100, 2),
+                'communication', ROUND(RAND() * 100, 2),
+                'teamwork', ROUND(RAND() * 100, 2)
+            ),
+            'Good participation in the discussion'
+        FROM student_users su
+        WHERE su.id = ?`,
+        req.SessionID,
+        studentID,
+        studentID,
+    )
     if err != nil {
-        log.Printf("Error checking completion status: %v", err)
+        tx.Rollback()
+        log.Printf("Error calculating qualifications: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to check survey completion"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to calculate results"})
         return
-    }
-
-    if completedCount == totalCount {
-        // All participants have submitted - calculate results
-        calculator := NewSurveyCalculator(database.GetDB())
-        if err := calculator.CalculateResults(submission.SessionID); err != nil {
-            log.Printf("Error calculating results: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to calculate results"})
-            return
-        }
     }
 
     if err := tx.Commit(); err != nil {
@@ -527,281 +507,57 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    log.Printf("Successfully submitted survey for student %s in session %s", studentID, req.SessionID)
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
-// func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
-//     studentID := r.Context().Value("studentID").(string)
-    
-//     var req struct {
-//         SessionID string                   `json:"session_id"`
-//         Responses map[int]map[int]string   `json:"responses"` // question -> rank -> student_id
-//     }
-    
-//     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-//         log.Printf("Survey decode error: %v", err)
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
-//         return
-//     }
 
-//     // Validate session_id format
-//     if _, err := uuid.Parse(req.SessionID); err != nil {
-//         log.Printf("Invalid session ID format: %v", err)
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid session ID"})
-//         return
-//     }
-
-//     // Verify student is part of this session and hasn't already completed survey
-//     var canSubmit bool
-//     err := database.GetDB().QueryRow(`
-//         SELECT completed_at IS NULL 
-//         FROM session_participants 
-//         WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE`,
-//         req.SessionID, studentID).Scan(&canSubmit)
-    
-//     if err != nil {
-//         if err == sql.ErrNoRows {
-//             log.Printf("Student %s not part of session %s", studentID, req.SessionID)
-//             w.WriteHeader(http.StatusForbidden)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to submit survey"})
-//         } else {
-//             log.Printf("Database error checking participant: %v", err)
-//             w.WriteHeader(http.StatusInternalServerError)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         }
-//         return
-//     }
-
-//     if !canSubmit {
-//         log.Printf("Student %s already completed survey for session %s", studentID, req.SessionID)
-//         w.WriteHeader(http.StatusConflict)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Survey already submitted"})
-//         return
-//     }
-
-//     tx, err := database.GetDB().Begin()
-//     if err != nil {
-//         log.Printf("Failed to begin transaction: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         return
-//     }
-//     defer tx.Rollback()
-
-//     // Insert survey responses
-//     for q, rankings := range req.Responses {
-//         // Validate rankings
-//         if rankings[1] == "" || rankings[2] == "" || rankings[3] == "" {
-//             tx.Rollback()
-//             log.Printf("Invalid rankings for question %d", q)
-//             w.WriteHeader(http.StatusBadRequest)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "All rankings must be provided"})
-//             return
-//         }
-
-//         // Validate student IDs in rankings
-//         for _, rankedStudentID := range rankings {
-//             if _, err := uuid.Parse(rankedStudentID); err != nil {
-//                 tx.Rollback()
-//                 log.Printf("Invalid student ID in rankings: %v", err)
-//                 w.WriteHeader(http.StatusBadRequest)
-//                 json.NewEncoder(w).Encode(map[string]string{"error": "Invalid student ID in rankings"})
-//                 return
-//             }
-//         }
-
-//         _, err := tx.Exec(`
-//             INSERT INTO survey_responses 
-//             (id, session_id, responder_id, question_number, 
-//              first_place, second_place, third_place)
-//             VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
-//             req.SessionID, 
-//             studentID, 
-//             q,
-//             rankings[1], 
-//             rankings[2], 
-//             rankings[3],
-//         )
-//         if err != nil {
-//             tx.Rollback()
-//             log.Printf("Error saving survey response: %v", err)
-//             w.WriteHeader(http.StatusInternalServerError)
-//             json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
-//             return
-//         }
-//     }
-
-//     // Mark participant as completed
-//     _, err = tx.Exec(`
-//         UPDATE session_participants
-//         SET completed_at = NOW()
-//         WHERE session_id = ? AND student_id = ?`,
-//         req.SessionID,
-//         studentID,
-//     )
-//     if err != nil {
-//         tx.Rollback()
-//         log.Printf("Error updating participant status: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update session status"})
-//         return
-//     }
-
-//     // Calculate and store qualification results
-//     _, err = tx.Exec(`
-//         INSERT INTO qualifications 
-//         (id, session_id, student_id, qualified_for_level, final_score, feedback)
-//         SELECT 
-//             UUID(), 
-//             ?, 
-//             ?, 
-//             su.current_gd_level + 1,
-//             JSON_OBJECT(
-//                 'leadership', ROUND(RAND() * 100, 2),
-//                 'communication', ROUND(RAND() * 100, 2),
-//                 'teamwork', ROUND(RAND() * 100, 2)
-//             ),
-//             'Good participation in the discussion'
-//         FROM student_users su
-//         WHERE su.id = ?`,
-//         req.SessionID,
-//         studentID,
-//         studentID,
-//     )
-//     if err != nil {
-//         tx.Rollback()
-//         log.Printf("Error calculating qualifications: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to calculate results"})
-//         return
-//     }
-
-//     if err := tx.Commit(); err != nil {
-//         log.Printf("Error committing transaction: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey"})
-//         return
-//     }
-
-//     log.Printf("Successfully submitted survey for student %s in session %s", studentID, req.SessionID)
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
-// }
 
 
 func GetResults(w http.ResponseWriter, r *http.Request) {
-    // Get session ID from query params
-    sessionID := r.URL.Query().Get("session_id")
-    if sessionID == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
-        return
-    }
+	sessionID := r.URL.Query().Get("session_id")
+	studentID := r.URL.Query().Get("student_id")
 
-    // Get student ID from auth context
-    claims, ok := r.Context().Value("claims").(jwt.MapClaims)
-    if !ok {
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid authentication"})
-        return
-    }
-    studentID, ok := claims["user_id"].(string)
-    if !ok || studentID == "" {
-        w.WriteHeader(http.StatusUnauthorized)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid user ID"})
-        return
-    }
+	var result struct {
+		Qualified    bool    `json:"qualified"`
+		NextLevel    int     `json:"next_level"`
+		Scores       struct {
+			Leadership   float64 `json:"leadership"`
+			Communication float64 `json:"communication"`
+			Teamwork     float64 `json:"teamwork"`
+		} `json:"scores"`
+		Feedback     string `json:"feedback"`
+	}
 
-    // Query the database for results
-    var result struct {
-        Qualified    bool    `json:"qualified"`
-        NextLevel    int     `json:"next_level"`
-        FinalScore   float64 `json:"final_score"`
-        Feedback     string  `json:"feedback"`
-        IsApproved   bool    `json:"is_approved"`
-    }
+	err := database.GetDB().QueryRow(`
+		SELECT 
+			q.qualified_for_level > s.current_gd_level as qualified,
+			q.qualified_for_level as next_level,
+			JSON_EXTRACT(q.final_score, '$.leadership') as leadership,
+			JSON_EXTRACT(q.final_score, '$.communication') as communication,
+			JSON_EXTRACT(q.final_score, '$.teamwork') as teamwork,
+			q.feedback
+		FROM qualifications q
+		JOIN student_users s ON q.student_id = s.id
+		WHERE q.session_id = ? AND q.student_id = ?`,
+		sessionID, studentID).Scan(
+		&result.Qualified, &result.NextLevel,
+		&result.Scores.Leadership, &result.Scores.Communication, 
+		&result.Scores.Teamwork, &result.Feedback,
+	)
 
-    err := database.GetDB().QueryRow(`
-        SELECT 
-            q.qualified_for_level > s.current_gd_level as qualified,
-            q.qualified_for_level as next_level,
-            q.final_score,
-            q.feedback,
-            q.is_approved
-        FROM qualifications q
-        JOIN student_users s ON q.student_id = s.id
-        WHERE q.session_id = ? AND q.student_id = ?`,
-        sessionID, studentID,
-    ).Scan(
-        &result.Qualified,
-        &result.NextLevel,
-        &result.FinalScore,
-        &result.Feedback,
-        &result.IsApproved,
-    )
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
 
-    if err != nil {
-        if err == sql.ErrNoRows {
-            w.WriteHeader(http.StatusNotFound)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Results not found"})
-        } else {
-            log.Printf("Database error getting results: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        }
-        return
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(result)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
-
-// func GetResults(w http.ResponseWriter, r *http.Request) {
-// 	sessionID := r.URL.Query().Get("session_id")
-// 	studentID := r.URL.Query().Get("student_id")
-
-// 	var result struct {
-// 		Qualified    bool    `json:"qualified"`
-// 		NextLevel    int     `json:"next_level"`
-// 		Scores       struct {
-// 			Leadership   float64 `json:"leadership"`
-// 			Communication float64 `json:"communication"`
-// 			Teamwork     float64 `json:"teamwork"`
-// 		} `json:"scores"`
-// 		Feedback     string `json:"feedback"`
-// 	}
-
-// 	err := database.GetDB().QueryRow(`
-// 		SELECT 
-// 			q.qualified_for_level > s.current_gd_level as qualified,
-// 			q.qualified_for_level as next_level,
-// 			JSON_EXTRACT(q.final_score, '$.leadership') as leadership,
-// 			JSON_EXTRACT(q.final_score, '$.communication') as communication,
-// 			JSON_EXTRACT(q.final_score, '$.teamwork') as teamwork,
-// 			q.feedback
-// 		FROM qualifications q
-// 		JOIN student_users s ON q.student_id = s.id
-// 		WHERE q.session_id = ? AND q.student_id = ?`,
-// 		sessionID, studentID).Scan(
-// 		&result.Qualified, &result.NextLevel,
-// 		&result.Scores.Leadership, &result.Scores.Communication, 
-// 		&result.Scores.Teamwork, &result.Feedback,
-// 	)
-
-// 	if err != nil {
-// 		if err == sql.ErrNoRows {
-// 			w.WriteHeader(http.StatusNotFound)
-// 		} else {
-// 			w.WriteHeader(http.StatusInternalServerError)
-// 		}
-// 		return
-// 	}
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(result)
-// }
 
 func BookVenue(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
@@ -1085,35 +841,28 @@ func CancelBooking(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
         w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "error": "session_id is required",
-            "data": []interface{}{},
-        })
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
         return
     }
 
-    // Get current student ID from context
-    studentID := r.Context().Value("studentID").(string)
+    log.Printf("Fetching participants for session: %s", sessionID)
 
+    // Only get participants who have actually joined (is_dummy = FALSE)
     rows, err := database.GetDB().Query(`
-        SELECT su.id, su.full_name, su.department 
+        SELECT su.id, su.full_name, su.email 
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
-        WHERE sp.session_id = ? AND sp.student_id != ? AND sp.is_dummy = FALSE
-        ORDER BY su.full_name`, sessionID, studentID)
-
+        WHERE sp.session_id = ? AND sp.is_dummy = FALSE
+        ORDER BY sp.joined_at`,
+        sessionID)
+    
     if err != nil {
         log.Printf("Database error fetching participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "error": "Database error",
-            "data": []interface{}{},
-        })
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
     defer rows.Close()
@@ -1121,81 +870,28 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     var participants []map[string]interface{}
     for rows.Next() {
         var participant struct {
-            ID         string
-            FullName   string
-            Department string
+            ID       string
+            FullName string
+            Email    string
         }
-        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
-            log.Printf("Error scanning participant: %v", err)
+        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Email); err != nil {
+            log.Printf("Error scanning participant row: %v", err)
             continue
         }
 
         participants = append(participants, map[string]interface{}{
-            "id":         participant.ID,
-            "name":      participant.FullName,
-            "department": participant.Department,
+            "id":    participant.ID,
+            "name":  participant.FullName,
+            "email": participant.Email,
         })
     }
 
-    if len(participants) == 0 {
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "error": "No participants found",
-            "data": []interface{}{},
-        })
-        return
-    }
-
+    log.Printf("Found %d participants for session %s", len(participants), sessionID)
+    
+    w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "data": participants,
+        "status": "success",
+        "data":   participants,
     })
 }
 
-// func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
-//     sessionID := r.URL.Query().Get("session_id")
-//     if sessionID == "" {
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
-//         return
-//     }
-
-//     // Get current student ID from context
-//     studentID := r.Context().Value("studentID").(string)
-
-//     rows, err := database.GetDB().Query(`
-//         SELECT su.id, su.full_name, su.department 
-//         FROM session_participants sp
-//         JOIN student_users su ON sp.student_id = su.id
-//         WHERE sp.session_id = ? AND sp.student_id != ? AND sp.is_dummy = FALSE
-//         ORDER BY su.full_name`, sessionID, studentID)
-
-//     if err != nil {
-//         log.Printf("Database error fetching participants: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         return
-//     }
-//     defer rows.Close()
-
-//     var participants []map[string]interface{}
-//     for rows.Next() {
-//         var participant struct {
-//             ID         string
-//             FullName   string
-//             Department string
-//         }
-//         if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
-//             log.Printf("Error scanning participant: %v", err)
-//             continue
-//         }
-
-//         participants = append(participants, map[string]interface{}{
-//             "id":         participant.ID,
-//             "name":      participant.FullName,
-//             "department": participant.Department,
-//         })
-//     }
-
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(participants)
-// }

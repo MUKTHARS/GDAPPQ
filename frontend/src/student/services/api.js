@@ -175,28 +175,7 @@ submitSurvey: (data) => {
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
-    
-  getSurveyQuestions: (sessionId) => api.get('/student/survey/questions', { params: { session_id: sessionId } }),
   
-  submitSurveyResponse: (data) => api.post('/student/survey/response', data),
-   submitSurvey: (data) => api.post('/student/survey', data, {
-    validateStatus: function (status) {
-      return status < 500; // Only reject server errors
-    }
-  }),
-  completeSurvey: (sessionId) => api.post('/student/survey/complete', { session_id: sessionId }),
-   getResultsStatus: (sessionId) => api.get('/student/results/status', { 
-    params: { session_id: sessionId } 
-  }),
-    getResults: (data) => api.get('/student/results', { 
-    params: {
-      session_id: data.session_id,
-      student_id: data.student_id
-    },
-    validateStatus: function (status) {
-      return status < 500;
-    }
-  }),
 };
 
 export default api;

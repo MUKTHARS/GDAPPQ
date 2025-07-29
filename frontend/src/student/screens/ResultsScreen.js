@@ -1,350 +1,140 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import api from '../services/api';
-import auth from '../services/auth';
+import { ProgressChart } from 'react-native-chart-kit';
 
-const ResultsScreen = ({ navigation, route }) => {
+export default function ResultsScreen({ navigation, route }) {
   const { sessionId } = route.params;
-  const [results, setResults] = useState({
-    qualified: false,
-    next_level: 0,
-    final_score: 0,
-    feedback: '',
-    is_approved: false
-  });
+  const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+ const sortedScores = [...scores].sort((a, b) => b.score - a.score);
 
   useEffect(() => {
     const fetchResults = async () => {
       try {
-        setLoading(true);
-        const authData = await auth.getAuthData();
-        
-        const response = await api.student.getResults({ 
-          session_id: sessionId,
-          student_id: authData.userId 
-        });
-        
-        if (!response.data) {
-          throw new Error('No results data received');
-        }
-
-        // Safely handle the response data
-        const resultData = {
-          qualified: response.data.qualified || false,
-          next_level: response.data.next_level || 0,
-          final_score: response.data.final_score || 0,
-          feedback: response.data.feedback || '',
-          is_approved: response.data.is_approved || false
-        };
-
-        setResults(resultData);
-        setError(null);
+        const response = await api.student.getResults(sessionId);
+        setResults(response.data);
       } catch (error) {
-        console.error('Failed to load results:', error);
-        setError(error.response?.data?.error || error.message || 'Failed to load results');
+        alert('Failed to load results');
       } finally {
         setLoading(false);
       }
     };
-
     fetchResults();
-    
-    const interval = setInterval(() => {
-      if (!results.final_score && !error?.includes('being calculated')) {
-        fetchResults();
-      }
-    }, 5000);
-    
-    return () => clearInterval(interval);
   }, [sessionId]);
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Calculating your results...</Text>
+      <View style={styles.loading}>
+        <Text>Loading results...</Text>
       </View>
     );
   }
 
-  if (error) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>{error}</Text>
-        {error.includes('being calculated') && (
-          <Text style={styles.infoText}>This may take a few minutes</Text>
-        )}
-      </View>
-    );
-  }
-
-  return (
+   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Your GD Results</Text>
+      <Text style={styles.title}>Survey Results</Text>
       
-      <View style={styles.scoreContainer}>
-        <Text style={styles.scoreLabel}>Final Score:</Text>
-        <Text style={styles.scoreValue}>
-          {results.final_score ? results.final_score.toFixed(2) : '0.00'}
-        </Text>
+      <Text style={styles.subtitle}>Qualified Members:</Text>
+      <View style={styles.qualifiedContainer}>
+        {qualified.map((member, index) => (
+          <View key={member.id} style={styles.qualifiedMember}>
+            <Text style={styles.qualifiedPosition}>
+              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}
+            </Text>
+            <Text style={styles.qualifiedName}>{member.name}</Text>
+            <Text style={styles.qualifiedScore}>{member.score.toFixed(1)} points</Text>
+          </View>
+        ))}
       </View>
-      
-      <View style={[
-        styles.qualificationContainer,
-        results.qualified ? styles.qualified : styles.notQualified
-      ]}>
-        <Text style={styles.qualificationText}>
-          {results.qualified ? 
-            `Qualified for Level ${results.next_level}` : 
-            'Not Qualified'}
-        </Text>
-      </View>
-      
-      {results.feedback && (
-        <View style={styles.feedbackContainer}>
-          <Text style={styles.feedbackTitle}>Feedback:</Text>
-          <Text style={styles.feedbackText}>{results.feedback}</Text>
-        </View>
-      )}
-      
-      {!results.is_approved && (
-        <Text style={styles.pendingText}>
-          *Pending faculty approval
-        </Text>
-      )}
+
+      <Text style={styles.subtitle}>All Participants:</Text>
+      <FlatList
+        data={sortedScores}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.scoreCard}>
+            <Text style={styles.memberName}>{item.name}</Text>
+            <View style={styles.scoreDetails}>
+              <Text style={styles.scoreText}>{item.score.toFixed(1)} points</Text>
+              {item.penalties > 0 && (
+                <Text style={styles.penaltyText}>({item.penalties} penalties)</Text>
+              )}
+            </View>
+          </View>
+        )}
+      />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
+    padding: 15,
+    backgroundColor: '#f5f5f5'
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: 'center'
   },
-  scoreContainer: {
+  subtitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginVertical: 10
+  },
+  qualifiedContainer: {
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 15,
+    elevation: 3
+  },
+  qualifiedMember: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee'
+  },
+  qualifiedPosition: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    width: 50
+  },
+  qualifiedName: {
+    flex: 1,
+    fontSize: 16
+  },
+  qualifiedScore: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF'
+  },
+  scoreCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    marginVertical: 5,
+    borderRadius: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    alignItems: 'center'
   },
-  scoreLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  scoreValue: {
-    fontSize: 18,
-  },
-  qualificationContainer: {
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  qualified: {
-    backgroundColor: '#d4edda',
-  },
-  notQualified: {
-    backgroundColor: '#f8d7da',
-  },
-  qualificationText: {
-    fontSize: 18,
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  feedbackContainer: {
-    marginBottom: 20,
-  },
-  feedbackTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  feedbackText: {
+  memberName: {
     fontSize: 16,
+    flex: 1
   },
-  pendingText: {
-    fontStyle: 'italic',
-    color: '#6c757d',
-    textAlign: 'center',
+  scoreDetails: {
+    alignItems: 'flex-end'
   },
-  loadingText: {
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  errorText: {
-    color: '#dc3545',
-    textAlign: 'center',
+  scoreText: {
     fontSize: 16,
+    fontWeight: '600'
   },
-  infoText: {
-    marginTop: 10,
-    textAlign: 'center',
-    color: '#6c757d',
-  },
+  penaltyText: {
+    fontSize: 12,
+    color: '#FF3B30'
+  }
 });
-
-export default ResultsScreen;
-
-// // frontend/src/student/screens/ResultsScreen.js
-// import React, { useState, useEffect } from 'react';
-// import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-// import api from '../services/api';
-
-// const ResultsScreen = ({ navigation, route }) => {
-//   const { sessionId } = route.params;
-//   const [results, setResults] = useState(null);
-//   const [loading, setLoading] = useState(true);
-
-//   useEffect(() => {
-//     const fetchResults = async () => {
-//       try {
-//         const response = await api.student.getResults(sessionId);
-//         setResults(response.data);
-//       } catch (error) {
-//         console.error('Failed to load results:', error);
-//       } finally {
-//         setLoading(false);
-//       }
-//     };
-    
-//     fetchResults();
-//   }, [sessionId]);
-
-//   if (loading) {
-//     return (
-//       <View style={styles.container}>
-//         <ActivityIndicator size="large" />
-//       </View>
-//     );
-//   }
-
-//   if (!results) {
-//     return (
-//       <View style={styles.container}>
-//         <Text>Results not available yet</Text>
-//       </View>
-//     );
-//   }
-
-//   return (
-//     <View style={styles.container}>
-//       <Text style={styles.title}>Your GD Results</Text>
-      
-//       <View style={styles.scoreContainer}>
-//         <Text style={styles.scoreLabel}>Final Score:</Text>
-//         <Text style={styles.scoreValue}>{results.final_score.toFixed(2)}</Text>
-//       </View>
-      
-//       <View style={styles.qualificationContainer}>
-//         <Text style={styles.qualificationText}>
-//           {results.qualified ? 
-//             `Qualified for Level ${results.next_level}` : 
-//             'Not Qualified'}
-//         </Text>
-//       </View>
-      
-//       {results.feedback && (
-//         <View style={styles.feedbackContainer}>
-//           <Text style={styles.feedbackTitle}>Feedback:</Text>
-//           <Text style={styles.feedbackText}>{results.feedback}</Text>
-//         </View>
-//       )}
-//     </View>
-//   );
-// };
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     padding: 16,
-//     backgroundColor: '#f5f5f5',
-//   },
-//   userResultCard: {
-//     backgroundColor: 'white',
-//     borderRadius: 8,
-//     padding: 16,
-//     marginBottom: 16,
-//     elevation: 2,
-//   },
-//   qualifiedCard: {
-//     borderLeftWidth: 4,
-//     borderLeftColor: 'green',
-//   },
-//   userResultTitle: {
-//     fontSize: 18,
-//     fontWeight: 'bold',
-//     marginBottom: 8,
-//   },
-//   userScore: {
-//     fontSize: 16,
-//     marginBottom: 4,
-//   },
-//   userPenalties: {
-//     fontSize: 16,
-//     marginBottom: 4,
-//     color: '#666',
-//   },
-//   userQualified: {
-//     fontSize: 18,
-//     fontWeight: 'bold',
-//     marginTop: 8,
-//     color: 'green',
-//   },
-//   resultsTitle: {
-//     fontSize: 18,
-//     fontWeight: 'bold',
-//     marginBottom: 16,
-//   },
-//   resultCard: {
-//     backgroundColor: 'white',
-//     borderRadius: 8,
-//     padding: 16,
-//     marginBottom: 12,
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     elevation: 1,
-//   },
-//   qualifiedResult: {
-//     borderLeftWidth: 4,
-//     borderLeftColor: 'green',
-//   },
-//   rank: {
-//     fontSize: 18,
-//     fontWeight: 'bold',
-//     marginRight: 16,
-//     width: 40,
-//     textAlign: 'center',
-//   },
-//   resultDetails: {
-//     flex: 1,
-//   },
-//   studentName: {
-//     fontSize: 16,
-//     fontWeight: 'bold',
-//   },
-//   score: {
-//     fontSize: 14,
-//     color: '#666',
-//   },
-//   qualifiedBadge: {
-//     backgroundColor: 'green',
-//     color: 'white',
-//     paddingHorizontal: 8,
-//     paddingVertical: 4,
-//     borderRadius: 12,
-//     fontSize: 12,
-//     fontWeight: 'bold',
-//   },
-//   errorText: {
-//     color: 'red',
-//   },
-// });
-
-// export default ResultsScreen;
