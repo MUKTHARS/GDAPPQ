@@ -17,36 +17,19 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   const currentRank = getRankForMember();
   const isSelected = currentRank !== null;
 
-  const getRankColor = (rank) => {
-    switch(rank) {
-      case 1: return '#FFD700'; // Gold
-      case 2: return '#C0C0C0'; // Silver  
-      case 3: return '#CD7F32'; // Bronze
-      default: return '#007AFF';
-    }
-  };
-
-  const getRankLabel = (rank) => {
-    switch(rank) {
-      case 1: return '🥇 1st Place';
-      case 2: return '🥈 2nd Place'; 
-      case 3: return '🥉 3rd Place';
-      default: return `Rank ${rank}`;
-    }
-  };
-
   return (
-    <View style={[styles.memberCard, isSelected && { borderColor: getRankColor(currentRank), borderWidth: 2 }]}>
+    <View style={[styles.memberCard, isSelected && styles.selectedCard]}>
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{member.name}</Text>
-        <Text style={styles.memberDetails}>{member.email}</Text>
+        <Text style={styles.memberDetails}>{member.department}</Text>
       </View>
       
       {isSelected ? (
         <View style={styles.selectedRankContainer}>
-          <View style={[styles.rankBadge, { backgroundColor: getRankColor(currentRank) }]}>
-            <Text style={styles.rankBadgeText}>{getRankLabel(currentRank)}</Text>
-          </View>
+          <Text style={styles.rankText}>
+            {currentRank === 1 ? '🥇 1st' : 
+             currentRank === 2 ? '🥈 2nd' : '🥉 3rd'}
+          </Text>
           <TouchableOpacity
             style={styles.removeButton}
             onPress={() => onSelect(currentRank, null)}
@@ -56,24 +39,23 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
         </View>
       ) : (
         <View style={styles.rankingButtons}>
-          {[1].map(rank => {
-            const isRankTaken = Object.values(currentRankings).includes(member.id) || currentRankings[rank];
+          {[1, 2, 3].map(rank => {
+            const isRankTaken = currentRankings[rank];
             return (
               <TouchableOpacity
                 key={rank}
                 style={[
                   styles.rankButton,
-                  { backgroundColor: getRankColor(rank) },
                   isRankTaken && styles.disabledButton
                 ]}
                 onPress={() => !isRankTaken && onSelect(rank, member.id)}
                 disabled={isRankTaken}
               >
-                <Text style={[styles.rankButtonText, isRankTaken && styles.disabledText]}>
-                  {rank === 1 && '🥇'}
+                <Text style={styles.rankButtonText}>
+                  {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}
                 </Text>
-                <Text style={[styles.rankButtonLabel, isRankTaken && styles.disabledText]}>
-                  {rank === 1 ? '1st' : ''}
+                <Text style={styles.rankButtonLabel}>
+                  {rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
                 </Text>
               </TouchableOpacity>
             );
@@ -170,25 +152,27 @@ export default function SurveyScreen({ navigation, route }) {
     });
   };
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
   try {
-    const currentSelections = selections[currentQuestion];
-    if (!currentSelections[1]) {
-      Alert.alert('Incomplete', 'Please select 1st place');
-      return;
+    // Verify all questions have complete rankings
+    for (const qIndex in selections) {
+      const questionSelections = selections[qIndex];
+      if (!questionSelections[1] || !questionSelections[2] || !questionSelections[3]) {
+        Alert.alert('Incomplete', 'Please select 1st, 2nd and 3rd place for all questions');
+        return;
+      }
     }
 
-    // Get auth data
     const authData = await auth.getAuthData();
     
-    // Format responses as the backend expects
+    // Format responses for backend
     const formattedResponses = {};
     Object.entries(selections).forEach(([qIndex, ranks]) => {
       const questionNum = parseInt(qIndex) + 1;
       formattedResponses[questionNum] = {
-        first_place: ranks[1] || '',
-        second_place: ranks[2] || '',
-        third_place: ranks[3] || '',
+        first_place: ranks[1],
+        second_place: ranks[2],
+        third_place: ranks[3],
         weight: 1.0 // Default weight
       };
     });
@@ -196,8 +180,7 @@ export default function SurveyScreen({ navigation, route }) {
     await api.student.submitSurvey({
       session_id: sessionId,
       responses: formattedResponses,
-      tookTooLong: penaltyApplied,
-      student_id: authData.userId // Pass student ID from auth
+      student_id: authData.userId
     });
     
     navigation.navigate('Results', { sessionId });
