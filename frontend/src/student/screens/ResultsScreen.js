@@ -1,4 +1,3 @@
-// frontend/src/student/screens/ResultsScreen.js
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import api from '../services/api';
@@ -7,9 +6,9 @@ import auth from '../services/auth';
 const ResultsScreen = ({ navigation, route }) => {
   const { sessionId } = route.params;
   const [results, setResults] = useState({
-    qualified: true,
-    next_level: 1,
-    final_score: 5,
+    qualified: false,
+    next_level: 0,
+    final_score: 0,
     feedback: '',
     is_approved: false
   });
@@ -22,7 +21,6 @@ const ResultsScreen = ({ navigation, route }) => {
         setLoading(true);
         const authData = await auth.getAuthData();
         
-        // Get results with student ID from auth
         const response = await api.student.getResults({ 
           session_id: sessionId,
           student_id: authData.userId 
@@ -32,14 +30,16 @@ const ResultsScreen = ({ navigation, route }) => {
           throw new Error('No results data received');
         }
 
-        // Safely handle the response data with defaults
-        setResults({
+        // Safely handle the response data
+        const resultData = {
           qualified: response.data.qualified || false,
           next_level: response.data.next_level || 0,
           final_score: response.data.final_score || 0,
           feedback: response.data.feedback || '',
           is_approved: response.data.is_approved || false
-        });
+        };
+
+        setResults(resultData);
         setError(null);
       } catch (error) {
         console.error('Failed to load results:', error);
@@ -51,9 +51,8 @@ const ResultsScreen = ({ navigation, route }) => {
 
     fetchResults();
     
-    // Refresh every 5 seconds if results aren't ready
     const interval = setInterval(() => {
-      if (!results && !error?.includes('being calculated')) {
+      if (!results.final_score && !error?.includes('being calculated')) {
         fetchResults();
       }
     }, 5000);
@@ -98,7 +97,7 @@ const ResultsScreen = ({ navigation, route }) => {
       ]}>
         <Text style={styles.qualificationText}>
           {results.qualified ? 
-            `Qualified for Level ${results.next_level || 1}` : 
+            `Qualified for Level ${results.next_level}` : 
             'Not Qualified'}
         </Text>
       </View>
@@ -180,11 +179,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorText: {
-    color: 'red',
+    color: '#dc3545',
     textAlign: 'center',
-    marginBottom: 10,
+    fontSize: 16,
   },
   infoText: {
+    marginTop: 10,
     textAlign: 'center',
     color: '#6c757d',
   },
