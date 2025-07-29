@@ -91,24 +91,32 @@ func InitDB(db *sql.DB) error {
 
         // Survey tables
         `CREATE TABLE IF NOT EXISTS survey_responses (
-            id VARCHAR(36) PRIMARY KEY,
-            session_id VARCHAR(36),
-            responder_id VARCHAR(36),
-            question_number INT NOT NULL,
-            first_place VARCHAR(36),
-            second_place VARCHAR(36),
-            third_place VARCHAR(36),
-            question_text VARCHAR(255),
-            weight DECIMAL(3,2),
-            applicable_levels JSON,
-            submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
-            FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
-            FOREIGN KEY (first_place) REFERENCES student_users(id) ON DELETE SET NULL,
-            FOREIGN KEY (second_place) REFERENCES student_users(id) ON DELETE SET NULL,
-            FOREIGN KEY (third_place) REFERENCES student_users(id) ON DELETE SET NULL
-        )`,
-
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36),
+    responder_id VARCHAR(36),
+    question_number INT NOT NULL,
+    first_place VARCHAR(36),
+    second_place VARCHAR(36),
+    third_place VARCHAR(36),
+    question_text VARCHAR(255),
+    weight DECIMAL(3,2) NOT NULL DEFAULT 1.0,
+    applicable_levels JSON,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    penalty_points INT DEFAULT 0,
+    is_biased BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    FOREIGN KEY (first_place) REFERENCES student_users(id) ON DELETE SET NULL,
+    FOREIGN KEY (second_place) REFERENCES student_users(id) ON DELETE SET NULL,
+    FOREIGN KEY (third_place) REFERENCES student_users(id) ON DELETE SET NULL
+)`,
+`CREATE TABLE IF NOT EXISTS survey_questions (
+    id VARCHAR(36) PRIMARY KEY,
+    text TEXT NOT NULL,
+    weight DECIMAL(3,2) NOT NULL DEFAULT 1.0,
+    applicable_levels JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`,
         // Results tables
         `CREATE TABLE IF NOT EXISTS qualifications (
             session_id VARCHAR(36),

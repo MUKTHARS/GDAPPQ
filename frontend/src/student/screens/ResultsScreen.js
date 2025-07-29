@@ -1,13 +1,12 @@
+// frontend/src/student/screens/ResultsScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import api from '../services/api';
-import { ProgressChart } from 'react-native-chart-kit';
 
-export default function ResultsScreen({ navigation, route }) {
+const ResultsScreen = ({ navigation, route }) => {
   const { sessionId } = route.params;
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(true);
- const sortedScores = [...scores].sort((a, b) => b.score - a.score);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -15,126 +14,143 @@ export default function ResultsScreen({ navigation, route }) {
         const response = await api.student.getResults(sessionId);
         setResults(response.data);
       } catch (error) {
-        alert('Failed to load results');
+        console.error('Failed to load results:', error);
       } finally {
         setLoading(false);
       }
     };
+    
     fetchResults();
   }, [sessionId]);
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <Text>Loading results...</Text>
+      <View style={styles.container}>
+        <ActivityIndicator size="large" />
       </View>
     );
   }
 
-   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Survey Results</Text>
-      
-      <Text style={styles.subtitle}>Qualified Members:</Text>
-      <View style={styles.qualifiedContainer}>
-        {qualified.map((member, index) => (
-          <View key={member.id} style={styles.qualifiedMember}>
-            <Text style={styles.qualifiedPosition}>
-              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}
-            </Text>
-            <Text style={styles.qualifiedName}>{member.name}</Text>
-            <Text style={styles.qualifiedScore}>{member.score.toFixed(1)} points</Text>
-          </View>
-        ))}
+  if (!results) {
+    return (
+      <View style={styles.container}>
+        <Text>Results not available yet</Text>
       </View>
+    );
+  }
 
-      <Text style={styles.subtitle}>All Participants:</Text>
-      <FlatList
-        data={sortedScores}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.scoreCard}>
-            <Text style={styles.memberName}>{item.name}</Text>
-            <View style={styles.scoreDetails}>
-              <Text style={styles.scoreText}>{item.score.toFixed(1)} points</Text>
-              {item.penalties > 0 && (
-                <Text style={styles.penaltyText}>({item.penalties} penalties)</Text>
-              )}
-            </View>
-          </View>
-        )}
-      />
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Your GD Results</Text>
+      
+      <View style={styles.scoreContainer}>
+        <Text style={styles.scoreLabel}>Final Score:</Text>
+        <Text style={styles.scoreValue}>{results.final_score.toFixed(2)}</Text>
+      </View>
+      
+      <View style={styles.qualificationContainer}>
+        <Text style={styles.qualificationText}>
+          {results.qualified ? 
+            `Qualified for Level ${results.next_level}` : 
+            'Not Qualified'}
+        </Text>
+      </View>
+      
+      {results.feedback && (
+        <View style={styles.feedbackContainer}>
+          <Text style={styles.feedbackTitle}>Feedback:</Text>
+          <Text style={styles.feedbackText}>{results.feedback}</Text>
+        </View>
+      )}
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 15,
-    backgroundColor: '#f5f5f5'
+    padding: 16,
+    backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center'
+  userResultCard: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
   },
-  subtitle: {
+  qualifiedCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: 'green',
+  },
+  userResultTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    marginVertical: 10
+    fontWeight: 'bold',
+    marginBottom: 8,
   },
-  qualifiedContainer: {
-    marginBottom: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 15,
-    elevation: 3
+  userScore: {
+    fontSize: 16,
+    marginBottom: 4,
   },
-  qualifiedMember: {
+  userPenalties: {
+    fontSize: 16,
+    marginBottom: 4,
+    color: '#666',
+  },
+  userQualified: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 8,
+    color: 'green',
+  },
+  resultsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  resultCard: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee'
+    elevation: 1,
   },
-  qualifiedPosition: {
+  qualifiedResult: {
+    borderLeftWidth: 4,
+    borderLeftColor: 'green',
+  },
+  rank: {
     fontSize: 18,
     fontWeight: 'bold',
-    width: 50
+    marginRight: 16,
+    width: 40,
+    textAlign: 'center',
   },
-  qualifiedName: {
+  resultDetails: {
     flex: 1,
-    fontSize: 16
   },
-  qualifiedScore: {
+  studentName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF'
+    fontWeight: 'bold',
   },
-  scoreCard: {
-    backgroundColor: '#fff',
-    padding: 15,
-    marginVertical: 5,
-    borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+  score: {
+    fontSize: 14,
+    color: '#666',
   },
-  memberName: {
-    fontSize: 16,
-    flex: 1
-  },
-  scoreDetails: {
-    alignItems: 'flex-end'
-  },
-  scoreText: {
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  penaltyText: {
+  qualifiedBadge: {
+    backgroundColor: 'green',
+    color: 'white',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     fontSize: 12,
-    color: '#FF3B30'
-  }
+    fontWeight: 'bold',
+  },
+  errorText: {
+    color: 'red',
+  },
 });
+
+export default ResultsScreen;

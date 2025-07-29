@@ -175,7 +175,14 @@ submitSurvey: (data) => {
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
+    
+  getSurveyQuestions: (sessionId) => api.get('/student/survey/questions', { params: { session_id: sessionId } }),
   
+  submitSurveyResponse: (data) => api.post('/student/survey/response', data),
+  
+  completeSurvey: (sessionId) => api.post('/student/survey/complete', { session_id: sessionId }),
+  
+  getResults: (sessionId) => api.get('/student/results', { params: { session_id: sessionId } }),
 };
 
 export default api;

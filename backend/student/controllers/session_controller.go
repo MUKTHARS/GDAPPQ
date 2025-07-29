@@ -33,6 +33,10 @@ type BookingRequest struct {
 type SurveyResponse struct {
 	Question int               `json:"question"`
 	Rankings map[int]string    `json:"rankings"` 
+    FirstPlace string            `json:"first_place"`
+    SecondPlace string           `json:"second_place"`
+    ThirdPlace string            `json:"third_place"`
+    Weight float64           `json:"weight"`
     
 }
 

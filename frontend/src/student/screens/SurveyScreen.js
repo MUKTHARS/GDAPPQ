@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import api from '../services/api';
-import auth from '../services/auth'; 
+import auth from '../services/auth';
 
-// Updated MemberCard component with better ranking design
 const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   const getRankForMember = () => {
     for (const [rank, memberId] of Object.entries(currentRankings)) {
@@ -49,7 +48,7 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
           </View>
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => onSelect(currentRank, null)} // Remove selection
+            onPress={() => onSelect(currentRank, null)}
           >
             <Text style={styles.removeButtonText}>Remove</Text>
           </TouchableOpacity>
@@ -91,7 +90,7 @@ export default function SurveyScreen({ navigation, route }) {
   const questions = [
     "Clarity of arguments",
     "Contribution to discussion",
-    "Teamwork and collaboration",
+    "Teamwork and collaboration", 
     "Logical reasoning",
     "Communication skills"
   ];
@@ -107,6 +106,8 @@ export default function SurveyScreen({ navigation, route }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [penaltyApplied, setPenaltyApplied] = useState(false);
 
   useEffect(() => {
     const fetchParticipants = async () => {
@@ -123,7 +124,6 @@ export default function SurveyScreen({ navigation, route }) {
         setMembers(filteredParticipants);
         setError(null);
         
-        // Ensure selections exist for all questions
         setSelections(prev => {
           const newSelections = {...prev};
           questions.forEach((_, index) => {
@@ -145,6 +145,22 @@ export default function SurveyScreen({ navigation, route }) {
     fetchParticipants();
   }, [sessionId]);
 
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      if (!penaltyApplied) {
+        Alert.alert('Time Up', 'Penalty will be applied if you delay further');
+        setPenaltyApplied(true);
+      }
+      return;
+    }
+    
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [timeLeft, penaltyApplied]);
+
   const handleSelect = (rank, memberId) => {
     setSelections({
       ...selections,
@@ -155,19 +171,34 @@ export default function SurveyScreen({ navigation, route }) {
     });
   };
 
-const handleSubmit = async () => {
-  try {
-    await api.student.submitSurvey({
-      sessionId,
-      responses: selections
-    });
-    navigation.navigate('Results', { sessionId });
-  } catch (error) {
-    console.error('Failed to submit survey:', error);
-  }
-};
+  const handleSubmit = async () => {
+    try {
+      const currentSelections = selections[currentQuestion];
+      if (!currentSelections[1] || !currentSelections[2] || !currentSelections[3]) {
+        Alert.alert('Incomplete', 'Please rank all 3 positions');
+        return;
+      }
 
+      // Include penalty flag if time ran out
+      const responseData = {
+        sessionId,
+        responses: selections,
+        tookTooLong: penaltyApplied
+      };
 
+      await api.student.submitSurvey(responseData);
+      navigation.navigate('Results', { sessionId });
+    } catch (error) {
+      console.error('Failed to submit survey:', error);
+      Alert.alert('Error', 'Failed to submit survey');
+    }
+  };
+
+  const handleNextQuestion = () => {
+    setCurrentQuestion(prev => prev + 1);
+    setTimeLeft(30);
+    setPenaltyApplied(false);
+  };
 
   if (loading) {
     return (
@@ -189,6 +220,10 @@ const handleSubmit = async () => {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.timer}>
+        Time Left: {timeLeft}s {penaltyApplied && '(Penalty Applied)'}
+      </Text>
+      
       <Text style={styles.question}>
         Q{currentQuestion + 1}: {questions[currentQuestion]}
       </Text>
@@ -242,7 +277,7 @@ const handleSubmit = async () => {
         {currentQuestion < questions.length - 1 ? (
           <TouchableOpacity
             style={[styles.navButton, styles.primaryButton]}
-            onPress={() => setCurrentQuestion(currentQuestion + 1)}
+            onPress={handleNextQuestion}
           >
             <Text>Next</Text>
           </TouchableOpacity>
@@ -263,61 +298,56 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+    backgroundColor: '#fff',
+  },
+  timer: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF5722',
+    marginBottom: 10,
+    textAlign: 'center',
   },
   question: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   instructions: {
-    marginBottom: 15,
+    fontSize: 14,
     color: '#666',
+    marginBottom: 15,
   },
-  
-  // Ranking Summary Styles
   rankingSummary: {
-    backgroundColor: '#f8f9fa',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 20,
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 5,
   },
   summaryTitle: {
-    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
-  },
-  summaryContainer: {
-    flexDirection: 'column',
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 5,
   },
+  summaryContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  summaryItem: {
+    flex: 1,
+  },
   summaryRank: {
-    fontSize: 14,
-    fontWeight: '600',
-    width: 80,
-    color: '#333',
+    fontWeight: 'bold',
   },
   summaryName: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
+    color: '#333',
   },
-
-  // Member Card Styles
   memberCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 15,
     marginBottom: 10,
-    backgroundColor: 'white',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    backgroundColor: '#fff',
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -328,78 +358,56 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   memberName: {
+    fontWeight: 'bold',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
   },
   memberDetails: {
-    fontSize: 14,
     color: '#666',
-    marginTop: 2,
+    fontSize: 14,
   },
-
-  // Ranking Buttons (when not selected)
-  rankingButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  rankButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignItems: 'center',
-    minWidth: 50,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  rankButtonText: {
-    fontSize: 16,
-    marginBottom: 2,
-  },
-  rankButtonLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  disabledButton: {
-    opacity: 0.4,
-  },
-  disabledText: {
-    color: '#ccc',
-  },
-
-  // Selected Rank Display
   selectedRankContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   rankBadge: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignItems: 'center',
+    padding: 5,
+    borderRadius: 4,
+    marginRight: 10,
   },
   rankBadgeText: {
-    color: 'white',
+    color: '#fff',
     fontWeight: 'bold',
-    fontSize: 12,
   },
   removeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ff4444',
-    borderRadius: 15,
+    padding: 5,
   },
   removeButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#FF5252',
   },
-
-  // Navigation Styles
+  rankingButtons: {
+    flexDirection: 'row',
+  },
+  rankButton: {
+    padding: 8,
+    borderRadius: 4,
+    marginLeft: 5,
+    alignItems: 'center',
+    minWidth: 50,
+  },
+  rankButtonText: {
+    color: '#fff',
+    fontSize: 18,
+  },
+  rankButtonLabel: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  disabledText: {
+    color: '#999',
+  },
   navigation: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -407,14 +415,17 @@ const styles = StyleSheet.create({
   },
   navButton: {
     padding: 10,
-    backgroundColor: '#ddd',
     borderRadius: 5,
+    backgroundColor: '#e0e0e0',
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
   },
   primaryButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#4CAF50',
   },
   errorText: {
-    color: 'red',
+    color: '#FF5252',
     textAlign: 'center',
     marginTop: 20,
   },
