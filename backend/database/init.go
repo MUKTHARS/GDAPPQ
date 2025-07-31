@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -267,5 +268,19 @@ if err != nil {
 	log.Printf("Error inserting qualification data: %v", err)
 }
     log.Println("Database initialization completed successfully!")
+
+
+ go func() {
+        for {
+            time.Sleep(30 * time.Minute) // Run every 30 minutes
+            _, err := db.Exec(`
+                DELETE FROM session_phase_tracking 
+                WHERE start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`)
+            if err != nil {
+                log.Printf("Error cleaning up phase tracking: %v", err)
+            }
+        }
+    }()
+
     return nil
 }
