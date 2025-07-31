@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth'; 
-
+///////////
 // Updated MemberCard component with better ranking design
 const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   const getRankForMember = () => {
