@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator }
 import api from '../services/api';
 import auth from '../services/auth'; 
 
-// Updated MemberCard component with better ranking design
 const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   const getRankForMember = () => {
     for (const [rank, memberId] of Object.entries(currentRankings)) {
@@ -67,7 +66,7 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
                   isRankTaken && styles.disabledButton
                 ]}
                 onPress={() => !isRankTaken && onSelect(rank, member.id)}
-                disabled={isRankTaken}
+                disabled={!!isRankTaken}  // Fixed: Ensure boolean value
               >
                 <Text style={[styles.rankButtonText, isRankTaken && styles.disabledText]}>
                   {rank === 1 && '🥇'}
@@ -155,19 +154,17 @@ export default function SurveyScreen({ navigation, route }) {
     });
   };
 
-const handleSubmit = async () => {
-  try {
-    await api.student.submitSurvey({
-      sessionId,
-      responses: selections
-    });
-    navigation.navigate('Results', { sessionId });
-  } catch (error) {
-    console.error('Failed to submit survey:', error);
-  }
-};
-
-
+  const handleSubmit = async () => {
+    try {
+      await api.student.submitSurvey({
+        sessionId,
+        responses: selections
+      });
+      navigation.navigate('Results', { sessionId });
+    } catch (error) {
+      alert('Failed to submit survey');
+    }
+  };
 
   if (loading) {
     return (

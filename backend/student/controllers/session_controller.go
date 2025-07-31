@@ -39,6 +39,7 @@ type SurveyResponse struct {
 // backend/student/controllers/session_controller.go
 
 func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
+     w.Header().Set("Content-Type", "application/json")
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
         w.WriteHeader(http.StatusBadRequest)
@@ -163,8 +164,15 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    if request.QRData == "" {
+        log.Println("Empty QR data received")
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "QR data is required"})
+        return
+    }
+
     studentID := r.Context().Value("studentID").(string)
-    log.Printf("JoinSession request for student %s with QR data: %s", studentID, request.QRData)
+    log.Printf("JoinSession request for student %s", studentID)
     
     // Parse QR data
     var qrPayload struct {
@@ -187,15 +195,13 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         FROM venue_qr_codes 
         WHERE venue_id = ? 
         AND is_active = TRUE 
-        AND expires_at > NOW()
-         ORDER BY created_at DESC LIMIT 1`,
-        
+        AND expires_at > NOW()`,
         qrPayload.VenueID,
     ).Scan(&dbQRData)
 
     if err != nil {
         if err == sql.ErrNoRows {
-            log.Printf("No valid QR code found for venue %s", qrPayload.VenueID)
+            log.Printf("No active QR code found for venue %s", qrPayload.VenueID)
             w.WriteHeader(http.StatusUnauthorized)
             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired QR code"})
         } else {
@@ -224,7 +230,24 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
     defer tx.Rollback()
+  _, err = tx.Exec(`
+        DELETE FROM session_phase_tracking 
+        WHERE student_id = ?`, 
+        studentID)
+    if err != nil {
+        log.Printf("Failed to clear old phase tracking: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
+        return
+    }
 
+    // Add new phase tracking with current timestamp
+    _, err = tx.Exec(`
+        INSERT INTO session_phase_tracking 
+        (session_id, student_id, phase, start_time)
+        VALUES (?, ?, 'prep', NOW())`,
+        sessionID, studentID)
+    
     // First check if there's an active session for this venue
     err = tx.QueryRow(`
         SELECT id FROM gd_sessions 
@@ -272,30 +295,39 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    if isParticipant {
-        log.Printf("Student %s already in session %s for venue %s", studentID, sessionID, qrPayload.VenueID)
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(map[string]string{
-            "status":     "already_joined",
-            "session_id": sessionID,
-        })
-        return
+    if !isParticipant {
+        // Add student to session
+        _, err = tx.Exec(`
+            INSERT INTO session_participants 
+            (id, session_id, student_id, is_dummy) 
+            VALUES (UUID(), ?, ?, FALSE)`,
+            sessionID, studentID)
+        
+        if err != nil {
+            log.Printf("Failed to add participant: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
+            return
+        }
+        log.Printf("Added student %s to session %s as participant", studentID, sessionID)
     }
 
-    // Add student to session
+    // Add/update phase tracking
     _, err = tx.Exec(`
-        INSERT INTO session_participants 
-        (id, session_id, student_id, is_dummy) 
-        VALUES (UUID(), ?, ?, FALSE)`,
+        INSERT INTO session_phase_tracking 
+        (session_id, student_id, phase, start_time)
+        VALUES (?, ?, 'prep', NOW())
+        ON DUPLICATE KEY UPDATE start_time = NOW()`,
         sessionID, studentID)
     
     if err != nil {
-        log.Printf("Failed to add participant: %v", err)
+        log.Printf("Failed to update phase tracking: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update session phase"})
         return
     }
-log.Printf("Successfully added student %s to session %s", studentID, sessionID)
+    log.Printf("Updated phase tracking for student %s in session %s", studentID, sessionID)
+
     // Update session status to active if not already
     _, err = tx.Exec(`
         UPDATE gd_sessions 
@@ -323,34 +355,6 @@ log.Printf("Successfully added student %s to session %s", studentID, sessionID)
         "session_id": sessionID,
     })
 }
-
-func GetSessionParticipantCount(w http.ResponseWriter, r *http.Request) {
-    sessionID := r.URL.Query().Get("session_id")
-    if sessionID == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
-        return
-    }
-
-    var count int
-    err := database.GetDB().QueryRow(`
-        SELECT COUNT(*) 
-        FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`,
-        sessionID).Scan(&count)
-
-    if err != nil {
-        log.Printf("Error counting participants: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-
-    log.Printf("Participant count for session %s: %d", sessionID, count)
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]int{"count": count})
-}
-
 
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
@@ -841,28 +845,67 @@ func CancelBooking(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
+        log.Println("GetSessionParticipants: session_id parameter is missing")
         w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "error": "session_id is required",
+            "data": []interface{}{},
+        })
         return
     }
 
-    log.Printf("Fetching participants for session: %s", sessionID)
+    studentID := r.Context().Value("studentID").(string)
+    log.Printf("GetSessionParticipants: fetching participants for session %s (excluding student %s)", sessionID, studentID)
 
-    // Only get participants who have actually joined (is_dummy = FALSE)
-    rows, err := database.GetDB().Query(`
-        SELECT su.id, su.full_name, su.email 
-        FROM session_participants sp
-        JOIN student_users su ON sp.student_id = su.id
-        WHERE sp.session_id = ? AND sp.is_dummy = FALSE
-        ORDER BY sp.joined_at`,
-        sessionID)
+    // First check if there are any participants at all
+    var totalParticipants int
+    err := database.GetDB().QueryRow(`
+        SELECT COUNT(*) FROM session_participants 
+        WHERE session_id = ? AND is_dummy = FALSE`,
+        sessionID).Scan(&totalParticipants)
     
     if err != nil {
-        log.Printf("Database error fetching participants: %v", err)
+        log.Printf("GetSessionParticipants: error checking total participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "error": "Database error",
+            "data": []interface{}{},
+        })
+        return
+    }
+    log.Printf("GetSessionParticipants: total participants in session: %d", totalParticipants)
+
+    // Get actual joined participants (have phase tracking)
+    rows, err := database.GetDB().Query(`
+        SELECT su.id, su.full_name, su.department 
+        FROM session_participants sp
+        JOIN student_users su ON sp.student_id = su.id
+        JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
+                                      AND sp.student_id = spt.student_id
+        WHERE sp.session_id = ? 
+          AND sp.student_id != ? 
+          AND sp.is_dummy = FALSE
+          AND su.is_active = TRUE
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+          AND NOT EXISTS (
+              SELECT 1 FROM session_phase_tracking spt2
+              WHERE spt2.student_id = spt.student_id
+                AND spt2.start_time > spt.start_time
+                AND spt2.session_id != spt.session_id
+          )
+        ORDER BY su.full_name`, sessionID, studentID)
+
+    if err != nil {
+        log.Printf("GetSessionParticipants: database error fetching participants: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "error": "Database error",
+            "data": []interface{}{},
+        })
         return
     }
     defer rows.Close()
@@ -870,28 +913,84 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     var participants []map[string]interface{}
     for rows.Next() {
         var participant struct {
-            ID       string
-            FullName string
-            Email    string
+            ID         string
+            FullName   string
+            Department string
         }
-        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Email); err != nil {
-            log.Printf("Error scanning participant row: %v", err)
+        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
+            log.Printf("GetSessionParticipants: error scanning participant: %v", err)
             continue
         }
 
         participants = append(participants, map[string]interface{}{
-            "id":    participant.ID,
-            "name":  participant.FullName,
-            "email": participant.Email,
+            "id":         participant.ID,
+            "name":      participant.FullName,
+            "department": participant.Department,
         })
     }
 
-    log.Printf("Found %d participants for session %s", len(participants), sessionID)
+    log.Printf("GetSessionParticipants: found %d joined participants", len(participants))
     
-    w.Header().Set("Content-Type", "application/json")
+    if len(participants) == 0 {
+        log.Printf("GetSessionParticipants: no joined participants found")
+        w.WriteHeader(http.StatusNotFound)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "error": "No participants found",
+            "data": []interface{}{},
+        })
+        return
+    }
+
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "status": "success",
-        "data":   participants,
+        "data": participants,
     })
 }
 
+// func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
+//     sessionID := r.URL.Query().Get("session_id")
+//     if sessionID == "" {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+//         return
+//     }
+
+//     // Get current student ID from context
+//     studentID := r.Context().Value("studentID").(string)
+
+//     rows, err := database.GetDB().Query(`
+//         SELECT su.id, su.full_name, su.department 
+//         FROM session_participants sp
+//         JOIN student_users su ON sp.student_id = su.id
+//         WHERE sp.session_id = ? AND sp.student_id != ? AND sp.is_dummy = FALSE
+//         ORDER BY su.full_name`, sessionID, studentID)
+
+//     if err != nil {
+//         log.Printf("Database error fetching participants: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer rows.Close()
+
+//     var participants []map[string]interface{}
+//     for rows.Next() {
+//         var participant struct {
+//             ID         string
+//             FullName   string
+//             Department string
+//         }
+//         if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
+//             log.Printf("Error scanning participant: %v", err)
+//             continue
+//         }
+
+//         participants = append(participants, map[string]interface{}{
+//             "id":         participant.ID,
+//             "name":      participant.FullName,
+//             "department": participant.Department,
+//         })
+//     }
+
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(participants)
+// }
