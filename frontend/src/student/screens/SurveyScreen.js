@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator }
 import api from '../services/api';
 import auth from '../services/auth'; 
 
-// Updated MemberCard component with better ranking design
 const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   const getRankForMember = () => {
     for (const [rank, memberId] of Object.entries(currentRankings)) {
@@ -67,7 +66,7 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
                   isRankTaken && styles.disabledButton
                 ]}
                 onPress={() => !isRankTaken && onSelect(rank, member.id)}
-                disabled={isRankTaken}
+                disabled={!!isRankTaken}  // Fixed: Ensure boolean value
               >
                 <Text style={[styles.rankButtonText, isRankTaken && styles.disabledText]}>
                   {rank === 1 && '🥇'}
