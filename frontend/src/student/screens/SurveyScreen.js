@@ -94,7 +94,7 @@ export default function SurveyScreen({ navigation, route }) {
     "Logical reasoning",
     "Communication skills"
   ];
-
+ const [confirmedQuestions, setConfirmedQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selections, setSelections] = useState(() => {
     const initialSelections = {};
@@ -106,18 +106,27 @@ export default function SurveyScreen({ navigation, route }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+ 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
         setLoading(true);
+         console.log('Starting participant fetch...');
         const response = await api.student.getSessionParticipants(sessionId);
-        
+         console.log('Participants response:', response);
+          if (!response.data) {
+        console.error('No data in participants response');
+        throw new Error('No participants data received');
+      }
         const authData = await auth.getAuthData();
+        console.log('Auth data:', authData);
         const participants = response.data?.data || [];
+         console.log('Raw participants:', participants);
         const filteredParticipants = participants.filter(
           participant => participant.id !== authData.userId
         );
+        console.log('Filtered participants:', filteredParticipants);
         
         setMembers(filteredParticipants);
         setError(null);
@@ -130,41 +139,151 @@ export default function SurveyScreen({ navigation, route }) {
               newSelections[index] = {};
             }
           });
-          return newSelections;
+           console.log('Initialized selections:', newSelections);
+        return newSelections;
         });
       } catch (err) {
-        console.error('Failed to fetch participants:', err);
+         console.error('Failed to fetch participants:', {
+        error: err,
+        message: err.message,
+        stack: err.stack
+      });
         setError('Failed to load participants');
         setMembers([]);
       } finally {
-        setLoading(false);
+        console.log('Participant fetch completed');
+      setLoading(false);
       }
     };
 
     fetchParticipants();
   }, [sessionId]);
 
-  const handleSelect = (rank, memberId) => {
-    setSelections({
-      ...selections,
+ const handleSelect = (rank, memberId) => {
+    setSelections(prev => ({
+      ...prev,
       [currentQuestion]: {
-        ...selections[currentQuestion],
+        ...prev[currentQuestion],
         [rank]: memberId
       }
-    });
+    }));
   };
 
-  const handleSubmit = async () => {
-    try {
-      await api.student.submitSurvey({
-        sessionId,
-        responses: selections
+const confirmCurrentQuestion = async () => {
+  console.log('Confirm button pressed for question:', currentQuestion + 1);
+  
+  const currentSelections = selections[currentQuestion] || {};
+  console.log('Current selections:', currentSelections);
+  
+  const selectedRanks = Object.keys(currentSelections).length;
+  console.log('Number of rankings selected:', selectedRanks);
+  
+  if (selectedRanks < 3) {
+    console.log('Validation failed - need 3 rankings');
+    alert('Please select all 3 rankings for this question');
+    return;
+  }
+
+  setIsSubmitting(true);
+  console.log('Submitting question...');
+
+  try {
+    const responseData = {
+      sessionId,
+      responses: {
+        [currentQuestion + 1]: currentSelections
+      }
+    };
+    console.log('Prepared submission data:', JSON.stringify(responseData, null, 2));
+
+    // First attempt
+    let response = await api.student.submitSurvey(responseData).catch(error => {
+      if (error.response?.status === 409) {
+        console.log('Survey already submitted for this question, continuing...');
+        return { data: { status: 'success' } };
+      }
+      throw error;
+    });
+
+    // If first attempt fails with 500, try again after a short delay
+    if (response?.status === 500 || response?.data?.error) {
+      console.log('First attempt failed, retrying...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      response = await api.student.submitSurvey(responseData).catch(error => {
+        if (error.response?.status === 409) {
+          return { data: { status: 'success' } };
+        }
+        throw error;
       });
-      navigation.navigate('Results', { sessionId });
-    } catch (error) {
-      alert('Failed to submit survey');
     }
-  };
+
+    console.log('API response:', response);
+
+    if (response.error && response.error !== 'Survey already submitted') {
+      console.error('API returned error:', response.error);
+      throw new Error(response.error);
+    }
+
+    console.log('Submission successful, marking question as confirmed');
+    setConfirmedQuestions(prev => [...prev, currentQuestion]);
+    
+    if (currentQuestion < questions.length - 1) {
+      console.log('Moving to next question');
+      setCurrentQuestion(prev => prev + 1);
+    } else {
+      console.log('All questions completed, navigating to results');
+      navigation.navigate('Results', { sessionId });
+    }
+  } catch (error) {
+    console.error('Error in confirmCurrentQuestion:', error);
+    
+    // More specific error messages based on error type
+    let errorMessage = 'Failed to save question rankings';
+    if (error.response) {
+      if (error.response.status === 500) {
+        errorMessage = 'Server is currently unavailable. Please try again later.';
+      } else if (error.response.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    alert(errorMessage);
+  } finally {
+    console.log('Submission process completed');
+    setIsSubmitting(false);
+  }
+};
+
+const handleSubmit = async () => {
+  try {
+    // Convert selections to the required format
+    const formattedResponses = {};
+    Object.keys(selections).forEach(questionIndex => {
+      const questionNum = parseInt(questionIndex) + 1; // Convert to 1-based index
+      const rankings = selections[questionIndex];
+      
+      // Convert rankings to the expected format (rank -> student_id)
+      formattedResponses[questionNum] = {};
+      Object.keys(rankings).forEach(rank => {
+        const rankNum = parseInt(rank);
+        if (rankings[rank]) {  // Only include if there's a value
+          formattedResponses[questionNum][rankNum] = rankings[rank];
+        }
+      });
+    });
+
+    await api.student.submitSurvey({
+      sessionId,
+      responses: formattedResponses
+    });
+    navigation.navigate('Results', { sessionId });
+  } catch (error) {
+    console.error('Survey submission error:', error);
+    alert('Failed to submit survey: ' + (error.message || 'Unknown error'));
+  }
+};
 
   if (loading) {
     return (
@@ -226,29 +345,47 @@ export default function SurveyScreen({ navigation, route }) {
         )}
       />
 
-      <View style={styles.navigation}>
+<View style={styles.navigation}>
         {currentQuestion > 0 && (
           <TouchableOpacity
             style={styles.navButton}
             onPress={() => setCurrentQuestion(currentQuestion - 1)}
+            disabled={isSubmitting}
           >
             <Text>Previous</Text>
           </TouchableOpacity>
         )}
         
-        {currentQuestion < questions.length - 1 ? (
-          <TouchableOpacity
-            style={[styles.navButton, styles.primaryButton]}
-            onPress={() => setCurrentQuestion(currentQuestion + 1)}
-          >
-            <Text>Next</Text>
-          </TouchableOpacity>
+        {confirmedQuestions.includes(currentQuestion) ? (
+          <View style={styles.confirmedContainer}>
+            <Text style={styles.confirmedText}>✓ Confirmed</Text>
+            {currentQuestion < questions.length - 1 && (
+              <TouchableOpacity
+                style={[styles.navButton, styles.primaryButton]}
+                onPress={() => setCurrentQuestion(currentQuestion + 1)}
+                disabled={isSubmitting}
+              >
+                <Text>Next Question</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ) : (
           <TouchableOpacity
-            style={[styles.navButton, styles.primaryButton]}
-            onPress={handleSubmit}
+            style={[
+              styles.navButton, 
+              styles.primaryButton,
+              (Object.keys(currentRankings).length < 1 || isSubmitting) && styles.disabledButton
+            ]}
+            onPress={confirmCurrentQuestion}
+            disabled={Object.keys(currentRankings).length < 1 || isSubmitting}
           >
-            <Text>Submit Survey</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text>
+                {currentQuestion < questions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
+              </Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -414,5 +551,10 @@ const styles = StyleSheet.create({
     color: 'red',
     textAlign: 'center',
     marginTop: 20,
+  },
+    confirmedText: {
+    color: 'green',
+    fontWeight: 'bold',
+    padding: 10,
   },
 });

@@ -140,24 +140,25 @@ getSessionParticipants: (sessionId) => {
     return { data: [] };
   });
 },
+
+
 submitSurvey: (data) => {
-    console.log('Submitting survey with data:', data);
+    console.log('[API] Submitting survey with data:', JSON.stringify(data, null, 2));
     return api.post('/student/survey', {
       session_id: data.sessionId,
-      responses: Object.keys(data.responses).reduce((acc, questionIndex) => {
-        const questionNum = parseInt(questionIndex);
-        const rankings = data.responses[questionIndex];
+      responses: Object.keys(data.responses).reduce((acc, questionKey) => {
+        const questionNum = parseInt(questionKey);
+        const rankings = data.responses[questionKey];
+        console.log(`[API] Processing question ${questionNum} with rankings:`, rankings);
         
-        // Convert rankings to the expected format (rank -> student_id)
         const formattedRankings = {};
         Object.keys(rankings).forEach(rank => {
           const rankNum = parseInt(rank);
-          if (rankings[rank]) {  // Only include if there's a value
+          if (rankings[rank]) {
             formattedRankings[rankNum] = rankings[rank];
           }
         });
         
-        // Only include if there are rankings
         if (Object.keys(formattedRankings).length > 0) {
           acc[questionNum] = formattedRankings;
         }
@@ -165,13 +166,70 @@ submitSurvey: (data) => {
       }, {})
     }, {
       validateStatus: function (status) {
-        return status < 500; // Reject only if status is 500 or higher
-      }
+        console.log('[API] Received status:', status);
+        return status < 500;
+      },
+      transformResponse: [
+        function (data) {
+          console.log('[API] Raw response data:', data);
+          try {
+            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+            console.log('[API] Parsed response:', parsed);
+            return parsed;
+          } catch (e) {
+            console.error('[API] Response parsing error:', e);
+            return { error: 'Invalid server response' };
+          }
+        }
+      ]
     }).catch(error => {
-      console.error("Error submitting survey:", error);
+      console.error('[API] Survey submission error:', {
+        message: error.message,
+        config: error.config,
+        response: error.response?.data
+      });
       throw error;
     });
   },
+
+  
+getResults: (sessionId) => {
+  return api.get('/student/results', { 
+    params: { session_id: sessionId },
+    transformResponse: [
+      function (data) {
+        try {
+          // Handle empty responses
+          if (!data) {
+            return { data: null };
+          }
+          
+          // Handle non-JSON responses
+          if (typeof data === 'string') {
+            try {
+              return JSON.parse(data);
+            } catch (e) {
+              return { 
+                error: data,
+                data: null 
+              };
+            }
+          }
+          
+          // Handle proper JSON responses
+          return typeof data === 'object' ? data : JSON.parse(data);
+        } catch (e) {
+          console.error('Results response parsing error:', e);
+          return { data: null };
+        }
+      }
+    ]
+  }).catch(error => {
+    console.error('Results API error:', error);
+    return { data: null };
+  });
+},
+
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
