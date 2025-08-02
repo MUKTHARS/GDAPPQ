@@ -458,7 +458,7 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // 4. Check if survey was already submitted for any question
+    
     var questionSubmitted bool
     err = tx.QueryRow(`
         SELECT EXISTS(
@@ -479,10 +479,9 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 5. Process each question's rankings
     for q, rankings := range req.Responses {
         // Validate exactly 3 rankings per question
-        if len(rankings) != 3 {
+        if len(rankings) != 1 {/////////////////////////////
             log.Printf("Invalid rankings count for question %d: %d", q, len(rankings))
             w.WriteHeader(http.StatusBadRequest)
             json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Question %d must have exactly 3 rankings", q)})
@@ -551,7 +550,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
 
-    // First check if survey was submitted
+    // First check if survey was submitted by this student
     var surveySubmitted bool
     err := database.GetDB().QueryRow(`
         SELECT EXISTS(
@@ -573,27 +572,21 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get aggregated results across all questions
-    type Result struct {
-        ResponderID   string  `json:"responder_id"`
-        Name         string  `json:"name"`
-        TotalScore   float64 `json:"total_score"`
-        AvgScore     float64 `json:"avg_score"`
-        Qualified    bool    `json:"qualified"`
-    }
-
+    // Get aggregated results for ONLY participants in this session
     rows, err := database.GetDB().Query(`
         SELECT 
             sr.responder_id,
             su.full_name,
             SUM(sr.score) as total_score,
-            COUNT(DISTINCT sr.question_number) as question_count
+            COUNT(DISTINCT sr.question_number) as question_count,
+            COUNT(DISTINCT sr.student_id) as voter_count
         FROM survey_results sr
         JOIN student_users su ON sr.responder_id = su.id
-        WHERE sr.session_id = ? AND sr.student_id = ?
+        JOIN session_participants sp ON sr.responder_id = sp.student_id AND sp.session_id = ?
+        WHERE sr.session_id = ? AND sp.is_dummy = FALSE
         GROUP BY sr.responder_id, su.full_name
         ORDER BY total_score DESC`,
-        sessionID, studentID)
+        sessionID, sessionID)
 
     if err != nil {
         log.Printf("Error fetching results: %v", err)
@@ -603,20 +596,28 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     }
     defer rows.Close()
 
+    type Result struct {
+        ResponderID   string  `json:"responder_id"`
+        Name         string  `json:"name"`
+        TotalScore   float64 `json:"total_score"`
+        AvgScore     float64 `json:"avg_score"`
+        Qualified    bool    `json:"qualified"`
+    }
+
     var results []Result
     for rows.Next() {
         var r Result
-        var questionCount int
-        if err := rows.Scan(&r.ResponderID, &r.Name, &r.TotalScore, &questionCount); err != nil {
+        var questionCount, voterCount int
+        if err := rows.Scan(&r.ResponderID, &r.Name, &r.TotalScore, &questionCount, &voterCount); err != nil {
             log.Printf("Error scanning result: %v", err)
             continue
         }
-        r.AvgScore = r.TotalScore / float64(questionCount)
-        r.Qualified = r.AvgScore >= 2.0 // Example threshold
+        r.AvgScore = r.TotalScore / float64(questionCount * voterCount)
+        r.Qualified = r.AvgScore >= 2.0
         results = append(results, r)
     }
 
-    // Get participants list
+    // Get participants list - only those in this session
     var participants []struct {
         ID   string `json:"id"`
         Name string `json:"name"`
@@ -626,8 +627,8 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         SELECT su.id, su.full_name 
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
-        WHERE sp.session_id = ? AND sp.is_dummy = FALSE AND sp.student_id != ?
-        ORDER BY su.full_name`, sessionID, studentID)
+        WHERE sp.session_id = ? AND sp.is_dummy = FALSE
+        ORDER BY su.full_name`, sessionID)
 
     if err != nil {
         log.Printf("Error fetching participants: %v", err)
