@@ -27,17 +27,17 @@ export default function AnalyticsDashboard() {
     }
   };
     
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await api.get('/admin/analytics/qualifications');
-        setData(response.data);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-    fetchData();
-  }, []);
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     try {
+  //       const response = await api.get('/admin/analytics/qualifications');
+  //       setData(response.data);
+  //     } catch (error) {
+  //       console.error(error);
+  //     }
+  //   };
+  //   fetchData();
+  // }, []);
 
   return (
     <View style={styles.container}>

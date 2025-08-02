@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList,ScrollView } from 'react-native';
 import api from '../services/api';
 import { ProgressChart } from 'react-native-chart-kit';
 
@@ -7,15 +7,22 @@ export default function ResultsScreen({ navigation, route }) {
   const { sessionId } = route.params;
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(true);
- const sortedScores = [...scores].sort((a, b) => b.score - a.score);
 
   useEffect(() => {
     const fetchResults = async () => {
       try {
+        console.log("Fetching results for session:", sessionId);
         const response = await api.student.getResults(sessionId);
+        console.log("Results response:", response.data);
+        
+        if (!response.data) {
+          throw new Error("No data received");
+        }
+        
         setResults(response.data);
       } catch (error) {
-        alert('Failed to load results');
+        console.error("Failed to load results:", error);
+        alert('Failed to load results: ' + (error.response?.data?.error || error.message));
       } finally {
         setLoading(false);
       }
@@ -31,39 +38,45 @@ export default function ResultsScreen({ navigation, route }) {
     );
   }
 
-   return (
+  if (!results) {
+    return (
+      <View style={styles.container}>
+        <Text>No results available</Text>
+      </View>
+    );
+  }
+
+  return (
     <View style={styles.container}>
       <Text style={styles.title}>Survey Results</Text>
       
-      <Text style={styles.subtitle}>Qualified Members:</Text>
-      <View style={styles.qualifiedContainer}>
-        {qualified.map((member, index) => (
-          <View key={member.id} style={styles.qualifiedMember}>
-            <Text style={styles.qualifiedPosition}>
-              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}
-            </Text>
-            <Text style={styles.qualifiedName}>{member.name}</Text>
-            <Text style={styles.qualifiedScore}>{member.score.toFixed(1)} points</Text>
-          </View>
-        ))}
+      <Text style={styles.subtitle}>Your Performance:</Text>
+      <View style={styles.scoreCard}>
+        <Text>Leadership: {results.scores?.leadership?.toFixed(1) || '0.0'}</Text>
+        <Text>Communication: {results.scores?.communication?.toFixed(1) || '0.0'}</Text>
+        <Text>Teamwork: {results.scores?.teamwork?.toFixed(1) || '0.0'}</Text>
+        <Text style={styles.qualifiedText}>
+          {results.qualified ? "✅ Qualified for next level!" : "❌ Not qualified yet"}
+        </Text>
       </View>
 
-      <Text style={styles.subtitle}>All Participants:</Text>
-      <FlatList
-        data={sortedScores}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.scoreCard}>
-            <Text style={styles.memberName}>{item.name}</Text>
-            <View style={styles.scoreDetails}>
-              <Text style={styles.scoreText}>{item.score.toFixed(1)} points</Text>
-              {item.penalties > 0 && (
-                <Text style={styles.penaltyText}>({item.penalties} penalties)</Text>
-              )}
-            </View>
-          </View>
-        )}
-      />
+      <Text style={styles.subtitle}>Feedback:</Text>
+      <Text style={styles.feedback}>{results.feedback || "No feedback available"}</Text>
+
+      {results.participants?.length > 0 && (
+        <>
+          <Text style={styles.subtitle}>Participants:</Text>
+          <FlatList
+            data={results.participants}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.participantCard}>
+                <Text>{item.name}</Text>
+              </View>
+            )}
+          />
+        </>
+      )}
     </View>
   );
 }

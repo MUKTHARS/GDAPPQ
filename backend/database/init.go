@@ -84,6 +84,7 @@ func InitDB(db *sql.DB) error {
             student_id VARCHAR(36),
             is_dummy BOOLEAN DEFAULT FALSE,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP NULL DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (session_id, student_id),
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
@@ -110,22 +111,7 @@ func InitDB(db *sql.DB) error {
             FOREIGN KEY (third_place) REFERENCES student_users(id) ON DELETE SET NULL
         )`,
 
-        // Results tables
-        `CREATE TABLE IF NOT EXISTS qualifications (
-            session_id VARCHAR(36),
-            student_id VARCHAR(36),
-            final_score DECIMAL(5,2) NOT NULL,
-            qualified_for_level INT NOT NULL,
-            is_approved BOOLEAN DEFAULT FALSE,
-            approved_by VARCHAR(36),
-            feedback TEXT,
-            approved_at TIMESTAMP,
-            PRIMARY KEY (session_id, student_id),
-            FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
-            FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
-            FOREIGN KEY (approved_by) REFERENCES staff_users(id) ON DELETE SET NULL
-        )`,
-
+        
         `CREATE TABLE IF NOT EXISTS gd_rules (
          level INT PRIMARY KEY,
         prep_time INT NOT NULL,
@@ -135,15 +121,7 @@ func InitDB(db *sql.DB) error {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
 
-// Analytics view
-        `CREATE VIEW IF NOT EXISTS qualification_rates AS
-        SELECT department, 
-        COUNT(*) as total,
-        SUM(CASE WHEN qualified_for_level > current_gd_level THEN 1 ELSE 0 END) as passed,
-        (SUM(CASE WHEN qualified_for_level > current_gd_level THEN 1 ELSE 0 END) / COUNT(*)) * 100 as rate
-        FROM student_users
-        JOIN qualifications ON student_users.id = qualifications.student_id
-        GROUP BY department`,
+
 
         `CREATE TABLE IF NOT EXISTS gd_session_topics (
     session_id VARCHAR(36) PRIMARY KEY,
@@ -160,6 +138,21 @@ func InitDB(db *sql.DB) error {
     PRIMARY KEY (session_id, student_id, phase),
     FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
+)`,
+
+`CREATE TABLE IF NOT EXISTS survey_results (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,  
+    responder_id VARCHAR(36) NOT NULL, 
+    question_number INT NOT NULL,
+    ranks INT NOT NULL,  
+    score INT NOT NULL, 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    UNIQUE KEY (session_id, student_id, question_number, ranks)  
 )`,
 
 `CREATE TABLE IF NOT EXISTS venue_qr_codes (
@@ -256,19 +249,6 @@ _, err = db.Exec(
 if err != nil {
     log.Printf("Error inserting test student: %v", err)
 }
-
-// Add sample qualification data
-_, err = db.Exec(`
-	INSERT IGNORE INTO qualifications 
-	(session_id, student_id, final_score, qualified_for_level, feedback) VALUES 
-	('session1', 'student1', 
-	 '{"leadership": 4.2, "communication": 3.8, "teamwork": 4.0}', 
-	 2, 'Good participation but needs to work on time management')`)
-if err != nil {
-	log.Printf("Error inserting qualification data: %v", err)
-}
-    log.Println("Database initialization completed successfully!")
-
 
  go func() {
         for {

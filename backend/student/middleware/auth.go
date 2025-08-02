@@ -53,6 +53,7 @@ func StudentOnly(next http.Handler) http.Handler {
         next.ServeHTTP(w, r.WithContext(ctx))
     })
 }
+
 // func StudentOnly(next http.Handler) http.Handler {
 //     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 //         log.Println("StudentOnly middleware - incoming request:", r.URL.Path)
