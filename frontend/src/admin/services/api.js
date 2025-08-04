@@ -39,7 +39,11 @@ api.admin = {
   }),
   updateVenue: (id, data) => api.put(`/admin/venues/${id}`, data),
   createVenue: (data) => api.post('/admin/venues', data),
-  getBookings: () => api.get('/admin/bookings'),
+  getBookings: () => api.get('/admin/bookings', {
+    validateStatus: function (status) {
+      return status < 500; // Resolve only if the status code is less than 500
+    }
+  }),
 
 createBulkSessions: (data) => {
   return api.post('/admin/sessions/bulk', data, {
