@@ -458,7 +458,7 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // 4. Check if survey was already submitted for any question
+    
     var questionSubmitted bool
     err = tx.QueryRow(`
         SELECT EXISTS(
@@ -479,10 +479,9 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 5. Process each question's rankings
     for q, rankings := range req.Responses {
         // Validate exactly 3 rankings per question
-        if len(rankings) != 3 {
+        if len(rankings) != 1  {/////////////////////////////
             log.Printf("Invalid rankings count for question %d: %d", q, len(rankings))
             w.WriteHeader(http.StatusBadRequest)
             json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Question %d must have exactly 3 rankings", q)})
@@ -551,37 +550,45 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
 
-    // First check if survey was submitted
-    var surveySubmitted bool
-    err := database.GetDB().QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM survey_results 
-            WHERE session_id = ? AND student_id = ?
-        )`, sessionID, studentID).Scan(&surveySubmitted)
+    // Get only participants who actually joined (have phase tracking)
+    var participants []struct {
+        ID   string `json:"id"`
+        Name string `json:"name"`
+    }
+
+    participantRows, err := database.GetDB().Query(`
+        SELECT DISTINCT su.id, su.full_name 
+        FROM session_participants sp
+        JOIN student_users su ON sp.student_id = su.id
+        JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
+                                      AND sp.student_id = spt.student_id
+        WHERE sp.session_id = ? 
+          AND sp.is_dummy = FALSE
+          AND su.is_active = TRUE
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 2 HOUR)`, 
+        sessionID)
 
     if err != nil {
-        log.Printf("Database error checking survey submission: %v", err)
+        log.Printf("Error fetching participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
-
-    if !surveySubmitted {
-        log.Printf("No survey submitted for session %s by student %s", sessionID, studentID)
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Survey not submitted yet"})
-        return
+    defer participantRows.Close()
+    
+    for participantRows.Next() {
+        var p struct {
+            ID   string `json:"id"`
+            Name string `json:"name"`
+        }
+        if err := participantRows.Scan(&p.ID, &p.Name); err != nil {
+            log.Printf("Error scanning participant: %v", err)
+            continue
+        }
+        participants = append(participants, p)
     }
 
-    // Get aggregated results across all questions
-    type Result struct {
-        ResponderID   string  `json:"responder_id"`
-        Name         string  `json:"name"`
-        TotalScore   float64 `json:"total_score"`
-        AvgScore     float64 `json:"avg_score"`
-        Qualified    bool    `json:"qualified"`
-    }
-
+    // Get survey responses only for actual participants
     rows, err := database.GetDB().Query(`
         SELECT 
             sr.responder_id,
@@ -590,10 +597,12 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             COUNT(DISTINCT sr.question_number) as question_count
         FROM survey_results sr
         JOIN student_users su ON sr.responder_id = su.id
-        WHERE sr.session_id = ? AND sr.student_id = ?
+        JOIN session_phase_tracking spt ON sr.session_id = spt.session_id 
+                                      AND sr.responder_id = spt.student_id
+        WHERE sr.session_id = ?
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 2 HOUR)
         GROUP BY sr.responder_id, su.full_name
-        ORDER BY total_score DESC`,
-        sessionID, studentID)
+        ORDER BY total_score DESC`, sessionID)
 
     if err != nil {
         log.Printf("Error fetching results: %v", err)
@@ -602,6 +611,13 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
     defer rows.Close()
+
+    type Result struct {
+        ResponderID string  `json:"responder_id"`
+        Name       string  `json:"name"`
+        TotalScore float64 `json:"total_score"`
+        AvgScore   float64 `json:"avg_score"`
+    }
 
     var results []Result
     for rows.Next() {
@@ -612,49 +628,114 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             continue
         }
         r.AvgScore = r.TotalScore / float64(questionCount)
-        r.Qualified = r.AvgScore >= 2.0 // Example threshold
         results = append(results, r)
     }
 
-    // Get participants list
-    var participants []struct {
-        ID   string `json:"id"`
-        Name string `json:"name"`
-    }
-
-    participantRows, err := database.GetDB().Query(`
-        SELECT su.id, su.full_name 
-        FROM session_participants sp
-        JOIN student_users su ON sp.student_id = su.id
-        WHERE sp.session_id = ? AND sp.is_dummy = FALSE AND sp.student_id != ?
-        ORDER BY su.full_name`, sessionID, studentID)
-
-    if err != nil {
-        log.Printf("Error fetching participants: %v", err)
-        // Continue without participants
-    } else {
-        defer participantRows.Close()
-        
-        for participantRows.Next() {
-            var p struct {
-                ID   string `json:"id"`
-                Name string `json:"name"`
-            }
-            if err := participantRows.Scan(&p.ID, &p.Name); err != nil {
-                log.Printf("Error scanning participant: %v", err)
-                continue
-            }
-            participants = append(participants, p)
-        }
-    }
-
-    log.Printf("Successfully fetched results for session %s", sessionID)
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
         "results":      results,
         "participants": participants,
     })
 }
+
+
+// func GetResults(w http.ResponseWriter, r *http.Request) {
+//     sessionID := r.URL.Query().Get("session_id")
+//     studentID := r.Context().Value("studentID").(string)
+
+//     log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
+
+//     // Get all participants in the session (regardless of survey completion)
+//     var participants []struct {
+//         ID   string `json:"id"`
+//         Name string `json:"name"`
+//     }
+
+//     participantRows, err := database.GetDB().Query(`
+//         SELECT su.id, su.full_name 
+//         FROM session_participants sp
+//         JOIN student_users su ON sp.student_id = su.id
+//         WHERE sp.session_id = ? AND sp.is_dummy = FALSE
+//         ORDER BY su.full_name`, sessionID)
+
+//     if err != nil {
+//         log.Printf("Error fetching participants: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer participantRows.Close()
+    
+//     for participantRows.Next() {
+//         var p struct {
+//             ID   string `json:"id"`
+//             Name string `json:"name"`
+//         }
+//         if err := participantRows.Scan(&p.ID, &p.Name); err != nil {
+//             log.Printf("Error scanning participant: %v", err)
+//             continue
+//         }
+//         participants = append(participants, p)
+//     }
+
+//     // Get aggregated results for all participants
+//     rows, err := database.GetDB().Query(`
+//         SELECT 
+//             sr.responder_id,
+//             su.full_name,
+//             SUM(sr.score) as total_score,
+//             COUNT(DISTINCT sr.question_number) as question_count
+//         FROM survey_results sr
+//         JOIN student_users su ON sr.responder_id = su.id
+//         WHERE sr.session_id = ?
+//         GROUP BY sr.responder_id, su.full_name
+//         ORDER BY total_score DESC`, sessionID)
+
+//     if err != nil {
+//         log.Printf("Error fetching results: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer rows.Close()
+
+//     type Result struct {
+//         ResponderID string  `json:"responder_id"`
+//         Name        string  `json:"name"`
+//         TotalScore  float64 `json:"total_score"`
+//         AvgScore    float64 `json:"avg_score"`
+//     }
+
+//     var results []Result
+//     for rows.Next() {
+//         var r Result
+//         var questionCount int
+//         if err := rows.Scan(&r.ResponderID, &r.Name, &r.TotalScore, &questionCount); err != nil {
+//             log.Printf("Error scanning result: %v", err)
+//             continue
+//         }
+//         r.AvgScore = r.TotalScore / float64(questionCount)
+//         results = append(results, r)
+//     }
+
+//     // If no results yet, return empty array instead of error
+//     if len(results) == 0 {
+//         log.Printf("No survey results yet for session %s", sessionID)
+//         w.Header().Set("Content-Type", "application/json")
+//         json.NewEncoder(w).Encode(map[string]interface{}{
+//             "results":      []interface{}{},
+//             "participants": participants,
+//         })
+//         return
+//     }
+
+//     log.Printf("Successfully fetched results for session %s", sessionID)
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "results":      results,
+//         "participants": participants,
+//     })
+// }
 
 
 

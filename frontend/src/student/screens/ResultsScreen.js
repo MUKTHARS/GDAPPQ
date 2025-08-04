@@ -1,153 +1,187 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList,ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, ActivityIndicator } from 'react-native';
 import api from '../services/api';
-import { ProgressChart } from 'react-native-chart-kit';
 
 export default function ResultsScreen({ navigation, route }) {
   const { sessionId } = route.params;
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [participants, setParticipants] = useState([]);
 
   useEffect(() => {
     const fetchResults = async () => {
       try {
-        console.log("Fetching results for session:", sessionId);
+        setLoading(true);
         const response = await api.student.getResults(sessionId);
-        console.log("Results response:", response.data);
         
-        if (!response.data) {
-          throw new Error("No data received");
-        }
+        // Handle case where backend returns empty arrays
+        const hasResults = response.data?.results?.length > 0;
+        const hasParticipants = response.data?.participants?.length > 0;
         
-        setResults(response.data);
+        setResults(hasResults ? response.data.results : []);
+        setParticipants(hasParticipants ? response.data.participants : []);
       } catch (error) {
         console.error("Failed to load results:", error);
-        alert('Failed to load results: ' + (error.response?.data?.error || error.message));
       } finally {
         setLoading(false);
       }
     };
+    
     fetchResults();
   }, [sessionId]);
 
   if (loading) {
     return (
       <View style={styles.loading}>
-        <Text>Loading results...</Text>
+        <ActivityIndicator size="large" />
+        <Text>Calculating results...</Text>
       </View>
     );
   }
 
-  if (!results) {
-    return (
-      <View style={styles.container}>
-        <Text>No results available</Text>
-      </View>
-    );
-  }
+  // Show whatever results we have, even if incomplete
+  const hasResults = results.length > 0;
+  const hasParticipants = participants.length > 0;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Survey Results</Text>
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Session Results</Text>
       
-      <Text style={styles.subtitle}>Your Performance:</Text>
-      <View style={styles.scoreCard}>
-        <Text>Leadership: {results.scores?.leadership?.toFixed(1) || '0.0'}</Text>
-        <Text>Communication: {results.scores?.communication?.toFixed(1) || '0.0'}</Text>
-        <Text>Teamwork: {results.scores?.teamwork?.toFixed(1) || '0.0'}</Text>
-        <Text style={styles.qualifiedText}>
-          {results.qualified ? "✅ Qualified for next level!" : "❌ Not qualified yet"}
-        </Text>
-      </View>
-
-      <Text style={styles.subtitle}>Feedback:</Text>
-      <Text style={styles.feedback}>{results.feedback || "No feedback available"}</Text>
-
-      {results.participants?.length > 0 && (
+      {hasResults ? (
         <>
-          <Text style={styles.subtitle}>Participants:</Text>
-          <FlatList
-            data={results.participants}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.participantCard}>
-                <Text>{item.name}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Rankings</Text>
+            {results.map((participant, index) => (
+              <View 
+                key={`result-${participant.responder_id || index}`}
+                style={[
+                  styles.resultCard,
+                  index === 0 && styles.firstPlace,
+                  index === 1 && styles.secondPlace,
+                  index === 2 && styles.thirdPlace,
+                ]}
+              >
+                <Text style={styles.rank}>
+                  {index + 1}
+                </Text>
+                <View style={styles.participantInfo}>
+                  <Text style={styles.participantName}>{participant.name}</Text>
+                  <Text style={styles.score}>Score: {participant.total_score.toFixed(1)}</Text>
+                </View>
               </View>
-            )}
-          />
+            ))}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>All Participants</Text>
+            {participants.map(participant => (
+              <View key={`participant-${participant.id}`} style={styles.participantCard}>
+                <Text style={styles.participantName}>{participant.name}</Text>
+              </View>
+            ))}
+          </View>
         </>
+      ) : hasParticipants ? (
+        <View style={styles.section}>
+          <Text style={styles.message}>Results are being calculated...</Text>
+          <Text style={styles.sectionTitle}>Participants</Text>
+          {participants.map(participant => (
+            <View key={`participant-${participant.id}`} style={styles.participantCard}>
+              <Text style={styles.participantName}>{participant.name}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.section}>
+          <Text style={styles.message}>No participants found for this session</Text>
+        </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 15,
-    backgroundColor: '#f5f5f5'
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
-    textAlign: 'center'
+    textAlign: 'center',
+    color: '#333',
   },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginVertical: 10
-  },
-  qualifiedContainer: {
+  section: {
     marginBottom: 20,
-    backgroundColor: '#fff',
+    backgroundColor: 'white',
     borderRadius: 10,
     padding: 15,
-    elevation: 3
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  qualifiedMember: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee'
-  },
-  qualifiedPosition: {
+  sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    width: 50
+    marginBottom: 10,
+    color: '#333',
   },
-  qualifiedName: {
-    flex: 1,
-    fontSize: 16
-  },
-  qualifiedScore: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF'
-  },
-  scoreCard: {
-    backgroundColor: '#fff',
-    padding: 15,
-    marginVertical: 5,
-    borderRadius: 8,
+  resultCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
   },
-  memberName: {
+  firstPlace: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#FFD700',
+  },
+  secondPlace: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#C0C0C0',
+  },
+  thirdPlace: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#CD7F32',
+  },
+  rank: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    width: 30,
+    textAlign: 'center',
+    marginRight: 10,
+  },
+  participantInfo: {
+    flex: 1,
+  },
+  participantName: {
     fontSize: 16,
-    flex: 1
+    fontWeight: '500',
   },
-  scoreDetails: {
-    alignItems: 'flex-end'
+  score: {
+    fontSize: 14,
+    color: '#666',
   },
-  scoreText: {
-    fontSize: 16,
-    fontWeight: '600'
+  participantCard: {
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 6,
   },
-  penaltyText: {
-    fontSize: 12,
-    color: '#FF3B30'
-  }
+  message: {
+    textAlign: 'center',
+    color: '#666',
+    marginBottom: 10,
+  },
 });

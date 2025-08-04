@@ -178,7 +178,7 @@ const confirmCurrentQuestion = async () => {
   const selectedRanks = Object.keys(currentSelections).length;
   console.log('Number of rankings selected:', selectedRanks);
   
-  if (selectedRanks < 3) {
+  if (selectedRanks < 1) {//////
     console.log('Validation failed - need 3 rankings');
     alert('Please select all 3 rankings for this question');
     return;

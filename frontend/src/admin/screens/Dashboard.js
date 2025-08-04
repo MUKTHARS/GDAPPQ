@@ -26,6 +26,7 @@ export default function Dashboard({ navigation }) {
     { title: 'Venue Management', screen: 'VenueSetup' },
     { title: 'Session Config', screen: 'SessionConfig' },
     { title: 'Session Rules', screen: 'SessionRules' },
+     { name: 'TopParticipants', title: 'Top Performers', icon: 'rule' },
     { title: 'Session Calendar', screen: 'SessionCalendar' },
     { title: 'Student Progress', screen: 'StudentProgress' },
     { title: 'Question Bank', screen: 'QuestionBank' },

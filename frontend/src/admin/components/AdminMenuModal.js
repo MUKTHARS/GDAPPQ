@@ -11,7 +11,7 @@ const AdminMenuModal = ({ visible, onClose, navigation }) => {
     { name: 'Dashboard', title: 'Dashboard', icon: 'dashboard' },
     { name: 'VenueSetup', title: 'Venue Management', icon: 'place' },
     { name: 'SessionConfig', title: 'Session Config', icon: 'settings' },
-    { name: 'SessionRules', title: 'Session Rules', icon: 'rule' },
+    { name: 'TopParticipants', title: 'Top Performers', icon: 'rule' },
     { name: 'SessionCalendar', title: 'Session Calendar', icon: 'calendar-today' },
     { name: 'StudentProgress', title: 'Student Progress', icon: 'school' },
     { name: 'QuestionBank', title: 'Question Bank', icon: 'library-books' },

@@ -13,7 +13,7 @@ import QuestionBank from '../screens/QuestionBank';
 import BulkSessions from '../screens/BulkSessions';
 import AdminHamburgerHeader from '../components/AdminHamburgerHeader';
 import BookingsScreen from '../screens/BookingsScreen';
-
+import TopParticipantsScreen from '../screens/TopParticipantsScreen';
 const Stack = createStackNavigator();
 
 const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
@@ -55,8 +55,8 @@ const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
       <Stack.Screen name="VenueSetup" component={VenueSetup} />
        <Stack.Screen name="Bulk Session" component={BulkSessions} />
       <Stack.Screen name="SessionConfig" component={SessionConfig} />
-      <Stack.Screen name="QrScreen" component={QrScreen} options={{ title: 'Venue QR Code' }}
-      />
+      <Stack.Screen name="QrScreen" component={QrScreen} options={{ title: 'Venue QR Code' }}      />
+      <Stack.Screen name="TopParticipants" component={TopParticipantsScreen}  options={{ title: 'Top Performers' }}/>
       <Stack.Screen name="SessionRules" component={SessionRules} />
       <Stack.Screen name="Analytics" component={AnalyticsDashboard} />
       <Stack.Screen name="SessionCalendar" component={SessionCalendar} />
@@ -92,6 +92,8 @@ const getHeaderTitle = (route) => {
       return 'Bulk Session Setup';
     case 'BookedStudents':
       return 'Booked Students';
+    case 'TopParticipants':
+      return 'Top Performers';
     default:
       return '';
   }
