@@ -4,10 +4,9 @@ import api from '../services/api';
 
 export default function ResultsScreen({ navigation, route }) {
   const { sessionId } = route.params;
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [topPerformers, setTopPerformers] = useState([]);
-  const [allParticipants, setAllParticipants] = useState([]);
+  const [participants, setParticipants] = useState([]);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -15,30 +14,14 @@ export default function ResultsScreen({ navigation, route }) {
         setLoading(true);
         const response = await api.student.getResults(sessionId);
         
-        if (!response.data) {
-          throw new Error("No data received");
-        }
+        // Handle case where backend returns empty arrays
+        const hasResults = response.data?.results?.length > 0;
+        const hasParticipants = response.data?.participants?.length > 0;
         
-        // Filter out any participants not in this session
-        const validParticipantIds = new Set(
-          (response.data.participants || []).map(p => p.id)
-        );
-        
-        const filteredResults = (response.data.results || []).filter(result => 
-          validParticipantIds.has(result.responder_id)
-        );
-        
-        setResults(filteredResults);
-        setAllParticipants(response.data.participants || []);
-        
-        // Calculate top 3 performers from filtered results
-        if (filteredResults.length > 0) {
-          const sorted = [...filteredResults].sort((a, b) => b.total_score - a.total_score);
-          setTopPerformers(sorted.slice(0, 3));
-        }
+        setResults(hasResults ? response.data.results : []);
+        setParticipants(hasParticipants ? response.data.participants : []);
       } catch (error) {
         console.error("Failed to load results:", error);
-        alert('Failed to load results: ' + (error.response?.data?.error || error.message));
       } finally {
         setLoading(false);
       }
@@ -51,66 +34,68 @@ export default function ResultsScreen({ navigation, route }) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" />
+        <Text>Calculating results...</Text>
       </View>
     );
   }
 
-  if (!results || results.length === 0) {
-    return (
-      <View style={styles.container}>
-        <Text>No results available yet</Text>
-      </View>
-    );
-  }
+  // Show whatever results we have, even if incomplete
+  const hasResults = results.length > 0;
+  const hasParticipants = participants.length > 0;
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Session Results</Text>
       
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Top Performers</Text>
-        
-        {topPerformers.length > 0 ? (
-          <View style={styles.topPerformersContainer}>
-            {topPerformers.map((participant, index) => (
+      {hasResults ? (
+        <>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Rankings</Text>
+            {results.map((participant, index) => (
               <View 
-                key={`top-${participant.responder_id || index}`} 
+                key={`result-${participant.responder_id || index}`}
                 style={[
-                  styles.topPerformerCard,
+                  styles.resultCard,
                   index === 0 && styles.firstPlace,
                   index === 1 && styles.secondPlace,
                   index === 2 && styles.thirdPlace,
                 ]}
               >
-                <Text style={styles.rankBadge}>
-                  {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}
+                <Text style={styles.rank}>
+                  {index + 1}
                 </Text>
-                <Text style={styles.topPerformerName}>{participant.name}</Text>
-                <Text style={styles.topPerformerScore}>
-                  Score: {participant.total_score.toFixed(1)}
-                </Text>
+                <View style={styles.participantInfo}>
+                  <Text style={styles.participantName}>{participant.name}</Text>
+                  <Text style={styles.score}>Score: {participant.total_score.toFixed(1)}</Text>
+                </View>
               </View>
             ))}
           </View>
-        ) : (
-          <Text style={styles.noResults}>No top performers data available</Text>
-        )}
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>All Participants</Text>
-        
-        <FlatList
-          data={allParticipants}
-          keyExtractor={item => `participant-${item.id}`}
-          scrollEnabled={false}
-          renderItem={({ item }) => (
-            <View style={styles.participantCard}>
-              <Text style={styles.participantName}>{item.name}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>All Participants</Text>
+            {participants.map(participant => (
+              <View key={`participant-${participant.id}`} style={styles.participantCard}>
+                <Text style={styles.participantName}>{participant.name}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : hasParticipants ? (
+        <View style={styles.section}>
+          <Text style={styles.message}>Results are being calculated...</Text>
+          <Text style={styles.sectionTitle}>Participants</Text>
+          {participants.map(participant => (
+            <View key={`participant-${participant.id}`} style={styles.participantCard}>
+              <Text style={styles.participantName}>{participant.name}</Text>
             </View>
-          )}
-        />
-      </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.section}>
+          <Text style={styles.message}>No participants found for this session</Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -134,7 +119,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   section: {
-    marginBottom: 25,
+    marginBottom: 20,
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 15,
@@ -146,66 +131,57 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#444',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 8,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
   },
-  topPerformersContainer: {
-    marginTop: 10,
-  },
-  topPerformerCard: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
+  resultCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
   },
   firstPlace: {
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#FFD700',
   },
   secondPlace: {
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#C0C0C0',
   },
   thirdPlace: {
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#CD7F32',
   },
-  rankBadge: {
-    fontSize: 16,
+  rank: {
+    fontSize: 18,
     fontWeight: 'bold',
-    width: 50,
+    width: 30,
+    textAlign: 'center',
+    marginRight: 10,
   },
-  topPerformerName: {
-    fontSize: 16,
-    fontWeight: '600',
+  participantInfo: {
     flex: 1,
-    color: '#333',
   },
-  topPerformerScore: {
+  participantName: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  score: {
     fontSize: 14,
     color: '#666',
   },
   participantCard: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 6,
   },
-  participantName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  noResults: {
+  message: {
     textAlign: 'center',
     color: '#666',
-    fontStyle: 'italic',
-    marginVertical: 15,
+    marginBottom: 10,
   },
 });
