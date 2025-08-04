@@ -58,7 +58,7 @@ createBulkSessions: (data) => {
 },
 
   getVenues: () => api.get('/admin/venues'),
-  
+  getTopParticipants: (params = {}) => api.get('/admin/results/top', { params }),
 };
 
 export default api;
