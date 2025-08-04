@@ -1,37 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import api from '../services/api';
-import { Picker } from '@react-native-picker/picker';
+import { colors } from '../../student/assets/globalStyles';
+
 
 export default function TopParticipantsScreen() {
   const [loading, setLoading] = useState(true);
   const [topParticipants, setTopParticipants] = useState([]);
   const [error, setError] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState('all');
-  const [levels, setLevels] = useState([1, 2, 3]);
+  const levels = ['all', 1, 2, 3]; // Available level options
 
   useEffect(() => {
     const fetchTopParticipants = async () => {
       try {
         setLoading(true);
-        const params = {};
-        if (selectedLevel !== 'all') {
-          params.level = selectedLevel;
-        }
+        const params = selectedLevel !== 'all' ? { level: selectedLevel } : {};
         
-        console.log('Fetching top participants with params:', params);
+        console.log('Fetching participants with level:', selectedLevel);
         const response = await api.admin.getTopParticipants(params);
-        console.log('API Response:', response);
         
         if (response.data?.error) {
           throw new Error(response.data.error);
         }
 
-        // Ensure we always have an array, even if empty
-        const participants = response.data?.top_participants || [];
-        console.log('Participants data:', participants);
-        
-        setTopParticipants(participants);
+        setTopParticipants(response.data?.top_participants || []);
         setError(null);
       } catch (err) {
         console.error('Failed to load top participants:', err);
@@ -68,19 +61,31 @@ export default function TopParticipantsScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Top Performers</Text>
       
-      <View style={styles.filterContainer}>
-        <Text style={styles.filterLabel}>Filter by Level:</Text>
-        <Picker
-          selectedValue={selectedLevel}
-          style={styles.picker}
-          onValueChange={(itemValue) => setSelectedLevel(itemValue)}
-        >
-          <Picker.Item label="All Levels" value="all" />
-          {levels.map(level => (
-            <Picker.Item key={level} label={`Level ${level}`} value={level} />
-          ))}
-        </Picker>
+      {/* Level Selector */}
+      <View style={styles.levelSelector}>
+        {levels.map(level => (
+          <TouchableOpacity
+            key={level}
+            style={[
+              styles.levelButton,
+              selectedLevel === level && styles.selectedLevelButton
+            ]}
+            onPress={() => setSelectedLevel(level)}
+          >
+            <Text style={[
+              styles.levelButtonText,
+              selectedLevel === level && styles.selectedLevelButtonText
+            ]}>
+              {level === 'all' ? 'All Levels' : `Level ${level}`}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
+
+      {/* Current Filter Display */}
+      <Text style={styles.filterText}>
+        Showing: {selectedLevel === 'all' ? 'All Levels' : `Level ${selectedLevel}`}
+      </Text>
 
       {loading ? (
         <ActivityIndicator size="large" style={styles.loader} />
@@ -88,8 +93,12 @@ export default function TopParticipantsScreen() {
         <Text style={styles.errorText}>{error}</Text>
       ) : topParticipants.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No participants found with survey results</Text>
-          <Text style={styles.emptySubtext}>Participants will appear after completing GD sessions</Text>
+          <Text style={styles.emptyText}>
+            No participants found {selectedLevel !== 'all' ? `for Level ${selectedLevel}` : ''}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            Participants will appear after completing GD sessions
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -112,21 +121,37 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
+    color: colors.primary,
   },
-  filterContainer: {
+  levelSelector: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 8,
   },
-  filterLabel: {
-    marginRight: 10,
-    fontSize: 16,
+  levelButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#e0e0e0',
   },
-  picker: {
-    flex: 1,
-    height: 50,
+  selectedLevelButton: {
+    backgroundColor: colors.primary,
+  },
+  levelButtonText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  selectedLevelButtonText: {
+    color: 'white',
+  },
+  filterText: {
+    textAlign: 'center',
+    marginBottom: 16,
+    color: '#666',
+    fontStyle: 'italic',
   },
   participantCard: {
     backgroundColor: 'white',
@@ -159,6 +184,7 @@ const styles = StyleSheet.create({
     marginRight: 16,
     width: 30,
     textAlign: 'center',
+    color: colors.primary,
   },
   participantInfo: {
     flex: 1,
@@ -167,6 +193,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
+    color: '#333',
   },
   details: {
     fontSize: 14,
@@ -176,6 +203,7 @@ const styles = StyleSheet.create({
   score: {
     fontSize: 14,
     fontWeight: 'bold',
+    color: colors.primary,
   },
   loader: {
     marginTop: 40,
@@ -194,11 +222,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 8,
+    color: '#666',
   },
   emptySubtext: {
     fontSize: 14,
     textAlign: 'center',
-    color: '#666',
+    color: '#999',
   },
   listContent: {
     paddingBottom: 20,
