@@ -530,7 +530,19 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
             }
         }
     }
-
+ // After successful survey submission, mark session as completed
+    _, err = tx.Exec(`
+        UPDATE gd_sessions 
+        SET status = 'completed', end_time = NOW()
+        WHERE id = ?`,
+        req.SessionID)
+    if err != nil {
+        tx.Rollback()
+        log.Printf("Failed to complete session: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to complete session"})
+        return
+    }
     if err := tx.Commit(); err != nil {
         log.Printf("Error committing transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -543,7 +555,47 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
+func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        SessionID string `json:"sessionId"`
+        Status    string `json:"status"`
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
 
+    // Validate status
+    validStatuses := map[string]bool{
+        "pending": true,
+        "lobby": true,
+        "active": true,
+        "completed": true,
+    }
+    if !validStatuses[req.Status] {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid status"})
+        return
+    }
+
+    _, err := database.GetDB().Exec(`
+        UPDATE gd_sessions 
+        SET status = ?
+        WHERE id = ?`,
+        req.Status, req.SessionID)
+    
+    if err != nil {
+        log.Printf("Failed to update session status: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update session status"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+}
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)
@@ -637,108 +689,6 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         "participants": participants,
     })
 }
-
-
-// func GetResults(w http.ResponseWriter, r *http.Request) {
-//     sessionID := r.URL.Query().Get("session_id")
-//     studentID := r.Context().Value("studentID").(string)
-
-//     log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
-
-//     // Get all participants in the session (regardless of survey completion)
-//     var participants []struct {
-//         ID   string `json:"id"`
-//         Name string `json:"name"`
-//     }
-
-//     participantRows, err := database.GetDB().Query(`
-//         SELECT su.id, su.full_name 
-//         FROM session_participants sp
-//         JOIN student_users su ON sp.student_id = su.id
-//         WHERE sp.session_id = ? AND sp.is_dummy = FALSE
-//         ORDER BY su.full_name`, sessionID)
-
-//     if err != nil {
-//         log.Printf("Error fetching participants: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         return
-//     }
-//     defer participantRows.Close()
-    
-//     for participantRows.Next() {
-//         var p struct {
-//             ID   string `json:"id"`
-//             Name string `json:"name"`
-//         }
-//         if err := participantRows.Scan(&p.ID, &p.Name); err != nil {
-//             log.Printf("Error scanning participant: %v", err)
-//             continue
-//         }
-//         participants = append(participants, p)
-//     }
-
-//     // Get aggregated results for all participants
-//     rows, err := database.GetDB().Query(`
-//         SELECT 
-//             sr.responder_id,
-//             su.full_name,
-//             SUM(sr.score) as total_score,
-//             COUNT(DISTINCT sr.question_number) as question_count
-//         FROM survey_results sr
-//         JOIN student_users su ON sr.responder_id = su.id
-//         WHERE sr.session_id = ?
-//         GROUP BY sr.responder_id, su.full_name
-//         ORDER BY total_score DESC`, sessionID)
-
-//     if err != nil {
-//         log.Printf("Error fetching results: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         return
-//     }
-//     defer rows.Close()
-
-//     type Result struct {
-//         ResponderID string  `json:"responder_id"`
-//         Name        string  `json:"name"`
-//         TotalScore  float64 `json:"total_score"`
-//         AvgScore    float64 `json:"avg_score"`
-//     }
-
-//     var results []Result
-//     for rows.Next() {
-//         var r Result
-//         var questionCount int
-//         if err := rows.Scan(&r.ResponderID, &r.Name, &r.TotalScore, &questionCount); err != nil {
-//             log.Printf("Error scanning result: %v", err)
-//             continue
-//         }
-//         r.AvgScore = r.TotalScore / float64(questionCount)
-//         results = append(results, r)
-//     }
-
-//     // If no results yet, return empty array instead of error
-//     if len(results) == 0 {
-//         log.Printf("No survey results yet for session %s", sessionID)
-//         w.Header().Set("Content-Type", "application/json")
-//         json.NewEncoder(w).Encode(map[string]interface{}{
-//             "results":      []interface{}{},
-//             "participants": participants,
-//         })
-//         return
-//     }
-
-//     log.Printf("Successfully fetched results for session %s", sessionID)
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(map[string]interface{}{
-//         "results":      results,
-//         "participants": participants,
-//     })
-// }
-
-
-
 
 func BookVenue(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)

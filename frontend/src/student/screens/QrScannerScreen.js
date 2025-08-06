@@ -17,56 +17,47 @@ export default function QrScannerScreen({ navigation }) {
   const codeScanner = useCodeScanner({
     codeTypes: ['qr'],
 
-onCodeScanned: async (codes) => {
-  console.log('QR Code scanned:', codes);
-  if (codes.length > 0 && isActive && isFocused) {
-    console.log('Processing QR code...');
-    setIsActive(false);
-    const qrData = codes[0].value;
-    
-    try {
-      console.log('Getting auth data...');
-      const authData = await auth.getAuthData();
-      console.log('Auth data:', authData);
-      
-      if (!authData?.token) {
-        console.error('No token found in auth data');
-        throw new Error('Authentication required - please login again');
-      }
+ onCodeScanned: async (codes) => {
+            if (codes.length > 0 && isActive && isFocused) {
+                setIsActive(false);
+                const qrData = codes[0].value;
+                
+                try {
+                    const authData = await auth.getAuthData();
+                    
+                    if (!authData?.token) {
+                        throw new Error('Authentication required - please login again');
+                    }
 
-      console.log('Attempting to join session with QR data:', qrData);
-      const response = await api.student.joinSession({ qr_data: qrData });
-      console.log('Join session response:', response);
+                    const response = await api.student.joinSession({ qr_data: qrData });
 
-      if (response?.data?.error) {
-        console.error('Error in response:', response.data.error);
-        throw new Error(response.data.error);
-      }
+                    if (response?.data?.error) {
+                        throw new Error(response.data.error);
+                    }
 
-      if (!response?.data?.session_id) {
-        console.error('Invalid session ID in response');
-        throw new Error('Failed to join session - invalid response');
-      }
+                    if (!response?.data?.session_id) {
+                        throw new Error('Failed to join session - invalid response');
+                    }
 
-      console.log('Successfully joined session:', response.data.session_id);
-      navigation.navigate('GdSession', { 
-        sessionId: response.data.session_id 
-      });
-      
-    } catch (error) {
-      console.error('QR Scan Error:', error);
-      setIsActive(true);
-      Alert.alert(
-        'Session Error',
-        error.message || 'Failed to join session',
-        [{ 
-          text: 'OK', 
-          onPress: () => setIsActive(true)
-        }]
-      );
-    }
-  }
-}
+                    // Navigate to lobby instead of directly to session
+                    navigation.navigate('Lobby', { 
+                        sessionId: response.data.session_id 
+                    });
+                    
+                } catch (error) {
+                    console.error('QR Scan Error:', error);
+                    setIsActive(true);
+                    Alert.alert(
+                        'Session Error',
+                        error.message || 'Failed to join session',
+                        [{ 
+                            text: 'OK', 
+                            onPress: () => setIsActive(true)
+                        }]
+                    );
+                }
+            }
+        }
 
   });
 

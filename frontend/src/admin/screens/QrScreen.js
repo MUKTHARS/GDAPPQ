@@ -84,7 +84,7 @@ export default function QrScreen({ route, navigation }) {
           venue_id: venue.id.toString(),
           force_new: forceNew
         },
-        timeout: 240000
+        timeout: 24000
       });
       
       if (response.data?.qr_string) {

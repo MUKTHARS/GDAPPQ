@@ -27,19 +27,19 @@ func GetStudentBookings(w http.ResponseWriter, r *http.Request) {
             v.name as venue_name,
             s.id as session_id,
             s.level as session_level,
-            sp.created_at as booked_at
+            sp.joined_at as booked_at
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
         JOIN gd_sessions s ON sp.session_id = s.id
         JOIN venues v ON s.venue_id = v.id
         WHERE s.status = 'pending' AND sp.is_dummy = FALSE
-        ORDER BY sp.created_at DESC
+        ORDER BY sp.joined_at DESC
     `)
     
     if err != nil {
         log.Printf("Database error: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        json.NewEncoder(w).Encode([]BookingInfo{}) // Return empty array instead of error message
         return
     }
     defer rows.Close()
@@ -62,8 +62,17 @@ func GetStudentBookings(w http.ResponseWriter, r *http.Request) {
         bookings = append(bookings, booking)
     }
 
+    // Ensure we always return an array, even if empty
+    if bookings == nil {
+        bookings = []BookingInfo{}
+    }
+
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(bookings)
+    if err := json.NewEncoder(w).Encode(bookings); err != nil {
+        log.Printf("Error encoding bookings: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode([]BookingInfo{}) // Fallback to empty array
+    }
 }
 
 

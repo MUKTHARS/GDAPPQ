@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import api from '../services/api';
-import { Picker } from '@react-native-picker/picker';
+import { colors } from '../../student/assets/globalStyles';
+
+
 export default function TopParticipantsScreen() {
   const [loading, setLoading] = useState(true);
   const [topParticipants, setTopParticipants] = useState([]);
   const [error, setError] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState('all');
-  const [levels, setLevels] = useState([1, 2, 3, 4, 5]);
+  const levels = ['all', 1, 2, 3]; // Available level options
 
   useEffect(() => {
     const fetchTopParticipants = async () => {
       try {
         setLoading(true);
-        const params = {};
-        if (selectedLevel !== 'all') {
-          params.level = selectedLevel;
-        }
+        const params = selectedLevel !== 'all' ? { level: selectedLevel } : {};
         
+        console.log('Fetching participants with level:', selectedLevel);
         const response = await api.admin.getTopParticipants(params);
         
         if (response.data?.error) {
@@ -29,6 +29,7 @@ export default function TopParticipantsScreen() {
       } catch (err) {
         console.error('Failed to load top participants:', err);
         setError(err.message || 'Failed to load data');
+        setTopParticipants([]);
       } finally {
         setLoading(false);
       }
@@ -60,27 +61,45 @@ export default function TopParticipantsScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Top Performers</Text>
       
-      <View style={styles.filterContainer}>
-  <Text style={styles.filterLabel}>Filter by Level:</Text>
-  <Picker
-    selectedValue={selectedLevel}
-    style={styles.picker}
-    onValueChange={(itemValue) => setSelectedLevel(itemValue)}
-    mode="dropdown" // Optional: for Android dropdown style
-  >
-    <Picker.Item label="All Levels" value="all" />
-    {levels.map(level => (
-      <Picker.Item key={level} label={`Level ${level}`} value={level} />
-    ))}
-  </Picker>
-</View>
+      {/* Level Selector */}
+      <View style={styles.levelSelector}>
+        {levels.map(level => (
+          <TouchableOpacity
+            key={level}
+            style={[
+              styles.levelButton,
+              selectedLevel === level && styles.selectedLevelButton
+            ]}
+            onPress={() => setSelectedLevel(level)}
+          >
+            <Text style={[
+              styles.levelButtonText,
+              selectedLevel === level && styles.selectedLevelButtonText
+            ]}>
+              {level === 'all' ? 'All Levels' : `Level ${level}`}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Current Filter Display */}
+      <Text style={styles.filterText}>
+        Showing: {selectedLevel === 'all' ? 'All Levels' : `Level ${selectedLevel}`}
+      </Text>
 
       {loading ? (
         <ActivityIndicator size="large" style={styles.loader} />
       ) : error ? (
         <Text style={styles.errorText}>{error}</Text>
       ) : topParticipants.length === 0 ? (
-        <Text style={styles.emptyText}>No participants found</Text>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            No participants found {selectedLevel !== 'all' ? `for Level ${selectedLevel}` : ''}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            Participants will appear after completing GD sessions
+          </Text>
+        </View>
       ) : (
         <FlatList
           data={topParticipants}
@@ -104,25 +123,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
+    color: colors.primary,
   },
-  filterContainer: {
+  levelSelector: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
-    backgroundColor: 'white',
-    padding: 10,
-    borderRadius: 8,
+    paddingHorizontal: 8,
   },
-  filterLabel: {
-    marginRight: 10,
-    fontSize: 16,
+  levelButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#e0e0e0',
   },
-  picker: {
-    flex: 1,
-    height: 50,
+  selectedLevelButton: {
+    backgroundColor: colors.primary,
   },
-  listContent: {
-    paddingBottom: 16,
+  levelButtonText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  selectedLevelButtonText: {
+    color: 'white',
+  },
+  filterText: {
+    textAlign: 'center',
+    marginBottom: 16,
+    color: '#666',
+    fontStyle: 'italic',
   },
   participantCard: {
     backgroundColor: 'white',
@@ -138,32 +167,33 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   firstPlace: {
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#FFD700',
   },
   secondPlace: {
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#C0C0C0',
   },
   thirdPlace: {
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#CD7F32',
   },
   rank: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     marginRight: 16,
-    color: '#333',
-    width: 40,
+    width: 30,
     textAlign: 'center',
+    color: colors.primary,
   },
   participantInfo: {
     flex: 1,
   },
   name: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
     marginBottom: 4,
+    color: '#333',
   },
   details: {
     fontSize: 14,
@@ -172,20 +202,34 @@ const styles = StyleSheet.create({
   },
   score: {
     fontSize: 14,
-    color: '#444',
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  loader: {
+    marginTop: 40,
   },
   errorText: {
     color: 'red',
     textAlign: 'center',
     marginTop: 20,
   },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
   emptyText: {
-    textAlign: 'center',
-    marginTop: 20,
     fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 8,
     color: '#666',
   },
-  loader: {
-    marginTop: 20,
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    color: '#999',
+  },
+  listContent: {
+    paddingBottom: 20,
   },
 });
