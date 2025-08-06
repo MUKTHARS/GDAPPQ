@@ -530,7 +530,19 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
             }
         }
     }
-
+ // After successful survey submission, mark session as completed
+    _, err = tx.Exec(`
+        UPDATE gd_sessions 
+        SET status = 'completed', end_time = NOW()
+        WHERE id = ?`,
+        req.SessionID)
+    if err != nil {
+        tx.Rollback()
+        log.Printf("Failed to complete session: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to complete session"})
+        return
+    }
     if err := tx.Commit(); err != nil {
         log.Printf("Error committing transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -543,7 +555,47 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
+func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        SessionID string `json:"sessionId"`
+        Status    string `json:"status"`
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
 
+    // Validate status
+    validStatuses := map[string]bool{
+        "pending": true,
+        "lobby": true,
+        "active": true,
+        "completed": true,
+    }
+    if !validStatuses[req.Status] {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid status"})
+        return
+    }
+
+    _, err := database.GetDB().Exec(`
+        UPDATE gd_sessions 
+        SET status = ?
+        WHERE id = ?`,
+        req.Status, req.SessionID)
+    
+    if err != nil {
+        log.Printf("Failed to update session status: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update session status"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+}
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)

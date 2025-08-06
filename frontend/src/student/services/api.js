@@ -96,8 +96,7 @@ api.student = {
       throw error;
     });
   },
-getSessionParticipants: (sessionId) => {
-  return api.get('/student/session/participants', { 
+ getSessionParticipants: (sessionId) => api.get('/student/session/participants', { 
     params: { session_id: sessionId },
     transformResponse: [
       function (data) {
@@ -138,8 +137,8 @@ getSessionParticipants: (sessionId) => {
   }).catch(error => {
     console.error('Participants API error:', error);
     return { data: [] };
-  });
-},
+  }),
+
 
 
 submitSurvey: (data) => {
@@ -233,7 +232,11 @@ getResults: (sessionId) => {
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
-  
-};
+   updateSessionStatus: (sessionId, status) => api.put('/student/session/status', { sessionId, status }),
+  // getSessionParticipants: (sessionId) => api.get('/student/session/participants', { 
+  //   params: { session_id: sessionId }
+  // }),
+
+  };
 
 export default api;
