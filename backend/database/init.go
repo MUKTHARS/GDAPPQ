@@ -103,6 +103,9 @@ func InitDB(db *sql.DB) error {
             question_text VARCHAR(255),
             weight DECIMAL(3,2),
             applicable_levels JSON,
+           
+    penalty_points INT DEFAULT 0,
+    is_biased BOOLEAN DEFAULT FALSE,
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
             FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
@@ -164,7 +167,66 @@ func InitDB(db *sql.DB) error {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
 )`,
+// Add to your init.go file (append to createTables)
+`CREATE TABLE IF NOT EXISTS survey_questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    question_text VARCHAR(255) NOT NULL,
+    weight DECIMAL(3,2) NOT NULL DEFAULT 1.00,
+    applicable_levels JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`,
+`CREATE TABLE IF NOT EXISTS question_timers (
+    session_id VARCHAR(36),
+    question_id INT,
+    end_time DATETIME NOT NULL,
+    PRIMARY KEY (session_id, question_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
+)`,
 
+
+
+
+`CREATE TABLE IF NOT EXISTS survey_penalties (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    question_id INT NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    penalty_points INT NOT NULL DEFAULT 1,
+    reason VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
+    FOREIGN KEY (student_id) REFERENCES student_users(id)
+);`,
+
+`CREATE TABLE IF NOT EXISTS survey_completion (
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, student_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
+);`,
+
+`CREATE TABLE IF NOT EXISTS survey_timeouts (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    question_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
+    FOREIGN KEY (student_id) REFERENCES student_users(id)
+);`,
+
+
+
+// Add sample questions
+`INSERT IGNORE INTO survey_questions (question_text, weight, applicable_levels) VALUES 
+('Clarity of arguments', 1.5, '[1,2,3,4]'),
+('Contribution to discussion', 1.2, '[1,2,3,4]'),
+('Teamwork and collaboration', 1.0, '[1,2,3,4]'),
+('Logical reasoning', 1.3, '[1,2,3,4]'),
+('Communication skills', 1.1, '[1,2,3,4]')`,
 // Insert sample session topic
 // `INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
 // ('session1', 'The impact of AI on modern education')`,

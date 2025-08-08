@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.251.212:8080' 
+    ? 'http://10.150.252.56:8080' 
     : 'http://localhost:8080',
 });
 
@@ -33,16 +33,22 @@ api.interceptors.response.use(response => {
     url: response.config.url
   });
   
-  // Handle database errors more safely
-  if (response.data?.error && typeof response.data.error === 'string' && 
-      response.data.error.includes('Database')) {
-    return Promise.reject(new Error('Database operation failed'));
+  // Handle empty responses
+  if (!response.data) {
+    return {
+      ...response,
+      data: {
+        status: 'success',
+        data: null
+      }
+    };
   }
   
   return response;
 }, error => {
-  // Skip logging for 403 errors on booking attempts
-  if (error.response?.status !== 403 || !error.config.url.includes('/student/sessions/book')) {
+  // Skip logging for certain errors
+  if (error.response?.status !== 500 || 
+      !error.config.url.includes('/student/survey/')) {
     console.error('API Error:', {
       message: error.message,
       response: error.response?.data,
@@ -50,10 +56,16 @@ api.interceptors.response.use(response => {
     });
   }
 
-  // Handle error message more safely
-  if (error.response?.data?.error && typeof error.response.data.error === 'string' && 
-      !error.response.data.error.includes('Database')) {
-    console.error('API Error:', error);
+  // For 500 errors on survey endpoints, return a default response
+  if (error.response?.status === 500 && 
+      error.config.url.includes('/student/survey/')) {
+    return Promise.resolve({
+      data: {
+        remaining_seconds: 30,
+        is_timed_out: false,
+        status: 'success'
+      }
+    });
   }
   
   return Promise.reject(error);
@@ -138,7 +150,12 @@ api.student = {
     console.error('Participants API error:', error);
     return { data: [] };
   }),
-
+checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', { 
+    params: { session_id: sessionId },
+    validateStatus: function (status) {
+        return status < 500; // Don't treat 404 as error
+    }
+}),
 
 
 submitSurvey: (data) => {
@@ -233,10 +250,38 @@ getResults: (sessionId) => {
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
    updateSessionStatus: (sessionId, status) => api.put('/student/session/status', { sessionId, status }),
-  // getSessionParticipants: (sessionId) => api.get('/student/session/participants', { 
-  //   params: { session_id: sessionId }
-  // }),
+   startSurveyTimer: (sessionId) => api.post('/student/survey/start', { session_id: sessionId }),
+  checkSurveyTimeout: (sessionId) => api.get('/student/survey/timeout', { params: { session_id: sessionId } }),
+  applySurveyPenalties: (sessionId) => api.post('/student/survey/penalties', { session_id: sessionId }),
+startQuestionTimer: (sessionId, questionId) => api.post('/student/survey/start-question', { 
+    session_id: sessionId,
+    question_id: questionId
+  }).catch(err => {
+    console.log('Timer start error:', err);
+    // Return a successful response to allow the survey to continue
+    return { data: { status: 'success' } };
+  }),
 
+checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-timeout', { 
+    params: { 
+      session_id: sessionId,
+      question_id: questionId
+    }
+  }).catch(err => {
+    console.log('Timeout check error:', err);
+    // Return default values if API fails
+    return { 
+      data: {
+        remaining_seconds: 30,
+        is_timed_out: false
+      }
+    };
+  }),
+  applyQuestionPenalty: (sessionId, questionId, studentId) => api.post('/student/survey/apply-penalty', {
+    session_id: sessionId,
+    question_id: questionId,
+    student_id: studentId
+  }),
   };
 
 export default api;

@@ -4,7 +4,6 @@ import api from '../services/api';
 import auth from '../services/auth'; 
 import { globalStyles, colors } from '../assets/globalStyles';
 import { useNavigation } from '@react-navigation/native';
-
 export default function SessionBooking() {
   const [venues, setVenues] = useState([]);
   const [level, setLevel] = useState(1);
