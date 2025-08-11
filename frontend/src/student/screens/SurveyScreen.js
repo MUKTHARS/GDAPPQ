@@ -242,9 +242,6 @@ useEffect(() => {
 
 const confirmCurrentQuestion = async () => {
 
-
- 
-    
     const currentSelections = selections[currentQuestion] || {};
       if (currentQuestion < questions.length - 1) {
         setCurrentQuestion(prev => prev + 1);
@@ -268,7 +265,19 @@ const confirmCurrentQuestion = async () => {
     //     alert('Please select all 3 rankings for this question');
     //     return;
     // }
+ const formattedRankings = {};
+    Object.keys(currentSelections).forEach(rank => {
+        const rankNum = parseInt(rank);
+        if (currentSelections[rank]) {
+            formattedRankings[rankNum] = currentSelections[rank];
+        }
+    });
 
+    // Ensure at least one ranking is selected
+    if (Object.keys(formattedRankings).length === 0) {
+        alert('Please select at least one ranking for this question');
+        return;
+    }
     setIsSubmitting(true);
     
     try {
@@ -286,7 +295,13 @@ const confirmCurrentQuestion = async () => {
             }
             throw error;
         });
-
+ if (currentQuestion === questions.length - 1) {
+            try {
+                await api.student.markSurveyCompleted(sessionId);
+            } catch (err) {
+                console.log('Error marking survey completed:', err);
+            }
+        }
         // If server error, try again after delay
         if (response?.status === 500 || response?.data?.error) {
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -299,12 +314,7 @@ const confirmCurrentQuestion = async () => {
         }
 
         setConfirmedQuestions(prev => [...prev, currentQuestion]);
-        
-        if (currentQuestion < questions.length - 1) {
-            setCurrentQuestion(prev => prev + 1);
-        } else {
-            navigation.navigate('Results', { sessionId });
-        }
+      
     } catch (error) {
         let errorMessage = 'Failed to save question rankings';
         if (error.response) {

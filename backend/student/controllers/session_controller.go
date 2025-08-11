@@ -391,46 +391,6 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback()
 
-    // Verify session exists and is active
-    var sessionExists bool
-    err = tx.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM gd_sessions 
-            WHERE id = ? AND status IN ('active', 'pending')
-        )`, req.SessionID).Scan(&sessionExists)
-    if err != nil {
-        log.Printf("Error checking session existence: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    if !sessionExists {
-        log.Printf("Session %s does not exist or is not active", req.SessionID)
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Session not found or not active"})
-        return
-    }
-
-    // Verify student is a participant
-    var isParticipant bool
-    err = tx.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM session_participants 
-            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
-        )`, req.SessionID, studentID).Scan(&isParticipant)
-    if err != nil {
-        log.Printf("Error checking participant status: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    if !isParticipant {
-        log.Printf("Student %s not part of session %s", studentID, req.SessionID)
-        w.WriteHeader(http.StatusForbidden)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to submit survey"})
-        return
-    }
-
     // Clear previous responses if any
     _, err = tx.Exec(`
         DELETE FROM survey_results 
@@ -445,16 +405,9 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 
     // Process each question response
     for q, rankings := range req.Responses {
-        // For testing with single rank, we'll accept 1 ranking
-        // In production, you should require exactly 3 rankings:
-        // if len(rankings) != 3 {
-        //    w.WriteHeader(http.StatusBadRequest)
-        //    json.NewEncoder(w).Encode(map[string]string{"error": "Exactly 3 rankings required per question"})
-        //    return
-        // }
-        
+        // Calculate scores based on rank (1st=4, 2nd=3, 3rd=2)
         for rank, responderID := range rankings {
-            score := 4 - rank // 1st=3, 2nd=2, 3rd=1
+            score := 5 - rank // 1st=4, 2nd=3, 3rd=2
             
             _, err = tx.Exec(`
                 INSERT INTO survey_results 
@@ -477,17 +430,17 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Mark session as completed
+    // Mark survey as completed for this student
     _, err = tx.Exec(`
-        UPDATE gd_sessions 
-        SET status = 'completed', end_time = NOW()
-        WHERE id = ?`,
-        req.SessionID)
+        INSERT INTO survey_completion (session_id, student_id)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+        req.SessionID, studentID)
     if err != nil {
         tx.Rollback()
-        log.Printf("Failed to complete session: %v", err)
+        log.Printf("Failed to mark survey completion: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to complete session"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to complete survey"})
         return
     }
 
@@ -544,6 +497,7 @@ func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 }
+
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)
@@ -639,7 +593,6 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         "participants": participants,
     })
 }
-
 func BookVenue(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
     
@@ -939,8 +892,21 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     }
 
     studentID := r.Context().Value("studentID").(string)
+    
+    // First, clean up any stale phase tracking (users who left unexpectedly)
+    _, err := database.GetDB().Exec(`
+        DELETE FROM session_phase_tracking 
+        WHERE session_id = ? 
+        AND start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`, 
+        sessionID)
+    if err != nil {
+        log.Printf("Error cleaning up stale phase tracking: %v", err)
+    }
 
-    // Only get participants who have phase tracking (QR scanned students)
+    // Get current active participants who:
+    // 1. Are booked for this session
+    // 2. Have scanned QR (have phase tracking)
+    // 3. Have active phase tracking within last 5 minutes
     rows, err := database.GetDB().Query(`
         SELECT DISTINCT su.id, su.full_name, su.department 
         FROM session_participants sp
@@ -948,10 +914,11 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
                                       AND sp.student_id = spt.student_id
         WHERE sp.session_id = ? 
-          AND sp.student_id != ? 
           AND sp.is_dummy = FALSE
           AND su.is_active = TRUE
-        ORDER BY su.full_name`, sessionID, studentID)
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        ORDER BY su.full_name`, 
+        sessionID)
 
     if err != nil {
         log.Printf("Database error fetching participants: %v", err)
@@ -976,6 +943,11 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
+        // Skip the current student
+        if participant.ID == studentID {
+            continue
+        }
+
         participants = append(participants, map[string]interface{}{
             "id":         participant.ID,
             "name":      participant.FullName,
@@ -983,20 +955,10 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
         })
     }
 
-    if len(participants) == 0 {
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "error": "No participants found",
-            "data": []interface{}{},
-        })
-        return
-    }
-
     json.NewEncoder(w).Encode(map[string]interface{}{
         "data": participants,
     })
 }
-
 
 func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
@@ -1006,16 +968,13 @@ func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    var (
-        totalParticipants int
-        completedCount   int
-    )
-
-    // Get total participants
+    // Get total participants who are in the session (not just those who scanned QR)
+    var totalParticipants int
     err := database.GetDB().QueryRow(`
-        SELECT COUNT(*) 
-        FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`,
+        SELECT COUNT(DISTINCT sp.student_id)
+        FROM session_participants sp
+        WHERE sp.session_id = ? 
+          AND sp.is_dummy = FALSE`, 
         sessionID).Scan(&totalParticipants)
     
     if err != nil {
@@ -1024,11 +983,15 @@ func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get completed count
+    // Get completed count for this session
+    var completedCount int
     err = database.GetDB().QueryRow(`
-        SELECT COUNT(DISTINCT student_id) 
-        FROM survey_completion 
-        WHERE session_id = ?`,
+        SELECT COUNT(DISTINCT sc.student_id)
+        FROM survey_completion sc
+        JOIN session_participants sp ON sc.session_id = sp.session_id 
+                                   AND sc.student_id = sp.student_id
+        WHERE sc.session_id = ? 
+          AND sp.is_dummy = FALSE`, 
         sessionID).Scan(&completedCount)
     
     if err != nil {
@@ -1039,8 +1002,37 @@ func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "all_completed": completedCount >= totalParticipants,
+        "all_completed": completedCount >= totalParticipants && totalParticipants > 0,
         "completed":     completedCount,
         "total":         totalParticipants,
     })
+}
+
+func MarkSurveyCompleted(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        SessionID string `json:"session_id"`
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
+
+    studentID := r.Context().Value("studentID").(string)
+
+    _, err := database.GetDB().Exec(`
+        INSERT INTO survey_completion (session_id, student_id)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+        req.SessionID, studentID)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

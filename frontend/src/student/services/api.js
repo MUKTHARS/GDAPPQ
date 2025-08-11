@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.252.56:8080' 
+    ? 'http://10.150.253.255:8080' 
     : 'http://localhost:8080',
 });
 
@@ -150,63 +150,86 @@ api.student = {
     console.error('Participants API error:', error);
     return { data: [] };
   }),
+
+
 checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', { 
     params: { session_id: sessionId },
     validateStatus: function (status) {
         return status < 500; // Don't treat 404 as error
-    }
+    },
+    transformResponse: [
+        function (data) {
+            try {
+                const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+                return {
+                    all_completed: parsed.all_completed || false,
+                    completed: parsed.completed || 0,
+                    total: parsed.total || 0,
+                    session_active: parsed.session_active !== false // Default to true if not specified
+                };
+            } catch (e) {
+                console.error('Completion check parse error:', e);
+                return {
+                    all_completed: false,
+                    completed: 0,
+                    total: 0,
+                    session_active: true
+                };
+            }
+        }
+    ]
 }),
 
 
 submitSurvey: (data) => {
     console.log('[API] Submitting survey with data:', JSON.stringify(data, null, 2));
     return api.post('/student/survey', {
-      session_id: data.sessionId,
-      responses: Object.keys(data.responses).reduce((acc, questionKey) => {
-        const questionNum = parseInt(questionKey);
-        const rankings = data.responses[questionKey];
-        console.log(`[API] Processing question ${questionNum} with rankings:`, rankings);
-        
-        const formattedRankings = {};
-        Object.keys(rankings).forEach(rank => {
-          const rankNum = parseInt(rank);
-          if (rankings[rank]) {
-            formattedRankings[rankNum] = rankings[rank];
-          }
-        });
-        
-        if (Object.keys(formattedRankings).length > 0) {
-          acc[questionNum] = formattedRankings;
-        }
-        return acc;
-      }, {})
+        session_id: data.sessionId,
+        responses: Object.keys(data.responses).reduce((acc, questionKey) => {
+            const questionNum = parseInt(questionKey);
+            const rankings = data.responses[questionKey];
+            console.log(`[API] Processing question ${questionNum} with rankings:`, rankings);
+            
+            const formattedRankings = {};
+            Object.keys(rankings).forEach(rank => {
+                const rankNum = parseInt(rank);
+                if (rankings[rank]) {
+                    formattedRankings[rankNum] = rankings[rank];
+                }
+            });
+            
+            if (Object.keys(formattedRankings).length > 0) {
+                acc[questionNum] = formattedRankings;
+            }
+            return acc;
+        }, {})
     }, {
-      validateStatus: function (status) {
-        console.log('[API] Received status:', status);
-        return status < 500;
-      },
-      transformResponse: [
-        function (data) {
-          console.log('[API] Raw response data:', data);
-          try {
-            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-            console.log('[API] Parsed response:', parsed);
-            return parsed;
-          } catch (e) {
-            console.error('[API] Response parsing error:', e);
-            return { error: 'Invalid server response' };
-          }
-        }
-      ]
+        validateStatus: function (status) {
+            console.log('[API] Received status:', status);
+            return status < 500;
+        },
+        transformResponse: [
+            function (data) {
+                console.log('[API] Raw response data:', data);
+                try {
+                    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+                    console.log('[API] Parsed response:', parsed);
+                    return parsed;
+                } catch (e) {
+                    console.error('[API] Response parsing error:', e);
+                    return { error: 'Invalid server response' };
+                }
+            }
+        ]
     }).catch(error => {
-      console.error('[API] Survey submission error:', {
-        message: error.message,
-        config: error.config,
-        response: error.response?.data
-      });
-      throw error;
+        console.error('[API] Survey submission error:', {
+            message: error.message,
+            config: error.config,
+            response: error.response?.data
+        });
+        throw error;
     });
-  },
+},
 
   
 getResults: (sessionId) => {
