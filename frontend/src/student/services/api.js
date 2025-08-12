@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.253.255:8080' 
+    ? 'http://10.150.250.70:8080' 
     : 'http://localhost:8080',
 });
 
@@ -155,14 +155,14 @@ api.student = {
 checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', { 
     params: { session_id: sessionId },
     validateStatus: function (status) {
-        return status < 500; // Don't treat 404 as error
+        return status < 500; 
     },
     transformResponse: [
         function (data) {
             try {
                 const parsed = typeof data === 'string' ? JSON.parse(data) : data;
                 return {
-                    all_completed: parsed.all_completed || false,
+                    all_completed: parsed.all_completed === true, // Ensure boolean
                     completed: parsed.completed || 0,
                     total: parsed.total || 0,
                     session_active: parsed.session_active !== false // Default to true if not specified

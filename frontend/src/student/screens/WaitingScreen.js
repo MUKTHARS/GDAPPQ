@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Alert } from 'react-native';
 import api from '../services/api';
 
 export default function WaitingScreen({ navigation, route }) {
@@ -12,37 +12,36 @@ export default function WaitingScreen({ navigation, route }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const pollingRef = useRef(null);
+    const [lastUpdate, setLastUpdate] = useState(Date.now());
 
-   // In WaitingScreen.js
-const checkCompletionStatus = async () => {
-    try {
-        const response = await api.student.checkSurveyCompletion(sessionId);
-        
-        if (response.data) {
-            // Ensure we have valid numbers (handle cases where counts might be null)
-            const completed = Number(response.data.completed) || 0;
-            const total = Number(response.data.total) || 0;
+    const checkCompletionStatus = async () => {
+        try {
+            const response = await api.student.checkSurveyCompletion(sessionId);
             
-            setStatus({
-                allCompleted: response.data.all_completed,
-                completed: completed,
-                total: total
-            });
+            if (response.data) {
+                const completed = Number(response.data.completed) || 0;
+                const total = Number(response.data.total) || 0;
+                const allCompleted = response.data.all_completed === true;
+                
+                setStatus({
+                    allCompleted,
+                    completed,
+                    total
+                });
+                setLastUpdate(Date.now());
 
-            if (response.data.all_completed && total > 0) {
-                if (pollingRef.current) {
+                if (allCompleted && total > 0) {
                     clearInterval(pollingRef.current);
+                    navigation.replace('Results', { sessionId });
                 }
-                navigation.replace('Results', { sessionId });
             }
+        } catch (err) {
+            console.error('Completion check error:', err);
+            setError('Failed to check completion status');
+        } finally {
+            setLoading(false);
         }
-    } catch (err) {
-        setError('Failed to check completion status');
-        console.error('Completion check error:', err);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
     useEffect(() => {
         // Initial check
@@ -51,11 +50,25 @@ const checkCompletionStatus = async () => {
         // Start polling every 3 seconds
         pollingRef.current = setInterval(checkCompletionStatus, 3000);
 
-        return () => {
-            // Clean up interval on unmount
-            if (pollingRef.current) {
-                clearInterval(pollingRef.current);
+        // Handle back button
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            () => {
+                Alert.alert(
+                    "Waiting for Results",
+                    "Are you sure you want to leave? You won't see the results if you exit now.",
+                    [
+                        { text: "Cancel", onPress: () => null },
+                        { text: "Exit", onPress: () => navigation.goBack() }
+                    ]
+                );
+                return true;
             }
+        );
+
+        return () => {
+            clearInterval(pollingRef.current);
+            backHandler.remove();
         };
     }, [sessionId]);
 
@@ -73,6 +86,7 @@ const checkCompletionStatus = async () => {
             <View style={styles.container}>
                 <Text style={styles.errorText}>{error}</Text>
                 <Text style={styles.retryText}>Will retry automatically...</Text>
+                <Text style={styles.timestamp}>Last update: {new Date(lastUpdate).toLocaleTimeString()}</Text>
             </View>
         );
     }
@@ -83,18 +97,21 @@ const checkCompletionStatus = async () => {
             
             <View style={styles.progressContainer}>
                 <Text style={styles.progressText}>
-                    {status.completed} of {status.total} participants have submitted
+                    {status.completed} of {status.total} scanned participants have completed
                 </Text>
-                <Text style={styles.remainingText}>
-                    {status.total - status.completed} remaining
-                </Text>
+                {status.total > 0 && (
+                    <Text style={styles.remainingText}>
+                        {status.total - status.completed} still completing
+                    </Text>
+                )}
             </View>
 
             <ActivityIndicator size="large" style={styles.spinner} />
             
             <Text style={styles.note}>
-                Results will be shown when all participants have submitted
+                Please wait until all scanned participants finish the survey
             </Text>
+            <Text style={styles.timestamp}>Last checked: {new Date(lastUpdate).toLocaleTimeString()}</Text>
         </View>
     );
 }
@@ -154,4 +171,9 @@ const styles = StyleSheet.create({
         color: '#666',
         fontSize: 14,
     },
+    timestamp: {
+        fontSize: 12,
+        color: '#999',
+        marginTop: 20,
+    }
 });

@@ -230,7 +230,6 @@ func ApplyQuestionPenalty(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"status": "penalty_applied"})
 }
 
-
 func HandleSurveyTimeout(sessionID string, studentID string, questionID int) error {
     tx, err := database.GetDB().Begin()
     if err != nil {
