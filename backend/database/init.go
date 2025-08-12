@@ -151,7 +151,10 @@ func InitDB(db *sql.DB) error {
     question_number INT NOT NULL,
     ranks INT NOT NULL,  
     score INT NOT NULL, 
+    is_current_session TINYINT(1) DEFAULT 0,
+    is_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+/**    Dont remove this ----- > CREATE INDEX idx_survey_results_session_completed ON survey_results (session_id, is_completed) **/
     FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
     FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,

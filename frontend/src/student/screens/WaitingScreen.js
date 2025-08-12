@@ -14,34 +14,37 @@ export default function WaitingScreen({ navigation, route }) {
     const pollingRef = useRef(null);
     const [lastUpdate, setLastUpdate] = useState(Date.now());
 
-    const checkCompletionStatus = async () => {
-        try {
-            const response = await api.student.checkSurveyCompletion(sessionId);
+ const checkCompletionStatus = async () => {
+    try {
+        const response = await api.student.checkSurveyCompletion(sessionId);
+        
+        if (response.data) {
+            const completed = Number(response.data.completed) || 0;
+            const total = Number(response.data.total) || 0;
+            const allCompleted = response.data.all_completed === true;
             
-            if (response.data) {
-                const completed = Number(response.data.completed) || 0;
-                const total = Number(response.data.total) || 0;
-                const allCompleted = response.data.all_completed === true;
-                
-                setStatus({
-                    allCompleted,
-                    completed,
-                    total
-                });
-                setLastUpdate(Date.now());
+            // Minimum 2 participants required (excluding self)
+            const hasEnoughParticipants = total >= 2;
+            
+            setStatus({
+                allCompleted: hasEnoughParticipants && allCompleted,
+                completed,
+                total
+            });
+            setLastUpdate(Date.now());
 
-                if (allCompleted && total > 0) {
-                    clearInterval(pollingRef.current);
-                    navigation.replace('Results', { sessionId });
-                }
+            if (hasEnoughParticipants && allCompleted) {
+                clearInterval(pollingRef.current);
+                navigation.replace('Results', { sessionId });
             }
-        } catch (err) {
-            console.error('Completion check error:', err);
-            setError('Failed to check completion status');
-        } finally {
-            setLoading(false);
         }
-    };
+    } catch (err) {
+        console.error('Completion check error:', err);
+        setError('Failed to check completion status');
+    } finally {
+        setLoading(false);
+    }
+};
 
     useEffect(() => {
         // Initial check
