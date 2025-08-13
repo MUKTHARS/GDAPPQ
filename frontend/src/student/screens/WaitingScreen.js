@@ -14,26 +14,25 @@ export default function WaitingScreen({ navigation, route }) {
     const pollingRef = useRef(null);
     const [lastUpdate, setLastUpdate] = useState(Date.now());
 
- const checkCompletionStatus = async () => {
+const checkCompletionStatus = async () => {
     try {
         const response = await api.student.checkSurveyCompletion(sessionId);
         
         if (response.data) {
             const completed = Number(response.data.completed) || 0;
             const total = Number(response.data.total) || 0;
-            const allCompleted = response.data.all_completed === true;
             
             // Minimum 2 participants required (excluding self)
             const hasEnoughParticipants = total >= 2;
             
             setStatus({
-                allCompleted: hasEnoughParticipants && allCompleted,
+                allCompleted: hasEnoughParticipants && (completed >= total),
                 completed,
                 total
             });
             setLastUpdate(Date.now());
 
-            if (hasEnoughParticipants && allCompleted) {
+            if (hasEnoughParticipants && completed >= total) {
                 clearInterval(pollingRef.current);
                 navigation.replace('Results', { sessionId });
             }

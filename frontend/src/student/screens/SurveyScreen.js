@@ -241,43 +241,14 @@ useEffect(() => {
   };
 
 const confirmCurrentQuestion = async () => {
-
     const currentSelections = selections[currentQuestion] || {};
-      if (currentQuestion < questions.length - 1) {
-        setCurrentQuestion(prev => prev + 1);
-    } else {
-        // Navigate to waiting screen instead of results
-        navigation.replace('Waiting', { sessionId });
-    }
- const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
+    const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
     
-    // if (!hasAllRanks) {
     if (!hasAtLeastOneRank) {
         alert('Please select at least one ranking for this question');
         return;
     }
 
-    // Ensure we have exactly 3 rankings for this question
-    // const requiredRanks = [1, 2, 3];
-    // const hasAllRanks = requiredRanks.every(rank => currentSelections[rank]);
-    
-    // if (!hasAllRanks) {
-    //     alert('Please select all 3 rankings for this question');
-    //     return;
-    // }
- const formattedRankings = {};
-    Object.keys(currentSelections).forEach(rank => {
-        const rankNum = parseInt(rank);
-        if (currentSelections[rank]) {
-            formattedRankings[rankNum] = currentSelections[rank];
-        }
-    });
-
-    // Ensure at least one ranking is selected
-    if (Object.keys(formattedRankings).length === 0) {
-        alert('Please select at least one ranking for this question');
-        return;
-    }
     setIsSubmitting(true);
     
     try {
@@ -288,38 +259,25 @@ const confirmCurrentQuestion = async () => {
             }
         };
 
-        // First try submitting normally
-        let response = await api.student.submitSurvey(responseData).catch(error => {
-            if (error.response?.status === 409) {
-                return { data: { status: 'success' } };
-            }
-            throw error;
-        });
- if (currentQuestion === questions.length - 1) {
-            try {
-                await api.student.markSurveyCompleted(sessionId);
-            } catch (err) {
-                console.log('Error marking survey completed:', err);
-            }
-        }
-        // If server error, try again after delay
-        if (response?.status === 500 || response?.data?.error) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            response = await api.student.submitSurvey(responseData).catch(error => {
-                if (error.response?.status === 409) {
-                    return { data: { status: 'success' } };
-                }
-                throw error;
-            });
-        }
+        // Submit current question's responses
+        await api.student.submitSurvey(responseData);
 
+        // Mark current question as confirmed
         setConfirmedQuestions(prev => [...prev, currentQuestion]);
-      
+        
+        // If this is the last question, mark survey as completed
+        if (currentQuestion === questions.length - 1) {
+            await api.student.markSurveyCompleted(sessionId);
+            navigation.replace('Waiting', { sessionId });
+        } else {
+            // Move to next question
+            setCurrentQuestion(prev => prev + 1);
+        }
     } catch (error) {
         let errorMessage = 'Failed to save question rankings';
         if (error.response) {
             if (error.response.status === 400) {
-                errorMessage = 'Please select all 3 rankings for each question';
+                errorMessage = 'Please select all rankings for this question';
             } else if (error.response.status === 500) {
                 errorMessage = 'Server is currently unavailable. Please try again later.';
             } else if (error.response.data?.error) {

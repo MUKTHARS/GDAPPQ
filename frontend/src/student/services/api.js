@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.250.70:8080' 
+    ? 'http://10.150.252.91:8080' 
     : 'http://localhost:8080',
 });
 
@@ -151,7 +151,13 @@ api.student = {
     return { data: [] };
   }),
 
-
+markSurveyCompleted: (sessionId) => api.post('/student/survey/mark-completed', { 
+    session_id: sessionId 
+}).catch(err => {
+    console.log('Mark survey completed error:', err);
+    // Return a successful response to allow the flow to continue
+    return { data: { status: 'success' } };
+}),
 checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', { 
     params: { session_id: sessionId },
     validateStatus: function (status) {
