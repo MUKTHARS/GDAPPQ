@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import api from '../services/api';
 
 const ResultItem = ({ item, index }) => {
@@ -22,11 +22,12 @@ const ResultItem = ({ item, index }) => {
   );
 };
 
-export default function ResultsScreen({ route }) {
+export default function ResultsScreen({ route, navigation }) {
   const { sessionId } = route.params;
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showFeedbackButton, setShowFeedbackButton] = useState(false);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -44,6 +45,7 @@ export default function ResultsScreen({ route }) {
           }));
           
           setResults(processedResults);
+          setShowFeedbackButton(true); // Show feedback button after results load
         } else {
           setError('No results available for this session');
         }
@@ -57,6 +59,10 @@ export default function ResultsScreen({ route }) {
 
     fetchResults();
   }, [sessionId]);
+
+  const handleFeedbackPress = () => {
+    navigation.navigate('Feedback', { sessionId });
+  };
 
   if (loading) {
     return (
@@ -90,6 +96,15 @@ export default function ResultsScreen({ route }) {
           </View>
         }
       />
+
+      {showFeedbackButton && (
+        <TouchableOpacity 
+          style={styles.feedbackButton}
+          onPress={handleFeedbackPress}
+        >
+          <Text style={styles.feedbackButtonText}>Provide Feedback</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -166,5 +181,18 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#666',
     fontStyle: 'italic',
+  },
+  feedbackButton: {
+    backgroundColor: '#2196F3',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  feedbackButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

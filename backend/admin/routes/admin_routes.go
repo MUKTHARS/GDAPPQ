@@ -67,7 +67,8 @@ router.Handle("/admin/rules", middleware.AdminOnly(
 
 router.Handle("/admin/results/top", middleware.AdminOnly(
 	http.HandlerFunc(controllers.GetTopParticipants)))
-
+router.Handle("/admin/feedbacks", middleware.AdminOnly(
+    http.HandlerFunc(controllers.GetSessionFeedbacks)))
 	return router
 
 

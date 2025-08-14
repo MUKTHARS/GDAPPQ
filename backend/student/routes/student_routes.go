@@ -51,6 +51,10 @@ func SetupStudentRoutes() *http.ServeMux {
     http.HandlerFunc(controllers.CheckSurveyCompletion)))
     router.Handle("/student/survey/mark-completed", middleware.StudentOnly(
     http.HandlerFunc(controllers.MarkSurveyCompleted)))
+    router.Handle("/student/feedback", middleware.StudentOnly(
+    http.HandlerFunc(controllers.SubmitFeedback)))
+    router.Handle("/student/feedback/get", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetFeedback)))
     router.Handle("/student/session/status", middleware.StudentOnly(
     http.HandlerFunc(controllers.UpdateSessionStatus)))
     return router

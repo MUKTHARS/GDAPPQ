@@ -4,7 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import HamburgerHeader from '../components/HamburgerHeader';
 import { View, Button } from 'react-native';
 import LobbyScreen from '../screens/LobbyScreen';
-// Import screens
+import FeedbackScreen from '../screens/FeedbackScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SessionBooking from '../screens/SessionBooking';
 import GdSessionScreen from '../screens/GdSessionScreen';
@@ -43,12 +43,9 @@ const StudentStack = ({ onAdminSwitch }) => {
       <Stack.Screen name="GdSession" component={GdSessionScreen} />
       <Stack.Screen name="Survey" component={SurveyScreen} />
       <Stack.Screen name="Results" component={ResultsScreen} />
-        <Stack.Screen name="Lobby" component={LobbyScreen} options={{ headerShown: false }} />
-    <Stack.Screen 
-    name="Waiting" 
-    component={WaitingScreen} 
-    options={{ headerShown: false }}
-/>
+      <Stack.Screen name="Lobby" component={LobbyScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="Waiting" component={WaitingScreen} options={{ headerShown: false }}/>
+    <Stack.Screen name="Feedback" component={FeedbackScreen} />
     
     </Stack.Navigator>
   );

@@ -274,7 +274,32 @@ getResults: (sessionId) => {
     return { data: null };
   });
 },
-
+submitFeedback: (sessionId, rating, comments) => api.post('/student/feedback', {
+    session_id: sessionId,
+    rating: rating,
+    comments: comments
+}),
+getFeedback: (sessionId) => api.get('/student/feedback/get', {
+    params: { session_id: sessionId },
+    validateStatus: function (status) {
+        // Consider 200 and 404 as valid statuses
+        return status === 200 || status === 404;
+    },
+    transformResponse: [
+        function (data) {
+            try {
+                // Handle empty responses or 404 cases
+                if (!data || Object.keys(data).length === 0) {
+                    return {};
+                }
+                return typeof data === 'object' ? data : JSON.parse(data);
+            } catch (e) {
+                console.error('Feedback response parsing error:', e);
+                return {};
+            }
+        }
+    ]
+}),
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
   checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),

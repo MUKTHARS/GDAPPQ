@@ -223,6 +223,17 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results 
     FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
     FOREIGN KEY (student_id) REFERENCES student_users(id)
 );`,
+`CREATE TABLE IF NOT EXISTS session_feedback (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    UNIQUE KEY (session_id, student_id)
+)`,
 
 
 

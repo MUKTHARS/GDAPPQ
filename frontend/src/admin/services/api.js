@@ -60,7 +60,9 @@ createBulkSessions: (data) => {
     }]
   });
 },
-
+getSessionFeedbacks: (sessionId) => api.get('/admin/feedbacks', { 
+    params: { session_id: sessionId } 
+}),
   getVenues: () => api.get('/admin/venues'),
   getTopParticipants: (params = {}) => api.get('/admin/results/top', { params }),
 };
