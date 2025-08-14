@@ -173,14 +173,9 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
 )`,
-// Add to your init.go file (append to createTables)
-`CREATE TABLE IF NOT EXISTS survey_questions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    question_text VARCHAR(255) NOT NULL,
-    weight DECIMAL(3,2) NOT NULL DEFAULT 1.00,
-    applicable_levels JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`,
+
+
+
 `CREATE TABLE IF NOT EXISTS question_timers (
     session_id VARCHAR(36),
     question_id INT,
@@ -190,6 +185,22 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results 
 )`,
 
 
+`CREATE TABLE IF NOT EXISTS survey_questions (
+    id VARCHAR(36) PRIMARY KEY,
+    question_text TEXT NOT NULL,
+    weight DECIMAL(3,1) DEFAULT 1.0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+)`,
+
+
+`CREATE TABLE IF NOT EXISTS question_levels (
+    question_id VARCHAR(36),
+    level INT,
+    PRIMARY KEY (question_id, level),
+    FOREIGN KEY (question_id) REFERENCES survey_questions(id) ON DELETE CASCADE
+)`,
 
 
 `CREATE TABLE IF NOT EXISTS survey_penalties (
@@ -236,14 +247,6 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results 
 )`,
 
 
-
-// Add sample questions
-`INSERT IGNORE INTO survey_questions (question_text, weight, applicable_levels) VALUES 
-('Clarity of arguments', 1.5, '[1,2,3,4]'),
-('Contribution to discussion', 1.2, '[1,2,3,4]'),
-('Teamwork and collaboration', 1.0, '[1,2,3,4]'),
-('Logical reasoning', 1.3, '[1,2,3,4]'),
-('Communication skills', 1.1, '[1,2,3,4]')`,
 // Insert sample session topic
 // `INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
 // ('session1', 'The impact of AI on modern education')`,

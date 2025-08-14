@@ -538,18 +538,19 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     var results []Result
     
     rows, err := database.GetDB().Query(`
-        SELECT 
-            sr.responder_id,
-            su.full_name,
-            COALESCE(SUM(sr.score), 0) as total_score,
-            COALESCE(SUM(sp.penalty_points), 0) as penalty_points
-        FROM survey_results sr
-        JOIN student_users su ON sr.responder_id = su.id
-        LEFT JOIN survey_penalties sp ON sr.responder_id = sp.student_id AND sr.session_id = sp.session_id
-        WHERE sr.session_id = ?
-        GROUP BY sr.responder_id, su.full_name
-        ORDER BY total_score DESC`,
-        sessionID)
+    SELECT 
+        sr.responder_id,
+        su.full_name,
+        COALESCE(SUM(sr.score * q.weight), 0) as total_score,
+        COALESCE(SUM(sp.penalty_points), 0) as penalty_points
+    FROM survey_results sr
+    JOIN survey_questions q ON sr.question_number = q.id
+    JOIN student_users su ON sr.responder_id = su.id
+    LEFT JOIN survey_penalties sp ON sr.responder_id = sp.student_id AND sr.session_id = sp.session_id
+    WHERE sr.session_id = ?
+    GROUP BY sr.responder_id, su.full_name
+    ORDER BY total_score DESC`,
+    sessionID)
 
     if err != nil {
         log.Printf("Error calculating scores: %v", err)

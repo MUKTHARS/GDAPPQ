@@ -57,7 +57,21 @@ router.Handle("/admin/students", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetStudentProgress)))
 
 router.Handle("/admin/questions", middleware.AdminOnly(
-    http.HandlerFunc(controllers.GetQuestions)))
+    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        switch r.Method {
+        case http.MethodGet:
+            controllers.GetQuestions(w, r)
+        case http.MethodPost:
+            controllers.CreateQuestion(w, r)
+        case http.MethodPut:
+            controllers.UpdateQuestion(w, r)
+        case http.MethodDelete:
+            controllers.DeleteQuestion(w, r)
+        default:
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        }
+    }),
+))
 
 router.Handle("/admin/bookings", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetStudentBookings)))

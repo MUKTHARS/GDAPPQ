@@ -87,13 +87,8 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
 
 export default function SurveyScreen({ navigation, route }) {
   const { sessionId } = route.params;
-  const questions = [
-    "Clarity of arguments",
-    "Contribution to discussion",
-    "Teamwork and collaboration",
-    "Logical reasoning",
-    "Communication skills"
-  ];
+  const [questions, setQuestions] = useState([]);
+  
   const [confirmedQuestions, setConfirmedQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selections, setSelections] = useState(() => {
@@ -111,6 +106,30 @@ export default function SurveyScreen({ navigation, route }) {
   const [penalties, setPenalties] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+
+useEffect(() => {
+ const fetchQuestions = async () => {
+  try {
+    // Get session level
+    const sessionResponse = await api.student.getSession(sessionId);
+    const level = sessionResponse.data?.level || 1;
+    
+    // Use the new student API method
+    const questionsResponse = await api.student.getSurveyQuestions(level);
+    
+    setQuestions(questionsResponse.data || []);
+  } catch (error) {
+    console.error('Questions fetch error:', error);
+    setQuestions([
+      { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+      { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+      { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+    ]);
+  }
+};
+
+  fetchQuestions();
+}, [sessionId]);
   // Timer management
   useEffect(() => {
     let timerInterval;
@@ -330,8 +349,8 @@ const confirmCurrentQuestion = async () => {
       </View>
       
       <Text style={styles.question}>
-        Q{currentQuestion + 1}: {questions[currentQuestion]}
-      </Text>
+  Q{currentQuestion + 1}: {questions[currentQuestion]?.text || 'Question loading...'}
+</Text>
       
       <Text style={styles.instructions}>
         Select top 3 performers (you cannot select yourself)
