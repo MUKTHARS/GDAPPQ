@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.252.91:8080' 
+    ? 'http://10.150.255.123:8080' 
     : 'http://localhost:8080',
 });
 
@@ -353,45 +353,38 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
   }),
 
    getSurveyQuestions: async (level) => {
-    try {
-      // First try the student-specific endpoint if it exists
-      const response = await api.get('/student/questions', { 
-        params: { level },
-        validateStatus: (status) => status < 500
-      });
-      
-      // If we get a proper response, use it
-      if (response.data && Array.isArray(response.data)) {
-        return response;
-      }
-      
-      // Fallback to admin endpoint with proper error handling
-      const adminResponse = await api.get('/admin/questions', {
-        params: { level },
-        validateStatus: (status) => status < 500
-      }).catch(err => {
-        console.log('Admin questions fallback failed, using default questions');
-        return { 
-          data: [
-            { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-            { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-            { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-          ] 
-        };
-      });
-      
-      return adminResponse;
-    } catch (error) {
-      console.log('Complete questions fallback triggered');
-      return {
-        data: [
-          { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-          { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-          { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-        ]
-      };
+        try {
+            // First try student-specific endpoint
+            const response = await api.get('/student/questions', { 
+                params: { level },
+                validateStatus: (status) => status < 500
+            });
+            
+            // If we get valid data, use it
+            if (response.data && Array.isArray(response.data)) {
+                return response;
+            }
+            
+            // Fallback to admin endpoint if student endpoint fails
+            const adminResponse = await api.get('/admin/questions', {
+                params: { level },
+                validateStatus: (status) => status < 500
+            });
+            
+            return adminResponse;
+        } catch (error) {
+            console.log('Questions fallback triggered');
+            return {
+                data: [
+                    { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+                    { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+                    { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+                ]
+            };
+        }
     }
-  }
+
+
   };
 
 export default api;

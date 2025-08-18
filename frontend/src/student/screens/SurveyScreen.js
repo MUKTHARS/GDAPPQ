@@ -108,24 +108,40 @@ export default function SurveyScreen({ navigation, route }) {
 
 
 useEffect(() => {
- const fetchQuestions = async () => {
-  try {
-    // Get session level
-    const sessionResponse = await api.student.getSession(sessionId);
-    const level = sessionResponse.data?.level || 1;
-    
-    // Use the new student API method
-    const questionsResponse = await api.student.getSurveyQuestions(level);
-    
-    setQuestions(questionsResponse.data || []);
-  } catch (error) {
-    console.error('Questions fetch error:', error);
-    setQuestions([
-      { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-      { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-      { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-    ]);
-  }
+const fetchQuestions = async () => {
+    try {
+        // Get session level
+        const sessionResponse = await api.student.getSession(sessionId);
+        const level = sessionResponse.data?.level || 1;
+        
+        // Use the student API method
+        const questionsResponse = await api.student.getSurveyQuestions(level);
+        
+        // Ensure we have an array of questions
+        let questionsData = questionsResponse.data;
+        if (!Array.isArray(questionsData)) {
+            questionsData = [];
+        }
+        
+        // Set default questions if empty
+        if (questionsData.length === 0) {
+            questionsData = [
+                { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+                { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+                { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+            ];
+        }
+        
+        setQuestions(questionsData);
+    } catch (error) {
+        console.error('Questions fetch error:', error);
+        // Set default questions if there's an error
+        setQuestions([
+            { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+            { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+            { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+        ]);
+    }
 };
 
   fetchQuestions();

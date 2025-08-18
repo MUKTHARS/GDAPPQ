@@ -247,14 +247,6 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results 
 )`,
 
 
-// Insert sample session topic
-// `INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
-// ('session1', 'The impact of AI on modern education')`,
-`INSERT IGNORE INTO gd_session_topics (session_id, topic, prep_materials) VALUES 
-('session1', 'The impact of AI on modern education', '{"articles": ["url1", "url2"]}')`,
-// Insert sample phase tracking
-`INSERT IGNORE INTO session_phase_tracking (session_id, student_id, phase) VALUES 
-('session1', 'student1', 'prep')`,
     }
 
     for _, query := range createTables {
