@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"gd/database"
+	"sort"
+
+	// "sort"
+
 	// "io"
 
 	// "sort"
@@ -195,6 +199,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 
     // Verify QR code against database
     var dbQRData string
+    
     err := database.GetDB().QueryRow(`
         SELECT qr_data 
         FROM venue_qr_codes 
@@ -235,7 +240,9 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
     defer tx.Rollback()
-  _, err = tx.Exec(`
+
+    // First clear any old phase tracking for this student
+    _, err = tx.Exec(`
         DELETE FROM session_phase_tracking 
         WHERE student_id = ?`, 
         studentID)
@@ -246,13 +253,6 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Add new phase tracking with current timestamp
-    _, err = tx.Exec(`
-        INSERT INTO session_phase_tracking 
-        (session_id, student_id, phase, start_time)
-        VALUES (?, ?, 'prep', NOW())`,
-        sessionID, studentID)
-    
     // First check if there's an active session for this venue
     err = tx.QueryRow(`
         SELECT id FROM gd_sessions 
@@ -268,22 +268,22 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
     }
 
     // If no session exists, create one
-    if err == sql.ErrNoRows {
-        sessionID = uuid.New().String()
-        _, err = tx.Exec(`
-            INSERT INTO gd_sessions 
-            (id, venue_id, status, start_time, level) 
-            VALUES (?, ?, 'active', NOW(), 
-                   (SELECT level FROM venues WHERE id = ?))`,
-            sessionID, qrPayload.VenueID, qrPayload.VenueID)
-        if err != nil {
-            log.Printf("Failed to create session: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session"})
-            return
-        }
-        log.Printf("Created new session %s for venue %s", sessionID, qrPayload.VenueID)
+   if err == sql.ErrNoRows {
+    sessionID = uuid.New().String()
+    _, err = tx.Exec(`
+        INSERT INTO gd_sessions 
+        (id, venue_id, status, start_time, end_time, level) 
+        VALUES (?, ?, 'active', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR), 
+               (SELECT level FROM venues WHERE id = ?))`,
+        sessionID, qrPayload.VenueID, qrPayload.VenueID)
+    if err != nil {
+        log.Printf("Failed to create session: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create session"})
+        return
     }
+    log.Printf("Created new session %s for venue %s", sessionID, qrPayload.VenueID)
+}
 
     // Check if student is already in this session
     var isParticipant bool
@@ -317,12 +317,11 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         log.Printf("Added student %s to session %s as participant", studentID, sessionID)
     }
 
-    // Add/update phase tracking
+    // Add phase tracking (marks QR code scanned)
     _, err = tx.Exec(`
         INSERT INTO session_phase_tracking 
         (session_id, student_id, phase, start_time)
-        VALUES (?, ?, 'prep', NOW())
-        ON DUPLICATE KEY UPDATE start_time = NOW()`,
+        VALUES (?, ?, 'prep', NOW())`,
         sessionID, studentID)
     
     if err != nil {
@@ -377,14 +376,6 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Validate session ID format
-    if _, err := uuid.Parse(req.SessionID); err != nil {
-        log.Printf("Invalid session ID format: %v", err)
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid session ID"})
-        return
-    }
-
     tx, err := database.GetDB().Begin()
     if err != nil {
         log.Printf("Failed to begin transaction: %v", err)
@@ -394,133 +385,29 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback()
 
-    // 1. Verify session exists and is active
-    var sessionExists bool
-    err = tx.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM gd_sessions 
-            WHERE id = ? AND status IN ('active', 'pending')
-        )`, req.SessionID).Scan(&sessionExists)
-    if err != nil {
-        log.Printf("Error checking session existence: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    if !sessionExists {
-        log.Printf("Session %s does not exist or is not active", req.SessionID)
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Session not found or not active"})
-        return
-    }
-
-    // 2. Verify student is a participant in this session
-    var isParticipant bool
-    err = tx.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM session_participants 
-            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
-        )`, req.SessionID, studentID).Scan(&isParticipant)
-    if err != nil {
-        log.Printf("Error checking participant status: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    if !isParticipant {
-        log.Printf("Student %s not part of session %s", studentID, req.SessionID)
-        w.WriteHeader(http.StatusForbidden)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to submit survey"})
-        return
-    }
-
-    // 3. Verify all responders are valid participants in the session
+    // Process each question response
     for q, rankings := range req.Responses {
-        for rank, responderID := range rankings {
-            var isValidResponder bool
-            err = tx.QueryRow(`
-                SELECT EXISTS(
-                    SELECT 1 FROM session_participants 
-                    WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
-                )`, req.SessionID, responderID).Scan(&isValidResponder)
-            if err != nil {
-                log.Printf("Error checking responder validity: %v", err)
-                w.WriteHeader(http.StatusInternalServerError)
-                json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-                return
-            }
-            if !isValidResponder {
-                log.Printf("Invalid responder %s for session %s", responderID, req.SessionID)
-                w.WriteHeader(http.StatusBadRequest)
-                json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Invalid participant ID %s for rank %d in question %d", responderID, rank, q)})
-                return
-            }
-        }
-    }
-
-    
-    var questionSubmitted bool
-    err = tx.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM survey_results 
-            WHERE session_id = ? AND student_id = ?
-            LIMIT 1
-        )`, req.SessionID, studentID).Scan(&questionSubmitted)
-    if err != nil {
-        log.Printf("Error checking survey submission status: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-        return
-    }
-    if questionSubmitted {
-        log.Printf("Survey already submitted by student %s", studentID)
-        w.WriteHeader(http.StatusConflict)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Survey already submitted"})
-        return
-    }
-
-    for q, rankings := range req.Responses {
-        // Validate exactly 3 rankings per question
-        if len(rankings) != 1  {/////////////////////////////
-            log.Printf("Invalid rankings count for question %d: %d", q, len(rankings))
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Question %d must have exactly 3 rankings", q)})
+        // Clear previous responses for this question if any
+        _, err = tx.Exec(`
+            DELETE FROM survey_results 
+            WHERE session_id = ? AND student_id = ? AND question_number = ?`,
+            req.SessionID, studentID, q)
+        if err != nil {
+            log.Printf("Error clearing previous responses: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
             return
         }
 
-        // Check for duplicate ranks (1,2,3)
-        rankSet := make(map[int]bool)
-        for rank := range rankings {
-            if rank < 1 || rank > 3 {
-                log.Printf("Invalid rank value %d for question %d", rank, q)
-                w.WriteHeader(http.StatusBadRequest)
-                json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Invalid rank value %d for question %d (must be 1-3)", rank, q)})
-                return
-            }
-            if rankSet[rank] {
-                log.Printf("Duplicate rank %d for question %d", rank, q)
-                w.WriteHeader(http.StatusBadRequest)
-                json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Duplicate rank %d for question %d", rank, q)})
-                return
-            }
-            rankSet[rank] = true
-        }
-
-        // Insert rankings for this question
+        // Save new rankings with is_current_session = 1
         for rank, responderID := range rankings {
-            score := 4 - rank // 1st=3, 2nd=2, 3rd=1
+            score := 5 - rank // 1st=4, 2nd=3, 3rd=2
             
             _, err = tx.Exec(`
                 INSERT INTO survey_results 
-                (id, session_id, student_id, responder_id, question_number, ranks, score)
-                VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
-                req.SessionID, 
-                studentID,
-                responderID,
-                q,
-                rank,
-                score,
-            )
+                (id, session_id, student_id, responder_id, question_number, ranks, score, is_current_session)
+                VALUES (UUID(), ?, ?, ?, ?, ?, ?, 1)`,
+                req.SessionID, studentID, responderID, q, rank, score)
             if err != nil {
                 tx.Rollback()
                 log.Printf("Error saving survey response: %v", err)
@@ -530,19 +417,8 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
             }
         }
     }
- // After successful survey submission, mark session as completed
-    _, err = tx.Exec(`
-        UPDATE gd_sessions 
-        SET status = 'completed', end_time = NOW()
-        WHERE id = ?`,
-        req.SessionID)
-    if err != nil {
-        tx.Rollback()
-        log.Printf("Failed to complete session: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to complete session"})
-        return
-    }
+
+    // Only mark as completed if all questions are answered (this check is now done client-side)
     if err := tx.Commit(); err != nil {
         log.Printf("Error committing transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -596,99 +472,435 @@ func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 }
+
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)
 
-    log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
-
-    // Get only participants who actually joined (have phase tracking)
-    var participants []struct {
-        ID   string `json:"id"`
-        Name string `json:"name"`
-    }
-
-    participantRows, err := database.GetDB().Query(`
-        SELECT DISTINCT su.id, su.full_name 
-        FROM session_participants sp
-        JOIN student_users su ON sp.student_id = su.id
-        JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
-                                      AND sp.student_id = spt.student_id
-        WHERE sp.session_id = ? 
-          AND sp.is_dummy = FALSE
-          AND su.is_active = TRUE
-          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 2 HOUR)`, 
-        sessionID)
-
+    // Verify student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, studentID).Scan(&isParticipant)
+    
     if err != nil {
-        log.Printf("Error fetching participants: %v", err)
+        log.Printf("Database error checking participant: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
-    defer participantRows.Close()
-    
-    for participantRows.Next() {
-        var p struct {
-            ID   string `json:"id"`
-            Name string `json:"name"`
-        }
-        if err := participantRows.Scan(&p.ID, &p.Name); err != nil {
-            log.Printf("Error scanning participant: %v", err)
-            continue
-        }
-        participants = append(participants, p)
+
+    if !isParticipant {
+        log.Printf("Student %s not authorized for session %s", studentID, sessionID)
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view these results"})
+        return
     }
 
-    // Get survey responses only for actual participants
+    // Get all participants in this session
+    participants := make(map[string]string) // id -> name
     rows, err := database.GetDB().Query(`
-        SELECT 
-            sr.responder_id,
-            su.full_name,
-            SUM(sr.score) as total_score,
-            COUNT(DISTINCT sr.question_number) as question_count
-        FROM survey_results sr
-        JOIN student_users su ON sr.responder_id = su.id
-        JOIN session_phase_tracking spt ON sr.session_id = spt.session_id 
-                                      AND sr.responder_id = spt.student_id
-        WHERE sr.session_id = ?
-          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 2 HOUR)
-        GROUP BY sr.responder_id, su.full_name
-        ORDER BY total_score DESC`, sessionID)
-
+        SELECT id, full_name FROM student_users 
+        WHERE id IN (SELECT student_id FROM session_participants WHERE session_id = ?)`, 
+        sessionID)
     if err != nil {
-        log.Printf("Error fetching results: %v", err)
+        log.Printf("Error getting participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
     defer rows.Close()
-
-    type Result struct {
-        ResponderID string  `json:"responder_id"`
-        Name       string  `json:"name"`
-        TotalScore float64 `json:"total_score"`
-        AvgScore   float64 `json:"avg_score"`
-    }
-
-    var results []Result
+    
     for rows.Next() {
-        var r Result
-        var questionCount int
-        if err := rows.Scan(&r.ResponderID, &r.Name, &r.TotalScore, &questionCount); err != nil {
-            log.Printf("Error scanning result: %v", err)
+        var id, name string
+        if err := rows.Scan(&id, &name); err != nil {
             continue
         }
-        r.AvgScore = r.TotalScore / float64(questionCount)
+        participants[id] = name
+    }
+
+    // Get all survey responses for this session
+    type SurveyResult struct {
+        ResponderID string
+        StudentID   string
+        Question    int
+        Rank        int
+        Score       float64
+    }
+    
+    var results []SurveyResult
+    rows, err = database.GetDB().Query(`
+        SELECT responder_id, student_id, question_number, ranks, score
+        FROM survey_results 
+        WHERE session_id = ? AND is_current_session = 1`, sessionID)
+    if err != nil {
+        log.Printf("Error getting survey responses: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+    
+    for rows.Next() {
+        var r SurveyResult
+        if err := rows.Scan(&r.ResponderID, &r.StudentID, &r.Question, &r.Rank, &r.Score); err != nil {
+            continue
+        }
         results = append(results, r)
+    }
+
+    // Calculate penalties for each student
+    penalties := make(map[string]float64)
+    rows, err = database.GetDB().Query(`
+        SELECT student_id, SUM(penalty_points) 
+        FROM survey_penalties 
+        WHERE session_id = ?
+        GROUP BY student_id`, sessionID)
+    if err != nil {
+        log.Printf("Error getting penalties: %v", err)
+    } else {
+        defer rows.Close()
+        for rows.Next() {
+            var studentID string
+            var points float64
+            if err := rows.Scan(&studentID, &points); err != nil {
+                continue
+            }
+            penalties[studentID] = points
+        }
+    }
+
+    // Calculate scores for each student
+    type StudentResult struct {
+        ID          string
+        Name        string
+        TotalScore  float64
+        Penalty     float64
+        FinalScore  float64
+        FirstPlaces int
+    }
+    
+    studentResults := make(map[string]*StudentResult)
+    
+    // Initialize student results
+    for id, name := range participants {
+        studentResults[id] = &StudentResult{
+            ID:         id,
+            Name:       name,
+            TotalScore: 0,
+            Penalty:    penalties[id],
+            FirstPlaces: 0,
+        }
+    }
+
+    // Calculate total scores
+    // Calculate total scores
+for _, r := range results {
+    // Only count scores where the student is the responder (being evaluated)
+    if result, ok := studentResults[r.ResponderID]; ok {
+        result.TotalScore += r.Score
+        if r.Rank == 1 {
+            result.FirstPlaces++
+        }
+    }
+    
+    // Also ensure we're not counting self-evaluations
+    if r.StudentID == r.ResponderID {
+        log.Printf("Warning: Self-evaluation found for student %s", r.StudentID)
+    }
+}
+
+    // Calculate final scores
+    for _, result := range studentResults {
+        result.FinalScore = result.TotalScore - result.Penalty
+    }
+
+    // Convert to slice for sorting
+    var sortedResults []StudentResult
+    for _, r := range studentResults {
+        sortedResults = append(sortedResults, *r)
+    }
+
+    // Sort results by final score (descending)
+    sort.Slice(sortedResults, func(i, j int) bool {
+        if sortedResults[i].FinalScore != sortedResults[j].FinalScore {
+            return sortedResults[i].FinalScore > sortedResults[j].FinalScore
+        }
+        return sortedResults[i].FirstPlaces > sortedResults[j].FirstPlaces
+    })
+
+    // Prepare response
+    var response []map[string]interface{}
+    for _, r := range sortedResults {
+        response = append(response, map[string]interface{}{
+            "responder_id":    r.ID,
+            "name":           r.Name,
+            "total_score":    fmt.Sprintf("%.2f", r.TotalScore),
+            "penalty_points": fmt.Sprintf("%.2f", r.Penalty),
+            "final_score":    fmt.Sprintf("%.2f", r.FinalScore),
+            "first_places":   r.FirstPlaces,
+        })
     }
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "results":      results,
-        "participants": participants,
+        "results":    response,
+        "session_id": sessionID,
     })
 }
+
+// func GetResults(w http.ResponseWriter, r *http.Request) {
+//     sessionID := r.URL.Query().Get("session_id")
+//     studentID := r.Context().Value("studentID").(string)
+
+//     log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
+
+//     // Verify student is part of this session
+//     var isParticipant bool
+//     err := database.GetDB().QueryRow(`
+//         SELECT EXISTS(
+//             SELECT 1 FROM session_participants 
+//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+//         )`, sessionID, studentID).Scan(&isParticipant)
+    
+//     if err != nil {
+//         log.Printf("Database error checking participant: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+
+//     if !isParticipant {
+//         log.Printf("Student %s not authorized for session %s", studentID, sessionID)
+//         w.WriteHeader(http.StatusForbidden)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view these results"})
+//         return
+//     }
+
+//     // Get all participants in this session
+//     var participants []string
+//     rows, err := database.GetDB().Query(`
+//         SELECT student_id FROM session_participants 
+//         WHERE session_id = ? AND is_dummy = FALSE`, sessionID)
+//     if err != nil {
+//         log.Printf("Error getting participants: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         return
+//     }
+//     defer rows.Close()
+    
+//     for rows.Next() {
+//         var id string
+//         if err := rows.Scan(&id); err != nil {
+//             continue
+//         }
+//         participants = append(participants, id)
+//     }
+
+//     // Get all survey responses for this session with question weights
+//     type SurveyResponse struct {
+//         QuestionNumber int
+//         ResponderID   string
+//         StudentID     string
+//         Rank          int
+//         Score         float64
+//         Weight        float64
+//     }
+    
+//     var responses []SurveyResponse
+//     rows, err = database.GetDB().Query(`
+//         SELECT sr.question_number, sr.responder_id, sr.student_id, sr.ranks, 
+//                COALESCE(sq.weight, 1.0) as question_weight
+//         FROM survey_results sr
+//         LEFT JOIN survey_questions sq ON sr.question_number = sq.id
+//         WHERE sr.session_id = ? AND sr.is_current_session = 1`, sessionID)
+//     if err != nil {
+//         log.Printf("Error getting survey responses: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         return
+//     }
+//     defer rows.Close()
+    
+//     for rows.Next() {
+//         var r SurveyResponse
+//         if err := rows.Scan(&r.QuestionNumber, &r.ResponderID, &r.StudentID, &r.Rank, &r.Weight); err != nil {
+//             continue
+//         }
+//         // Calculate weighted score (4 for 1st, 3 for 2nd, 2 for 3rd)
+//         r.Score = float64(5 - r.Rank) * r.Weight // Changed from 4 to 5 to give more weight
+//         responses = append(responses, r)
+//     }
+
+//     // Get survey completion times
+//     type SurveyTime struct {
+//         StudentID string
+//         StartTime time.Time
+//         EndTime   time.Time
+//     }
+//     var surveyTimes []SurveyTime
+//     rows, err = database.GetDB().Query(`
+//         SELECT student_id, MIN(submitted_at) as start_time, MAX(submitted_at) as end_time
+//         FROM survey_results 
+//         WHERE session_id = ? AND is_current_session = 1
+//         GROUP BY student_id`, sessionID)
+//     if err != nil {
+//         log.Printf("Error getting survey times: %v", err)
+//     } else {
+//         defer rows.Close()
+//         for rows.Next() {
+//             var st SurveyTime
+//             if err := rows.Scan(&st.StudentID, &st.StartTime, &st.EndTime); err != nil {
+//                 continue
+//             }
+//             surveyTimes = append(surveyTimes, st)
+//         }
+//     }
+
+//     // Calculate penalties for each student
+//     penalties := make(map[string]float64)
+//     rows, err = database.GetDB().Query(`
+//         SELECT student_id, SUM(penalty_points) 
+//         FROM survey_penalties 
+//         WHERE session_id = ?
+//         GROUP BY student_id`, sessionID)
+//     if err != nil {
+//         log.Printf("Error getting penalties: %v", err)
+//     } else {
+//         defer rows.Close()
+//         for rows.Next() {
+//             var studentID string
+//             var points float64
+//             if err := rows.Scan(&studentID, &points); err != nil {
+//                 continue
+//             }
+//             penalties[studentID] = points
+//         }
+//     }
+
+//     // Calculate average scores for each student
+//     type StudentResult struct {
+//         ID          string
+//         Name        string
+//         TotalScore  float64
+//         Penalty     float64
+//         FinalScore  float64
+//         SurveyTime  int
+//         FirstPlaces int
+//     }
+    
+//     studentResults := make(map[string]*StudentResult)
+    
+//     // Initialize results for all participants
+//     rows, err = database.GetDB().Query(`
+//         SELECT id, full_name FROM student_users 
+//         WHERE id IN (SELECT student_id FROM session_participants WHERE session_id = ?)`, 
+//         sessionID)
+//     if err != nil {
+//         log.Printf("Error getting participant names: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         return
+//     }
+//     defer rows.Close()
+    
+//     for rows.Next() {
+//         var id, name string
+//         if err := rows.Scan(&id, &name); err != nil {
+//             continue
+//         }
+//         studentResults[id] = &StudentResult{
+//             ID:         id,
+//             Name:       name,
+//             TotalScore: 0,
+//             Penalty:   penalties[id],
+//             SurveyTime: 0,
+//             FirstPlaces: 0,
+//         }
+//     }
+
+//     // Calculate total scores from all responders
+//     for _, r := range responses {
+//         if result, ok := studentResults[r.StudentID]; ok {
+//             result.TotalScore += r.Score
+//             if r.Rank == 1 {
+//                 result.FirstPlaces++
+//             }
+//         }
+//     }
+
+//     // Add survey times to results
+//     for _, st := range surveyTimes {
+//         if result, ok := studentResults[st.StudentID]; ok {
+//             result.SurveyTime = int(st.EndTime.Sub(st.StartTime).Seconds())
+//         }
+//     }
+
+//     // Apply penalties and calculate final scores
+//     for id, result := range studentResults {
+//         // Get penalty points
+//         result.Penalty = penalties[id]
+        
+//         // Calculate average score (total / number of questions * number of responders)
+//         responderCount := len(participants) - 1 // exclude self
+//         questionCount := 3 // default to 3 questions
+        
+//         // Get actual question count
+//         var qCount int
+//         err := database.GetDB().QueryRow(`
+//             SELECT COUNT(DISTINCT question_number) 
+//             FROM survey_results 
+//             WHERE session_id = ?`, sessionID).Scan(&qCount)
+//         if err == nil && qCount > 0 {
+//             questionCount = qCount
+//         }
+        
+//         if responderCount > 0 && questionCount > 0 {
+//             result.TotalScore = result.TotalScore / float64(responderCount * questionCount)
+//         }
+        
+//         result.FinalScore = result.TotalScore - result.Penalty
+//     }
+
+//     // Convert to slice for sorting
+//     var results []StudentResult
+//     for _, r := range studentResults {
+//         results = append(results, *r)
+//     }
+
+//     // Sort results:
+//     // 1. By final score (descending)
+//     // 2. By number of first places (descending)
+//     // 3. By survey time (ascending - faster is better)
+//     sort.Slice(results, func(i, j int) bool {
+//         if results[i].FinalScore != results[j].FinalScore {
+//             return results[i].FinalScore > results[j].FinalScore
+//         }
+//         if results[i].FirstPlaces != results[j].FirstPlaces {
+//             return results[i].FirstPlaces > results[j].FirstPlaces
+//         }
+//         return results[i].SurveyTime < results[j].SurveyTime
+//     })
+
+//     // Prepare response
+//     var response []map[string]interface{}
+//     for _, r := range results {
+//         response = append(response, map[string]interface{}{
+//             "responder_id":    r.ID,
+//             "name":           r.Name,
+//             "total_score":    fmt.Sprintf("%.2f", r.TotalScore),
+//             "penalty_points": fmt.Sprintf("%.2f", r.Penalty),
+//             "final_score":    fmt.Sprintf("%.2f", r.FinalScore),
+//             "survey_time":    r.SurveyTime,
+//             "first_places":   r.FirstPlaces,
+//         })
+//     }
+
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "results":    response,
+//         "session_id": sessionID,
+//     })
+// }
+
 
 func BookVenue(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
@@ -980,7 +1192,6 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
-        log.Println("GetSessionParticipants: session_id parameter is missing")
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]interface{}{
             "error": "session_id is required",
@@ -990,48 +1201,36 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     }
 
     studentID := r.Context().Value("studentID").(string)
-    log.Printf("GetSessionParticipants: fetching participants for session %s (excluding student %s)", sessionID, studentID)
-
-    // First check if there are any participants at all
-    var totalParticipants int
-    err := database.GetDB().QueryRow(`
-        SELECT COUNT(*) FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`,
-        sessionID).Scan(&totalParticipants)
     
+    // First, clean up any stale phase tracking (users who left unexpectedly)
+    _, err := database.GetDB().Exec(`
+        DELETE FROM session_phase_tracking 
+        WHERE session_id = ? 
+        AND start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`, 
+        sessionID)
     if err != nil {
-        log.Printf("GetSessionParticipants: error checking total participants: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "error": "Database error",
-            "data": []interface{}{},
-        })
-        return
+        log.Printf("Error cleaning up stale phase tracking: %v", err)
     }
-    log.Printf("GetSessionParticipants: total participants in session: %d", totalParticipants)
 
-    // Get actual joined participants (have phase tracking)
+    // Get current active participants who:
+    // 1. Are booked for this session
+    // 2. Have scanned QR (have phase tracking)
+    // 3. Have active phase tracking within last 5 minutes
     rows, err := database.GetDB().Query(`
-        SELECT su.id, su.full_name, su.department 
+        SELECT DISTINCT su.id, su.full_name, su.department 
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
                                       AND sp.student_id = spt.student_id
         WHERE sp.session_id = ? 
-          AND sp.student_id != ? 
           AND sp.is_dummy = FALSE
           AND su.is_active = TRUE
-          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
-          AND NOT EXISTS (
-              SELECT 1 FROM session_phase_tracking spt2
-              WHERE spt2.student_id = spt.student_id
-                AND spt2.start_time > spt.start_time
-                AND spt2.session_id != spt.session_id
-          )
-        ORDER BY su.full_name`, sessionID, studentID)
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        ORDER BY su.full_name`, 
+        sessionID)
 
     if err != nil {
-        log.Printf("GetSessionParticipants: database error fetching participants: %v", err)
+        log.Printf("Database error fetching participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]interface{}{
             "error": "Database error",
@@ -1049,7 +1248,12 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
             Department string
         }
         if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
-            log.Printf("GetSessionParticipants: error scanning participant: %v", err)
+            log.Printf("Error scanning participant: %v", err)
+            continue
+        }
+
+        // Skip the current student
+        if participant.ID == studentID {
             continue
         }
 
@@ -1060,20 +1264,92 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
         })
     }
 
-    log.Printf("GetSessionParticipants: found %d joined participants", len(participants))
-    
-    if len(participants) == 0 {
-        log.Printf("GetSessionParticipants: no joined participants found")
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "error": "No participants found",
-            "data": []interface{}{},
-        })
-        return
-    }
-
     json.NewEncoder(w).Encode(map[string]interface{}{
         "data": participants,
     })
 }
 
+
+// In survey_controller.go, modify the CheckSurveyCompletion function
+func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+
+    // Get total participants who have both booked AND scanned QR (have phase tracking)
+    var totalParticipants int
+    err := database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT sp.student_id)
+        FROM session_participants sp
+        JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
+                                      AND sp.student_id = spt.student_id
+        WHERE sp.session_id = ? 
+          AND sp.is_dummy = FALSE
+          AND spt.start_time > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        sessionID).Scan(&totalParticipants)
+    
+    if err != nil {
+        log.Printf("Error getting QR-scanned participants: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    // Get count of participants who have completed ALL questions
+    var completedCount int
+    err = database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT sc.student_id)
+        FROM survey_completion sc
+        JOIN session_participants sp ON sc.session_id = sp.session_id AND sc.student_id = sp.student_id
+        WHERE sc.session_id = ?`,
+        sessionID).Scan(&completedCount)
+    
+    if err != nil {
+        log.Printf("Error getting completed count: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    log.Printf("Completion check - Session: %s, QR-Scanned: %d, Completed: %d", 
+        sessionID, totalParticipants, completedCount)
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "all_completed": completedCount >= totalParticipants && totalParticipants > 0,
+        "completed":     completedCount,
+        "total":         totalParticipants,
+    })
+}
+
+func MarkSurveyCompleted(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        SessionID string `json:"session_id"`
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
+
+    studentID := r.Context().Value("studentID").(string)
+
+    _, err := database.GetDB().Exec(`
+        INSERT INTO survey_completion (session_id, student_id)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+        req.SessionID, studentID)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}

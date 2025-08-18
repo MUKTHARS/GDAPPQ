@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.251.212:8080' 
+    ? 'http://10.150.255.123:8080' 
     : 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
@@ -60,7 +60,9 @@ createBulkSessions: (data) => {
     }]
   });
 },
-
+getSessionFeedbacks: (sessionId) => api.get('/admin/feedbacks', { 
+    params: { session_id: sessionId } 
+}),
   getVenues: () => api.get('/admin/venues'),
   getTopParticipants: (params = {}) => api.get('/admin/results/top', { params }),
 };

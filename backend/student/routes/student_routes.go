@@ -27,15 +27,39 @@ func SetupStudentRoutes() *http.ServeMux {
         http.HandlerFunc(controllers.SubmitSurvey)))
     
     // Results
-    router.Handle("/student/results", middleware.StudentOnly(
+     router.Handle("/student/results", middleware.StudentOnly(
         http.HandlerFunc(controllers.GetResults)))
-
-   router.Handle("/student/session/check", middleware.StudentOnly(
+    router.Handle("/student/survey/start-question", middleware.StudentOnly(
+    http.HandlerFunc(controllers.StartQuestionTimer)))
+     router.Handle("/student/survey/check-timeout", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CheckQuestionTimeout)))
+     router.Handle("/student/survey/apply-penalty", middleware.StudentOnly(
+    http.HandlerFunc(controllers.ApplyQuestionPenalty)))
+    router.Handle("/student/survey/start", middleware.StudentOnly(
+    http.HandlerFunc(controllers.StartSurveyTimer)))
+    router.Handle("/student/survey/timeout", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CheckSurveyTimeout)))
+    router.Handle("/student/survey/penalties", middleware.StudentOnly(
+    http.HandlerFunc(controllers.ApplySurveyPenalties)))
+    router.Handle("/student/session/check", middleware.StudentOnly(
     http.HandlerFunc(controllers.CheckBooking)))
-   router.Handle("/student/session/cancel", middleware.StudentOnly(
+    router.Handle("/student/session/cancel", middleware.StudentOnly(
     http.HandlerFunc(controllers.CancelBooking)))
     router.Handle("/student/session/participants", middleware.StudentOnly(
     http.HandlerFunc(controllers.GetSessionParticipants)))
+    router.Handle("/student/survey/completion", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CheckSurveyCompletion)))
+    router.Handle("/student/survey/mark-completed", middleware.StudentOnly(
+    http.HandlerFunc(controllers.MarkSurveyCompleted)))
+    router.Handle("/student/feedback", middleware.StudentOnly(
+    http.HandlerFunc(controllers.SubmitFeedback)))
+
+
+
+    router.Handle("/student/feedback/get", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetFeedback)))
+     router.Handle("/student/questions", middleware.StudentOnly(
+        http.HandlerFunc(controllers.GetQuestionsForStudent)))
     router.Handle("/student/session/status", middleware.StudentOnly(
     http.HandlerFunc(controllers.UpdateSessionStatus)))
     return router

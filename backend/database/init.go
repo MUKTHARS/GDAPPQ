@@ -103,6 +103,9 @@ func InitDB(db *sql.DB) error {
             question_text VARCHAR(255),
             weight DECIMAL(3,2),
             applicable_levels JSON,
+           
+    penalty_points INT DEFAULT 0,
+    is_biased BOOLEAN DEFAULT FALSE,
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
             FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
@@ -148,7 +151,15 @@ func InitDB(db *sql.DB) error {
     question_number INT NOT NULL,
     ranks INT NOT NULL,  
     score INT NOT NULL, 
+    is_current_session TINYINT(1) DEFAULT 0,
+    is_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+/**    Dont remove this ----- > CREATE INDEX idx_survey_results_session_completed ON survey_results (session_id, is_completed) 
+CREATE INDEX IF NOT EXISTS idx_survey_completion_session ON survey_completion (session_id);
+CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results (session_id, student_id);
+CREATE INDEX IF NOT EXISTS idx_survey_results_session_responder ON survey_results (session_id, responder_id);
+CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalties (session_id, student_id);
+**/
     FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
     FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
@@ -165,14 +176,77 @@ func InitDB(db *sql.DB) error {
     FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
 )`,
 
-// Insert sample session topic
-// `INSERT IGNORE INTO gd_session_topics (session_id, topic) VALUES 
-// ('session1', 'The impact of AI on modern education')`,
-`INSERT IGNORE INTO gd_session_topics (session_id, topic, prep_materials) VALUES 
-('session1', 'The impact of AI on modern education', '{"articles": ["url1", "url2"]}')`,
-// Insert sample phase tracking
-`INSERT IGNORE INTO session_phase_tracking (session_id, student_id, phase) VALUES 
-('session1', 'student1', 'prep')`,
+
+
+`CREATE TABLE IF NOT EXISTS question_timers (
+    session_id VARCHAR(36),
+    question_id INT,
+    end_time DATETIME NOT NULL,
+    PRIMARY KEY (session_id, question_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
+)`,
+
+
+`CREATE TABLE IF NOT EXISTS survey_questions (
+    id VARCHAR(36) PRIMARY KEY,
+    question_text TEXT NOT NULL,
+    weight DECIMAL(3,1) DEFAULT 1.0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+)`,
+
+
+`CREATE TABLE IF NOT EXISTS question_levels (
+    question_id VARCHAR(36),
+    level INT,
+    PRIMARY KEY (question_id, level),
+    FOREIGN KEY (question_id) REFERENCES survey_questions(id) ON DELETE CASCADE
+)`,
+
+
+`CREATE TABLE IF NOT EXISTS survey_penalties (
+  id VARCHAR(36) PRIMARY KEY,
+  session_id VARCHAR(36) NOT NULL,
+  student_id VARCHAR(36) NOT NULL,
+  question_id INT NOT NULL,
+  penalty_points FLOAT NOT NULL DEFAULT 0.5,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
+  FOREIGN KEY (student_id) REFERENCES student_users(id),
+  UNIQUE KEY (session_id, student_id, question_id)
+);`,
+
+`CREATE TABLE IF NOT EXISTS survey_completion (
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, student_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
+);`,
+
+`CREATE TABLE IF NOT EXISTS survey_timing (
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    duration_seconds INT NOT NULL,
+    PRIMARY KEY (session_id, student_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
+    FOREIGN KEY (student_id) REFERENCES student_users(id)
+);`,
+`CREATE TABLE IF NOT EXISTS session_feedback (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    UNIQUE KEY (session_id, student_id)
+)`,
+
+
     }
 
     for _, query := range createTables {
@@ -255,7 +329,7 @@ if err != nil {
             time.Sleep(30 * time.Minute) // Run every 30 minutes
             _, err := db.Exec(`
                 DELETE FROM session_phase_tracking 
-                WHERE start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`)
+                WHERE start_time < DATE_SUB(NOW(), INTERVAL 30 MINUTE)`)
             if err != nil {
                 log.Printf("Error cleaning up phase tracking: %v", err)
             }
