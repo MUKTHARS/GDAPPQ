@@ -206,16 +206,15 @@ CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalt
 
 
 `CREATE TABLE IF NOT EXISTS survey_penalties (
-    id VARCHAR(36) PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    question_id INT NOT NULL,
-    student_id VARCHAR(36) NOT NULL,
-    penalty_points INT NOT NULL DEFAULT 1,
-    reason VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
-    FOREIGN KEY (student_id) REFERENCES student_users(id)
+  id VARCHAR(36) PRIMARY KEY,
+  session_id VARCHAR(36) NOT NULL,
+  student_id VARCHAR(36) NOT NULL,
+  question_id INT NOT NULL,
+  penalty_points FLOAT NOT NULL DEFAULT 0.5,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
+  FOREIGN KEY (student_id) REFERENCES student_users(id),
+  UNIQUE KEY (session_id, student_id, question_id)
 );`,
 
 `CREATE TABLE IF NOT EXISTS survey_completion (

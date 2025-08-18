@@ -207,18 +207,20 @@ func ApplyQuestionPenalty(w http.ResponseWriter, r *http.Request) {
         QuestionID int    `json:"question_id"`
         StudentID  string `json:"student_id"`
     }
+    
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
         return
     }
 
-    // Apply penalty for this specific question
+    // Apply penalty (0.5 points per unanswered question)
     _, err := database.GetDB().Exec(`
-        INSERT INTO survey_penalties (session_id, question_id, student_id, penalty_points)
-        VALUES (?, ?, ?, 1)
-        ON DUPLICATE KEY UPDATE penalty_points = penalty_points + 1`,
-        req.SessionID, req.QuestionID, req.StudentID)
+        INSERT INTO survey_penalties 
+        (session_id, student_id, question_id, penalty_points) 
+        VALUES (?, ?, ?, 0.5)
+        ON DUPLICATE KEY UPDATE penalty_points = penalty_points + 0.5`,
+        req.SessionID, req.StudentID, req.QuestionID)
     
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
