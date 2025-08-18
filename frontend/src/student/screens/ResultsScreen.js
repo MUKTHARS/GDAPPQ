@@ -3,6 +3,14 @@ import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity }
 import api from '../services/api';
 
 const ResultItem = ({ item, index }) => {
+  // Convert string scores to numbers if needed
+  const totalScore = typeof item.total_score === 'string' ? 
+    parseFloat(item.total_score) : item.total_score || 0;
+  const penaltyPoints = typeof item.penalty_points === 'string' ? 
+    parseFloat(item.penalty_points) : item.penalty_points || 0;
+  const finalScore = typeof item.final_score === 'string' ? 
+    parseFloat(item.final_score) : item.final_score || 0;
+
   return (
     <View style={styles.resultItem}>
       <View style={styles.rankContainer}>
@@ -13,9 +21,9 @@ const ResultItem = ({ item, index }) => {
       <View style={styles.detailsContainer}>
         <Text style={styles.nameText}>{item.name}</Text>
         <View style={styles.scoresContainer}>
-          <Text style={styles.scoreText}>Score: {item.total_score.toFixed(1)}</Text>
-          <Text style={styles.penaltyText}>Penalties: -{item.penalty_points}</Text>
-          <Text style={styles.finalScoreText}>Final: {item.final_score.toFixed(1)}</Text>
+          <Text style={styles.scoreText}>Score: {totalScore.toFixed(1)}</Text>
+          <Text style={styles.penaltyText}>Penalties: -{penaltyPoints.toFixed(1)}</Text>
+          <Text style={styles.finalScoreText}>Final: {finalScore.toFixed(1)}</Text>
         </View>
       </View>
     </View>
@@ -36,16 +44,20 @@ export default function ResultsScreen({ route, navigation }) {
         const response = await api.student.getResults(sessionId);
         
         if (response.data?.results) {
-          // Process results to ensure all numeric values
+          // Process results to ensure all values are numbers
           const processedResults = response.data.results.map(item => ({
             ...item,
-            total_score: item.total_score || 0,
-            penalty_points: item.penalty_points || 0,
-            final_score: (item.total_score || 0) - (item.penalty_points || 0)
+            total_score: typeof item.total_score === 'string' ? 
+              parseFloat(item.total_score) : item.total_score || 0,
+            penalty_points: typeof item.penalty_points === 'string' ? 
+              parseFloat(item.penalty_points) : item.penalty_points || 0,
+            final_score: typeof item.final_score === 'string' ? 
+              parseFloat(item.final_score) : 
+              (item.total_score || 0) - (item.penalty_points || 0)
           }));
           
           setResults(processedResults);
-          setShowFeedbackButton(true); // Show feedback button after results load
+          setShowFeedbackButton(true);
         } else {
           setError('No results available for this session');
         }

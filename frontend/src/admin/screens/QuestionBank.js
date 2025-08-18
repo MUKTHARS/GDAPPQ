@@ -23,24 +23,56 @@ export default function QuestionBank() {
 
 const fetchQuestions = async () => {
   try {
-    const response = await api.get('/admin/questions', {
-      headers: {
-        'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
-      }
-    });
+    setLoading(true);
+    const response = await api.get('/admin/questions');
     
-    if (response.data && Array.isArray(response.data)) {
-      setQuestions(response.data);
-    } else {
-      console.log('Unexpected response format, using empty array');
-      setQuestions([]);
+    // Handle both direct array and nested data responses
+    let questionsData = response.data;
+    if (response.data && !Array.isArray(response.data) && response.data.data) {
+      questionsData = response.data.data;
     }
+    
+    if (!Array.isArray(questionsData)) {
+      console.log('Unexpected response format, using empty array');
+      questionsData = [];
+    }
+    
+    // Ensure all questions have levels array
+    const formattedQuestions = questionsData.map(q => ({
+      ...q,
+      levels: Array.isArray(q.levels) ? q.levels : []
+    }));
+    
+    setQuestions(formattedQuestions);
   } catch (error) {
     console.error('Failed to fetch questions:', error);
-    // Fallback to empty array
     setQuestions([]);
+  } finally {
+    setLoading(false);
   }
 };
+
+
+// const fetchQuestions = async () => {
+//   try {
+//     const response = await api.get('/admin/questions', {
+//       headers: {
+//         'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
+//       }
+//     });
+    
+//     if (response.data && Array.isArray(response.data)) {
+//       setQuestions(response.data);
+//     } else {
+//       console.log('Unexpected response format, using empty array');
+//       setQuestions([]);
+//     }
+//   } catch (error) {
+//     console.error('Failed to fetch questions:', error);
+//     // Fallback to empty array
+//     setQuestions([]);
+//   }
+// };
 
   const toggleLevel = (level) => {
     if (newQuestion.levels.includes(level)) {

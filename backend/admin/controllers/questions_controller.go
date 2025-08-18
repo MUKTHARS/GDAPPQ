@@ -2,11 +2,14 @@ package controllers
 
 import (
 	// "database/sql"
+	"database/sql"
 	"encoding/json"
 	"gd/database"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+
 	// "strings"
 
 	"github.com/google/uuid"
@@ -26,20 +29,17 @@ type QuestionRequest struct {
 }
 
 func GetQuestions(w http.ResponseWriter, r *http.Request) {
-    levelStr := r.URL.Query().Get("level")
-    level, err := strconv.Atoi(levelStr)
-    if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level parameter"})
-        return
-    }
-
     rows, err := database.GetDB().Query(`
-        SELECT q.id, q.question_text, q.weight 
+        SELECT 
+            q.id,
+            q.question_text,
+            q.weight,
+            q.is_active,
+            GROUP_CONCAT(ql.level) as levels
         FROM survey_questions q
-        JOIN question_levels l ON q.id = l.question_id
-        WHERE l.level = ? AND q.is_active = TRUE
-        ORDER BY q.created_at`, level)
+        LEFT JOIN question_levels ql ON q.id = ql.question_id
+        GROUP BY q.id
+        ORDER BY q.created_at DESC`)
     
     if err != nil {
         log.Printf("Database error: %v", err)
@@ -49,24 +49,40 @@ func GetQuestions(w http.ResponseWriter, r *http.Request) {
     }
     defer rows.Close()
 
+    type Question struct {
+        ID       string  `json:"id"`
+        Text     string  `json:"text"`
+        Weight   float32 `json:"weight"`
+        IsActive bool    `json:"is_active"`
+        Levels   []int   `json:"levels"`
+    }
+
     var questions []Question
     for rows.Next() {
         var q Question
-        if err := rows.Scan(&q.ID, &q.Text, &q.Weight); err != nil {
+        var levelsStr sql.NullString
+        if err := rows.Scan(&q.ID, &q.Text, &q.Weight, &q.IsActive, &levelsStr); err != nil {
             log.Printf("Error scanning question: %v", err)
             continue
         }
+        
+        // Parse levels
+        if levelsStr.Valid {
+            levels := strings.Split(levelsStr.String, ",")
+            for _, l := range levels {
+                if level, err := strconv.Atoi(l); err == nil {
+                    q.Levels = append(q.Levels, level)
+                }
+            }
+        }
+        
         questions = append(questions, q)
     }
 
-    if len(questions) == 0 {
-        log.Println("No questions found for level", level)
-        // Return empty array instead of error to trigger fallback
-        questions = []Question{}
-    }
-
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(questions)
+    if err := json.NewEncoder(w).Encode(questions); err != nil {
+        log.Printf("Error encoding response: %v", err)
+    }
 }
 
 func CreateQuestion(w http.ResponseWriter, r *http.Request) {

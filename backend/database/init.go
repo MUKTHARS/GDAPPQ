@@ -155,8 +155,10 @@ func InitDB(db *sql.DB) error {
     is_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 /**    Dont remove this ----- > CREATE INDEX idx_survey_results_session_completed ON survey_results (session_id, is_completed) 
-CREATE INDEX idx_survey_completion_session ON survey_completion (session_id);
+CREATE INDEX IF NOT EXISTS idx_survey_completion_session ON survey_completion (session_id);
 CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results (session_id, student_id);
+CREATE INDEX IF NOT EXISTS idx_survey_results_session_responder ON survey_results (session_id, responder_id);
+CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalties (session_id, student_id);
 **/
     FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
@@ -225,12 +227,11 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results 
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
 );`,
 
-`CREATE TABLE IF NOT EXISTS survey_timeouts (
-    id VARCHAR(36) PRIMARY KEY,
+`CREATE TABLE IF NOT EXISTS survey_timing (
     session_id VARCHAR(36) NOT NULL,
     student_id VARCHAR(36) NOT NULL,
-    question_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    duration_seconds INT NOT NULL,
+    PRIMARY KEY (session_id, student_id),
     FOREIGN KEY (session_id) REFERENCES gd_sessions(id),
     FOREIGN KEY (student_id) REFERENCES student_users(id)
 );`,
