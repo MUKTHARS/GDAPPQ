@@ -500,10 +500,11 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     }
 
     // Get all participants in this session
-    var participants []string
+    participants := make(map[string]string) // id -> name
     rows, err := database.GetDB().Query(`
-        SELECT student_id FROM session_participants 
-        WHERE session_id = ? AND is_dummy = FALSE`, sessionID)
+        SELECT id, full_name FROM student_users 
+        WHERE id IN (SELECT student_id FROM session_participants WHERE session_id = ?)`, 
+        sessionID)
     if err != nil {
         log.Printf("Error getting participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -512,30 +513,27 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
     
     for rows.Next() {
-        var id string
-        if err := rows.Scan(&id); err != nil {
+        var id, name string
+        if err := rows.Scan(&id, &name); err != nil {
             continue
         }
-        participants = append(participants, id)
+        participants[id] = name
     }
 
-    // Get all survey responses for this session with question weights
-    type SurveyResponse struct {
-        QuestionNumber int
-        ResponderID   string
-        StudentID     string
-        Rank          int
-        Score         float64
-        Weight        float64
+    // Get all survey responses for this session
+    type SurveyResult struct {
+        ResponderID string
+        StudentID   string
+        Question    int
+        Rank        int
+        Score       float64
     }
     
-    var responses []SurveyResponse
+    var results []SurveyResult
     rows, err = database.GetDB().Query(`
-        SELECT sr.question_number, sr.responder_id, sr.student_id, sr.ranks, 
-               COALESCE(sq.weight, 1.0) as question_weight
-        FROM survey_results sr
-        LEFT JOIN survey_questions sq ON sr.question_number = sq.id
-        WHERE sr.session_id = ? AND sr.is_current_session = 1`, sessionID)
+        SELECT responder_id, student_id, question_number, ranks, score
+        FROM survey_results 
+        WHERE session_id = ? AND is_current_session = 1`, sessionID)
     if err != nil {
         log.Printf("Error getting survey responses: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -544,47 +542,11 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
     
     for rows.Next() {
-        var r SurveyResponse
-        if err := rows.Scan(&r.QuestionNumber, &r.ResponderID, &r.StudentID, &r.Rank, &r.Weight); err != nil {
+        var r SurveyResult
+        if err := rows.Scan(&r.ResponderID, &r.StudentID, &r.Question, &r.Rank, &r.Score); err != nil {
             continue
         }
-        // Calculate weighted score (1st=4, 2nd=3, 3rd=2)
-        switch r.Rank {
-        case 1:
-            r.Score = 4 * r.Weight
-        case 2:
-            r.Score = 3 * r.Weight
-        case 3:
-            r.Score = 2 * r.Weight
-        default:
-            r.Score = 0
-        }
-        responses = append(responses, r)
-    }
-
-    // Get survey completion times
-    type SurveyTime struct {
-        StudentID string
-        StartTime time.Time
-        EndTime   time.Time
-    }
-    var surveyTimes []SurveyTime
-    rows, err = database.GetDB().Query(`
-        SELECT student_id, MIN(submitted_at) as start_time, MAX(submitted_at) as end_time
-        FROM survey_results 
-        WHERE session_id = ? AND is_current_session = 1
-        GROUP BY student_id`, sessionID)
-    if err != nil {
-        log.Printf("Error getting survey times: %v", err)
-    } else {
-        defer rows.Close()
-        for rows.Next() {
-            var st SurveyTime
-            if err := rows.Scan(&st.StudentID, &st.StartTime, &st.EndTime); err != nil {
-                continue
-            }
-            surveyTimes = append(surveyTimes, st)
-        }
+        results = append(results, r)
     }
 
     // Calculate penalties for each student
@@ -615,91 +577,67 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         TotalScore  float64
         Penalty     float64
         FinalScore  float64
-        SurveyTime  int
         FirstPlaces int
     }
     
     studentResults := make(map[string]*StudentResult)
     
-    // Initialize results for all participants
-    rows, err = database.GetDB().Query(`
-        SELECT id, full_name FROM student_users 
-        WHERE id IN (SELECT student_id FROM session_participants WHERE session_id = ?)`, 
-        sessionID)
-    if err != nil {
-        log.Printf("Error getting participant names: %v", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-    defer rows.Close()
-    
-    for rows.Next() {
-        var id, name string
-        if err := rows.Scan(&id, &name); err != nil {
-            continue
-        }
+    // Initialize student results
+    for id, name := range participants {
         studentResults[id] = &StudentResult{
             ID:         id,
             Name:       name,
             TotalScore: 0,
-            Penalty:   penalties[id],
-            SurveyTime: 0,
+            Penalty:    penalties[id],
             FirstPlaces: 0,
         }
     }
 
-    // Calculate total scores from all responders
-    for _, r := range responses {
-        if result, ok := studentResults[r.StudentID]; ok {
-            result.TotalScore += r.Score
-            if r.Rank == 1 {
-                result.FirstPlaces++
-            }
+    // Calculate total scores
+    // Calculate total scores
+for _, r := range results {
+    // Only count scores where the student is the responder (being evaluated)
+    if result, ok := studentResults[r.ResponderID]; ok {
+        result.TotalScore += r.Score
+        if r.Rank == 1 {
+            result.FirstPlaces++
         }
     }
-
-    // Add survey times to results
-    for _, st := range surveyTimes {
-        if result, ok := studentResults[st.StudentID]; ok {
-            result.SurveyTime = int(st.EndTime.Sub(st.StartTime).Seconds())
-        }
+    
+    // Also ensure we're not counting self-evaluations
+    if r.StudentID == r.ResponderID {
+        log.Printf("Warning: Self-evaluation found for student %s", r.StudentID)
     }
+}
 
-    // Calculate final scores by subtracting penalties
+    // Calculate final scores
     for _, result := range studentResults {
         result.FinalScore = result.TotalScore - result.Penalty
     }
 
     // Convert to slice for sorting
-    var results []StudentResult
+    var sortedResults []StudentResult
     for _, r := range studentResults {
-        results = append(results, *r)
+        sortedResults = append(sortedResults, *r)
     }
 
-    // Sort results:
-    // 1. By final score (descending)
-    // 2. By number of first places (descending)
-    // 3. By survey time (ascending - faster is better)
-    sort.Slice(results, func(i, j int) bool {
-        if results[i].FinalScore != results[j].FinalScore {
-            return results[i].FinalScore > results[j].FinalScore
+    // Sort results by final score (descending)
+    sort.Slice(sortedResults, func(i, j int) bool {
+        if sortedResults[i].FinalScore != sortedResults[j].FinalScore {
+            return sortedResults[i].FinalScore > sortedResults[j].FinalScore
         }
-        if results[i].FirstPlaces != results[j].FirstPlaces {
-            return results[i].FirstPlaces > results[j].FirstPlaces
-        }
-        return results[i].SurveyTime < results[j].SurveyTime
+        return sortedResults[i].FirstPlaces > sortedResults[j].FirstPlaces
     })
 
     // Prepare response
     var response []map[string]interface{}
-    for _, r := range results {
+    for _, r := range sortedResults {
         response = append(response, map[string]interface{}{
             "responder_id":    r.ID,
             "name":           r.Name,
             "total_score":    fmt.Sprintf("%.2f", r.TotalScore),
             "penalty_points": fmt.Sprintf("%.2f", r.Penalty),
             "final_score":    fmt.Sprintf("%.2f", r.FinalScore),
-            "survey_time":    r.SurveyTime,
             "first_places":   r.FirstPlaces,
         })
     }
