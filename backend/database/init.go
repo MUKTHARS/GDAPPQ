@@ -66,6 +66,7 @@ func InitDB(db *sql.DB) error {
             venue_id VARCHAR(36),
             level INT NOT NULL,
             start_time TIMESTAMP NOT NULL,
+             qr_group_id VARCHAR(36) NULL,
             end_time TIMESTAMP NOT NULL,
             agenda JSON DEFAULT (JSON_OBJECT()),
             survey_weights JSON DEFAULT (JSON_OBJECT()),
