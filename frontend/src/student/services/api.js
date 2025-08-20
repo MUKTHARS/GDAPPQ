@@ -352,37 +352,43 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
     student_id: studentId
   }),
 
-   getSurveyQuestions: async (level) => {
-        try {
-            // First try student-specific endpoint
-            const response = await api.get('/student/questions', { 
-                params: { level },
-                validateStatus: (status) => status < 500
-            });
-            
-            // If we get valid data, use it
-            if (response.data && Array.isArray(response.data)) {
-                return response;
-            }
-            
-            // Fallback to admin endpoint if student endpoint fails
-            const adminResponse = await api.get('/admin/questions', {
-                params: { level },
-                validateStatus: (status) => status < 500
-            });
-            
-            return adminResponse;
-        } catch (error) {
-            console.log('Questions fallback triggered');
-            return {
-                data: [
-                    { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-                    { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-                    { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-                ]
-            };
+  getSurveyQuestions: async (level, sessionId = '') => {
+    try {
+        const params = { level };
+        // Add session_id parameter if provided
+        if (sessionId) {
+            params.session_id = sessionId;
         }
+        
+        // First try student-specific endpoint
+        const response = await api.get('/student/questions', { 
+            params: params,
+            validateStatus: (status) => status < 500
+        });
+        
+        // If we get valid data, use it
+        if (response.data && Array.isArray(response.data)) {
+            return response;
+        }
+        
+        // Fallback to admin endpoint if student endpoint fails
+        const adminResponse = await api.get('/admin/questions', {
+            params: { level }, // Don't send session_id to admin endpoint
+            validateStatus: (status) => status < 500
+        });
+        
+        return adminResponse;
+    } catch (error) {
+        console.log('Questions fallback triggered');
+        return {
+            data: [
+                { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+                { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+                { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+            ]
+        };
     }
+}
 
 
   };

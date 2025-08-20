@@ -85,28 +85,40 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   );
 };
 
-const shuffleArray = (array) => {
+const seededShuffle = (array, seed) => {
   const shuffled = [...array];
+  let currentSeed = seed;
+  const random = () => {
+    currentSeed = (currentSeed * 9301 + 49297) % 233280;
+    return currentSeed / 233280;
+  };
+  
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
 };
 
+
+// const shuffleArray = (array) => {
+//   const shuffled = [...array];
+//   for (let i = shuffled.length - 1; i > 0; i--) {
+//     const j = Math.floor(Math.random() * (i + 1));
+//     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+//   }
+//   return shuffled;
+// };
+
 export default function SurveyScreen({ navigation, route }) {
   const { sessionId } = route.params;
-  const [questions, setQuestions] = useState([]);
+  const [allQuestions, setAllQuestions] = useState([]); // Add this state
+  const [shuffledQuestions, setShuffledQuestions] = useState([]); // Add this state
+  const [questions, setQuestions] = useState([]); // Keep this for compatibility
   
   const [confirmedQuestions, setConfirmedQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selections, setSelections] = useState(() => {
-    const initialSelections = {};
-    questions.forEach((_, index) => {
-      initialSelections[index] = {};
-    });
-    return initialSelections;
-  });
+  const [selections, setSelections] = useState({});
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -114,60 +126,91 @@ export default function SurveyScreen({ navigation, route }) {
   const [isTimedOut, setIsTimedOut] = useState(false);
   const [penalties, setPenalties] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+   const [userSeed, setUserSeed] = useState(null);
 
-
-useEffect(() => {
-
-useEffect(() => {
-    const fetchQuestions = async () => {
+ useEffect(() => {
+    const initializeUserSeed = async () => {
       try {
-        // Get session level
-        const sessionResponse = await api.student.getSession(sessionId);
-        const level = sessionResponse.data?.level || 1;
-        
-        // Use the student API method
-        const questionsResponse = await api.student.getSurveyQuestions(level);
-        
-        // Ensure we have an array of questions
-        let questionsData = questionsResponse.data;
-        if (!Array.isArray(questionsData)) {
-          questionsData = [];
-        }
-        
-        // Set default questions if empty
-        if (questionsData.length === 0) {
-          questionsData = [
-            { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-            { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-            { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-          ];
-        }
-        
-        setAllQuestions(questionsData);
-        
-        // Shuffle the questions for this student
-        const shuffled = shuffleArray(questionsData);
-        setShuffledQuestions(shuffled);
-        
-        // Initialize selections for shuffled questions
-        const initialSelections = {};
-        shuffled.forEach((_, index) => {
-          initialSelections[index] = {};
-        });
-        setSelections(initialSelections);
-        
+        const authData = await auth.getAuthData();
+        // Create a unique seed using user ID + session ID
+        const seed = `${authData.userId}-${sessionId}`;
+        setUserSeed(seed);
       } catch (error) {
-        console.error('Questions fetch error:', error);
-        // Set default questions if there's an error
-        const defaultQuestions = [
+        // Fallback to random seed if auth fails
+        setUserSeed(Math.random().toString());
+      }
+    };
+    initializeUserSeed();
+  }, [sessionId]);
+
+
+useEffect(() => {
+  const fetchQuestions = async () => {
+    if (!userSeed) return;
+
+    try {
+      // Get session level
+      const sessionResponse = await api.student.getSession(sessionId);
+      const level = sessionResponse.data?.level || 1;
+      
+      // Use the student API method
+      const questionsResponse = await api.student.getSurveyQuestions(level);
+      
+      // Ensure we have an array of questions
+      let questionsData = questionsResponse.data;
+      if (!Array.isArray(questionsData)) {
+        questionsData = [];
+      }
+      
+      // Set default questions if empty
+      if (questionsData.length === 0) {
+        questionsData = [
           { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
           { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
           { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
         ];
-        setAllQuestions(defaultQuestions);
-        
-        const shuffled = shuffleArray(defaultQuestions);
+      }
+      
+      setAllQuestions(questionsData);
+      
+      // Convert userSeed to a consistent numeric value
+      let numericSeed = 0;
+      for (let i = 0; i < userSeed.length; i++) {
+        numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
+      }
+      
+      // Shuffle the questions using the user-specific seed
+      const shuffled = seededShuffle(questionsData, numericSeed);
+      setShuffledQuestions(shuffled);
+      setQuestions(shuffled);
+      
+      // Initialize selections for shuffled questions
+      const initialSelections = {};
+      shuffled.forEach((_, index) => {
+        initialSelections[index] = {};
+      });
+      setSelections(initialSelections);
+      
+    } catch (error) {
+      console.error('Questions fetch error:', error);
+      // Set default questions if there's an error
+      const defaultQuestions = [
+        { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+        { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+        { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+      ];
+      
+      setAllQuestions(defaultQuestions);
+      
+      // Use userSeed for shuffling even with default questions
+      if (userSeed) {
+        let numericSeed = 0;
+        for (let i = 0; i < userSeed.length; i++) {
+          numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
+        }
+        const shuffled = seededShuffle(defaultQuestions, numericSeed);
         setShuffledQuestions(shuffled);
+        setQuestions(shuffled);
         
         const initialSelections = {};
         shuffled.forEach((_, index) => {
@@ -175,58 +218,79 @@ useEffect(() => {
         });
         setSelections(initialSelections);
       }
-    };
-
-    fetchQuestions();
-  }, [sessionId]);
-
-
-
-//   const fetchQuestions = async () => {
-//     try {
-//         // Get session level
-//         const sessionResponse = await api.student.getSession(sessionId);
-//         const level = sessionResponse.data?.level || 1;
-        
-//         // Use the student API method
-//         const questionsResponse = await api.student.getSurveyQuestions(level);
-        
-//         // Ensure we have an array of questions
-//         let questionsData = questionsResponse.data;
-//         if (!Array.isArray(questionsData)) {
-//             questionsData = [];
-//         }
-        
-//         // Set default questions if empty
-//         if (questionsData.length === 0) {
-//             questionsData = [
-//                 { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-//                 { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-//                 { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-//             ];
-//         }
-        
-//         setAllQuestions(questionsData);
-//         const initialSelections = {};
-//         shuffled.forEach((_, index) => {
-//           initialSelections[index] = {};
-//         });
-//         setSelections(initialSelections);
-//     } catch (error) {
-//         console.error('Questions fetch error:', error);
-//         // Set default questions if there's an error
-//         setQuestions([
-//             { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-//             { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-//             { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-//         ]);
-//     }
-// };
+    }
+  };
 
   fetchQuestions();
-}, [sessionId]);
+}, [sessionId, userSeed]);
+
+
+  // useEffect(() => {
+  //   const fetchQuestions = async () => {
+  //     try {
+  //       // Get session level
+  //       const sessionResponse = await api.student.getSession(sessionId);
+  //       const level = sessionResponse.data?.level || 1;
+        
+  //       // Use the student API method
+  //       const questionsResponse = await api.student.getSurveyQuestions(level);
+        
+  //       // Ensure we have an array of questions
+  //       let questionsData = questionsResponse.data;
+  //       if (!Array.isArray(questionsData)) {
+  //         questionsData = [];
+  //       }
+        
+  //       // Set default questions if empty
+  //       if (questionsData.length === 0) {
+  //         questionsData = [
+  //           { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+  //           { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+  //           { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+  //         ];
+  //       }
+        
+  //       setAllQuestions(questionsData);
+        
+  //       // Shuffle the questions for this student
+  //       const shuffled = shuffleArray(questionsData);
+  //       setShuffledQuestions(shuffled);
+  //       setQuestions(shuffled); // Also set the original questions state for compatibility
+        
+  //       // Initialize selections for shuffled questions
+  //       const initialSelections = {};
+  //       shuffled.forEach((_, index) => {
+  //         initialSelections[index] = {};
+  //       });
+  //       setSelections(initialSelections);
+        
+  //     } catch (error) {
+  //       console.error('Questions fetch error:', error);
+  //       // Set default questions if there's an error
+  //       const defaultQuestions = [
+  //         { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+  //         { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+  //         { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+  //       ];
+        
+  //       setAllQuestions(defaultQuestions);
+  //       const shuffled = shuffleArray(defaultQuestions);
+  //       setShuffledQuestions(shuffled);
+  //       setQuestions(shuffled); // Also set the original questions state for compatibility
+        
+  //       const initialSelections = {};
+  //       shuffled.forEach((_, index) => {
+  //         initialSelections[index] = {};
+  //       });
+  //       setSelections(initialSelections);
+  //     }
+  //   };
+
+  //   fetchQuestions();
+  // }, [sessionId]);
+
   // Timer management
-useEffect(() => {
+  useEffect(() => {
     let timerInterval;
     let timeoutCheckInterval;
     
@@ -313,9 +377,9 @@ useEffect(() => {
         clearInterval(timerInterval);
         clearInterval(timeoutCheckInterval);
     };
-}, [currentQuestion]);
+  }, [currentQuestion]);
 
-useEffect(() => {
+  useEffect(() => {
     const fetchParticipants = async () => {
       try {
         setLoading(true);
@@ -341,7 +405,7 @@ useEffect(() => {
         
         setSelections(prev => {
           const newSelections = {...prev};
-          questions.forEach((_, index) => {
+          shuffledQuestions.forEach((_, index) => {
             if (!newSelections[index]) {
               newSelections[index] = {};
             }
@@ -356,8 +420,10 @@ useEffect(() => {
       }
     };
 
-    fetchParticipants();
-}, [sessionId]);
+    if (shuffledQuestions.length > 0) {
+      fetchParticipants();
+    }
+  }, [sessionId, shuffledQuestions]);
 
   const handleSelect = (rank, memberId) => {
     setSelections(prev => ({
@@ -369,7 +435,7 @@ useEffect(() => {
     }));
   };
 
-const confirmCurrentQuestion = async () => {
+  const confirmCurrentQuestion = async () => {
     const currentSelections = selections[currentQuestion] || {};
     const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
     
@@ -412,16 +478,18 @@ const confirmCurrentQuestion = async () => {
     proceedToNextQuestion();
   };
 
-  const proceedToNextQuestion = async () => {
+    const proceedToNextQuestion = async () => {
     setIsSubmitting(true);
     
     try {
       // Only submit if there are selections
       const currentSelections = selections[currentQuestion] || {};
       if (Object.keys(currentSelections).length > 0) {
-        // Get the original question ID from the shuffled array
-        const originalQuestion = shuffledQuestions[currentQuestion];
-        const originalQuestionIndex = allQuestions.findIndex(q => q.id === originalQuestion.id);
+        // Get the original question from the shuffled array
+        const shuffledQuestion = shuffledQuestions[currentQuestion];
+        
+        // Find the original index in allQuestions
+        const originalQuestionIndex = allQuestions.findIndex(q => q.id === shuffledQuestion.id);
         
         const responseData = {
           sessionId,
@@ -467,7 +535,7 @@ const confirmCurrentQuestion = async () => {
   const currentRankings = selections[currentQuestion] || {};
 
   return (
-    <View style={styles.container}>
+   <View style={styles.container}>
       <View style={styles.timerContainer}>
         <Text style={styles.timerText}>
           Time remaining: {timeRemaining}s
@@ -485,8 +553,8 @@ const confirmCurrentQuestion = async () => {
       </View>
       
       <Text style={styles.question}>
-  Q{currentQuestion + 1}: {questions[currentQuestion]?.text || 'Question loading...'}
-</Text>
+        Q{currentQuestion + 1}: {shuffledQuestions[currentQuestion]?.text || 'Question loading...'}
+      </Text>
       
       <Text style={styles.instructions}>
         Select top 3 performers (you cannot select yourself)
@@ -538,7 +606,7 @@ const confirmCurrentQuestion = async () => {
         {confirmedQuestions.includes(currentQuestion) ? (
           <View style={styles.confirmedContainer}>
             <Text style={styles.confirmedText}>✓ Confirmed</Text>
-            {currentQuestion < questions.length - 1 && (
+            {currentQuestion < shuffledQuestions.length - 1 && (
               <TouchableOpacity
                 style={[styles.navButton, styles.primaryButton]}
                 onPress={() => setCurrentQuestion(currentQuestion + 1)}
@@ -562,7 +630,7 @@ const confirmCurrentQuestion = async () => {
               <ActivityIndicator color="white" />
             ) : (
               <Text>
-                {currentQuestion < questions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
+                {currentQuestion < shuffledQuestions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
               </Text>
             )}
           </TouchableOpacity>
