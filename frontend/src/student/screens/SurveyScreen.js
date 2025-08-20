@@ -85,6 +85,15 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
   );
 };
 
+const shuffleArray = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 export default function SurveyScreen({ navigation, route }) {
   const { sessionId } = route.params;
   const [questions, setQuestions] = useState([]);
@@ -108,8 +117,10 @@ export default function SurveyScreen({ navigation, route }) {
 
 
 useEffect(() => {
-const fetchQuestions = async () => {
-    try {
+
+useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
         // Get session level
         const sessionResponse = await api.student.getSession(sessionId);
         const level = sessionResponse.data?.level || 1;
@@ -120,29 +131,97 @@ const fetchQuestions = async () => {
         // Ensure we have an array of questions
         let questionsData = questionsResponse.data;
         if (!Array.isArray(questionsData)) {
-            questionsData = [];
+          questionsData = [];
         }
         
         // Set default questions if empty
         if (questionsData.length === 0) {
-            questionsData = [
-                { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-                { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-                { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-            ];
-        }
-        
-        setQuestions(questionsData);
-    } catch (error) {
-        console.error('Questions fetch error:', error);
-        // Set default questions if there's an error
-        setQuestions([
+          questionsData = [
             { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
             { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
             { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-        ]);
-    }
-};
+          ];
+        }
+        
+        setAllQuestions(questionsData);
+        
+        // Shuffle the questions for this student
+        const shuffled = shuffleArray(questionsData);
+        setShuffledQuestions(shuffled);
+        
+        // Initialize selections for shuffled questions
+        const initialSelections = {};
+        shuffled.forEach((_, index) => {
+          initialSelections[index] = {};
+        });
+        setSelections(initialSelections);
+        
+      } catch (error) {
+        console.error('Questions fetch error:', error);
+        // Set default questions if there's an error
+        const defaultQuestions = [
+          { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+          { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+          { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+        ];
+        setAllQuestions(defaultQuestions);
+        
+        const shuffled = shuffleArray(defaultQuestions);
+        setShuffledQuestions(shuffled);
+        
+        const initialSelections = {};
+        shuffled.forEach((_, index) => {
+          initialSelections[index] = {};
+        });
+        setSelections(initialSelections);
+      }
+    };
+
+    fetchQuestions();
+  }, [sessionId]);
+
+
+
+//   const fetchQuestions = async () => {
+//     try {
+//         // Get session level
+//         const sessionResponse = await api.student.getSession(sessionId);
+//         const level = sessionResponse.data?.level || 1;
+        
+//         // Use the student API method
+//         const questionsResponse = await api.student.getSurveyQuestions(level);
+        
+//         // Ensure we have an array of questions
+//         let questionsData = questionsResponse.data;
+//         if (!Array.isArray(questionsData)) {
+//             questionsData = [];
+//         }
+        
+//         // Set default questions if empty
+//         if (questionsData.length === 0) {
+//             questionsData = [
+//                 { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+//                 { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+//                 { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+//             ];
+//         }
+        
+//         setAllQuestions(questionsData);
+//         const initialSelections = {};
+//         shuffled.forEach((_, index) => {
+//           initialSelections[index] = {};
+//         });
+//         setSelections(initialSelections);
+//     } catch (error) {
+//         console.error('Questions fetch error:', error);
+//         // Set default questions if there's an error
+//         setQuestions([
+//             { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+//             { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+//             { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+//         ]);
+//     }
+// };
 
   fetchQuestions();
 }, [sessionId]);
@@ -295,75 +374,79 @@ const confirmCurrentQuestion = async () => {
     const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
     
     if (!hasAtLeastOneRank && !penalties[currentQuestion]) {
-        Alert.alert(
-            "Incomplete Ranking",
-            "You haven't selected any rankings for this question. " +
-            "You'll receive a penalty if you proceed without selections.",
-            [
-                {
-                    text: "Cancel",
-                    style: "cancel"
-                },
-                {
-                    text: "Proceed Anyway",
-                    onPress: async () => {
-                        // Apply penalty for incomplete question
-                        try {
-                            const authData = await auth.getAuthData();
-                            await api.student.applyQuestionPenalty(
-                                sessionId,
-                                currentQuestion + 1,
-                                authData.userId
-                            );
-                            setPenalties(prev => ({
-                                ...prev,
-                                [currentQuestion]: true
-                            }));
-                            proceedToNextQuestion();
-                        } catch (err) {
-                            console.log('Penalty application error:', err);
-                        }
-                    }
-                }
-            ]
-        );
-        return;
+      Alert.alert(
+        "Incomplete Ranking",
+        "You haven't selected any rankings for this question. " +
+        "You'll receive a penalty if you proceed without selections.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Proceed Anyway",
+            onPress: async () => {
+              // Apply penalty for incomplete question
+              try {
+                const authData = await auth.getAuthData();
+                await api.student.applyQuestionPenalty(
+                  sessionId,
+                  currentQuestion + 1,
+                  authData.userId
+                );
+                setPenalties(prev => ({
+                  ...prev,
+                  [currentQuestion]: true
+                }));
+                proceedToNextQuestion();
+              } catch (err) {
+                console.log('Penalty application error:', err);
+              }
+            }
+          }
+        ]
+      );
+      return;
     }
 
     proceedToNextQuestion();
-};
+  };
 
-
-const proceedToNextQuestion = async () => {
+  const proceedToNextQuestion = async () => {
     setIsSubmitting(true);
     
     try {
-        // Only submit if there are selections
-        const currentSelections = selections[currentQuestion] || {};
-        if (Object.keys(currentSelections).length > 0) {
-            const responseData = {
-                sessionId,
-                responses: {
-                    [currentQuestion + 1]: currentSelections
-                }
-            };
-            await api.student.submitSurvey(responseData);
-        }
-
-        setConfirmedQuestions(prev => [...prev, currentQuestion]);
+      // Only submit if there are selections
+      const currentSelections = selections[currentQuestion] || {};
+      if (Object.keys(currentSelections).length > 0) {
+        // Get the original question ID from the shuffled array
+        const originalQuestion = shuffledQuestions[currentQuestion];
+        const originalQuestionIndex = allQuestions.findIndex(q => q.id === originalQuestion.id);
         
-        if (currentQuestion === questions.length - 1) {
-            await api.student.markSurveyCompleted(sessionId);
-            navigation.replace('Waiting', { sessionId });
-        } else {
-            setCurrentQuestion(prev => prev + 1);
-        }
+        const responseData = {
+          sessionId,
+          responses: {
+            [originalQuestionIndex + 1]: currentSelections // Use original question number
+          }
+        };
+        await api.student.submitSurvey(responseData);
+      }
+
+      setConfirmedQuestions(prev => [...prev, currentQuestion]);
+      
+      if (currentQuestion === shuffledQuestions.length - 1) {
+        await api.student.markSurveyCompleted(sessionId);
+        navigation.replace('Waiting', { sessionId });
+      } else {
+        setCurrentQuestion(prev => prev + 1);
+      }
     } catch (error) {
-        // ... existing error handling ...
+      console.error('Error submitting survey:', error);
+      Alert.alert('Error', 'Failed to submit survey. Please try again.');
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-};
+  };
 
   if (loading) {
     return (

@@ -293,12 +293,7 @@ export default function Dashboard({ navigation }) {
 
       {venues.map(venue => (
         <View key={venue.id} style={styles.venueCard}>
-          {/* <View style={styles.venueInfo}>
-            <Text style={styles.venueName}>{venue.name}</Text>
-            <Text>Capacity: {venue.capacity}</Text>
-            <Text>Timing: {venue.session_timing || 'Not specified'}</Text>
-            <Text>Table: {venue.table_details || 'Not specified'}</Text>
-          </View> */}
+      
 
           <View style={[
             styles.levelTag,

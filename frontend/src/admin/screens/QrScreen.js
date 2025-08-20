@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Button, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
@@ -18,6 +18,52 @@ export default function QrScreen({ route, navigation }) {
     isNew: false,
     isFull: false
   });
+
+  // Use refs to track state without causing re-renders
+  const isAutoGeneratingRef = useRef(false);
+  const currentQRIdRef = useRef(null);
+  const qrStatsRef = useRef(qrStats);
+  const expiryTimeRef = useRef('');
+  const isScreenActiveRef = useRef(true);
+  const intervalRef = useRef(null);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    currentQRIdRef.current = currentQRId;
+    qrStatsRef.current = qrStats;
+    expiryTimeRef.current = expiryTime;
+  }, [currentQRId, qrStats, expiryTime]);
+
+  // Track screen focus state
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      isScreenActiveRef.current = true;
+      // Refresh data when screen comes into focus
+      if (!isLoading) {
+        fetchQR(false, false);
+      }
+    });
+
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      isScreenActiveRef.current = false;
+      // Stop any auto-generation when screen loses focus
+      isAutoGeneratingRef.current = false;
+      // Clear interval when screen is not visible
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    });
+
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+      // Clean up interval on component unmount
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [navigation, isLoading]);
 
   if (!route?.params?.venue?.id) {
     return (
@@ -39,9 +85,9 @@ export default function QrScreen({ route, navigation }) {
       const storedData = await AsyncStorage.getItem(`qr_${venue.id}`);
       if (storedData) {
         const { qrData, expiry, qrId, isFull } = JSON.parse(storedData);
-        // Don't use stored QR if it's full (unless it's the current one)
-        if (!isFull && new Date(expiry) > new Date()) {
-          return { qrData, expiry, qrId };
+        // Return stored QR regardless of fullness for display
+        if (new Date(expiry) > new Date()) {
+          return { qrData, expiry, qrId, isFull };
         }
       }
       return null;
@@ -65,55 +111,50 @@ export default function QrScreen({ route, navigation }) {
     }
   };
 
-  const fetchQR = async (forceNew = false, autoGenerate = false) => {
+  // Safe date conversion function to prevent "Date value out of bounds" error
+  const safeToISOString = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date string:', dateString);
+        return new Date().toISOString(); // Return current date as fallback
+      }
+      return date.toISOString();
+    } catch (error) {
+      console.error('Error converting date to ISO string:', error);
+      return new Date().toISOString(); // Return current date as fallback
+    }
+  };
+
+  const fetchQR = async (forceNew = false, isAutoGenerate = false) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      // Check if we have a valid stored QR code that's not full
-      if (!forceNew && !autoGenerate) {
+      // For manual refresh or initial load, use stored QR if available
+      if (!forceNew && !isAutoGenerate) {
         const stored = await getStoredQR();
         if (stored) {
           setQrData(stored.qrData);
           setExpiryTime(new Date(stored.expiry).toLocaleTimeString());
           setCurrentQRId(stored.qrId);
           
-          // Fetch current usage stats
-          try {
-            const statsResponse = await api.get('/admin/qr/manage', {
-              params: { venue_id: venue.id }
-            });
-            
-            if (statsResponse.data && Array.isArray(statsResponse.data)) {
-              const currentQR = statsResponse.data.find(qr => qr.id === stored.qrId);
-              if (currentQR) {
-                const isFull = currentQR.current_usage >= currentQR.max_capacity;
-                
-                setQrStats({
-                  maxCapacity: currentQR.max_capacity,
-                  currentUsage: currentQR.current_usage,
-                  remainingSlots: currentQR.remaining,
-                  isNew: false,
-                  isFull: isFull
-                });
-                
-                // Update storage if QR status changed
-                await storeQR(stored.qrData, stored.expiry, stored.qrId, isFull);
-                
-                // If QR is full and this is auto-generation, generate new one
-                if (isFull && autoGenerate) {
-                  console.log('QR is full, auto-generating new one...');
-                  await fetchQR(true, true);
-                  return;
-                }
-              }
-            }
-          } catch (statsError) {
-            console.error('Error fetching QR stats:', statsError);
+          const isFull = stored.isFull || false;
+          setQrStats(prev => ({
+            ...prev,
+            isFull: isFull,
+            currentUsage: isFull ? 2 : 0 // Set usage to 2 if full
+          }));
+
+          // If stored QR is full and this is auto-generation, skip to generate new one
+          if (isFull && isAutoGenerate) {
+            console.log('Stored QR is full, proceeding to generate new one...');
+            // Continue to generate new QR
+          } else {
+            setIsLoading(false);
+            return;
           }
-          
-          setIsLoading(false);
-          return;
         }
       }
 
@@ -127,8 +168,8 @@ export default function QrScreen({ route, navigation }) {
         force_new: forceNew
       };
       
-      // Add auto_generate parameter for backend to distinguish auto vs manual generation
-      if (autoGenerate) {
+      // Add auto_generate parameter only for true auto-generation
+      if (isAutoGenerate) {
         params.auto_generate = 'true';
       }
 
@@ -149,92 +190,110 @@ export default function QrScreen({ route, navigation }) {
         const currentUsage = response.data.current_usage || 0;
         const remainingSlots = maxCapacity - currentUsage;
         const isFull = response.data.is_full || (remainingSlots === 0);
+        const isNew = response.data.is_new || false;
         
         setQrStats({
           maxCapacity: maxCapacity,
           currentUsage: currentUsage,
           remainingSlots: remainingSlots,
-          isNew: response.data.is_new || false,
+          isNew: isNew,
           isFull: isFull
         });
         
-        // Store the new QR code
-        await storeQR(response.data.qr_string, expiry.toISOString(), response.data.qr_id, isFull);
+        // Store the new QR code using safe date conversion
+        const safeExpiryISO = safeToISOString(response.data.expires_at);
+        await storeQR(response.data.qr_string, safeExpiryISO, response.data.qr_id, isFull);
         
         // Show alert if this is a new QR code (only for manual generation)
-        if (response.data.is_new && !autoGenerate) {
+        if (isNew && !isAutoGenerate) {
           Alert.alert(
             'New QR Code Generated',
             'A new QR code has been created for this venue.',
             [{ text: 'OK' }]
           );
         }
+
+        // Reset auto-generating flag
+        isAutoGeneratingRef.current = false;
       } else {
         throw new Error(response.data?.error || 'Invalid QR data received');
       }
     } catch (error) {
       console.error('QR Generation Error:', error.message);
       setError(error.message);
+      isAutoGeneratingRef.current = false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Auto-refresh QR when it becomes full (only for auto-generation)
-  useEffect(() => {
-    const checkQRStatus = async () => {
-      if (currentQRId && qrStats.isFull && !qrStats.isNew && !isLoading) {
-        // QR is full, generate a new one automatically
-        console.log('QR is full, auto-generating new one...');
-        await fetchQR(true, true);
-      }
-    };
+  // Check if we need to auto-generate new QR
+  const checkAutoGeneration = async () => {
+    // Don't auto-generate if screen is not active
+    if (!isScreenActiveRef.current || isAutoGeneratingRef.current || !currentQRIdRef.current) {
+      return;
+    }
 
-    checkQRStatus();
-  }, [qrStats.isFull, currentQRId, isLoading]);
-
-  useEffect(() => {
-    fetchQR();
-    
-    // Set up interval to check QR status every 10 seconds for auto-generation
-    const interval = setInterval(async () => {
-      if (currentQRId && !qrStats.isNew && !isLoading) {
-        try {
-          const statsResponse = await api.get('/admin/qr/manage', {
-            params: { venue_id: venue.id }
-          });
+    try {
+      // Check current QR status from server
+      const statsResponse = await api.get('/admin/qr/manage', {
+        params: { venue_id: venue.id }
+      });
+      
+      if (statsResponse.data && Array.isArray(statsResponse.data)) {
+        const currentQR = statsResponse.data.find(qr => qr.id === currentQRIdRef.current);
+        if (currentQR) {
+          const isFull = currentQR.current_usage >= currentQR.max_capacity;
           
-          if (statsResponse.data && Array.isArray(statsResponse.data)) {
-            const currentQR = statsResponse.data.find(qr => qr.id === currentQRId);
-            if (currentQR) {
-              const isFull = currentQR.current_usage >= currentQR.max_capacity;
-              
-              setQrStats(prev => ({
-                ...prev,
-                currentUsage: currentQR.current_usage,
-                remainingSlots: currentQR.remaining,
-                isFull: isFull
-              }));
-              
-              // Update storage if QR status changed
-              if (isFull !== prev.isFull) {
-                await storeQR(qrData, new Date(expiryTime).toISOString(), currentQRId, isFull);
-              }
-            }
+          // Update UI state
+          setQrStats(prev => ({
+            ...prev,
+            currentUsage: currentQR.current_usage,
+            remainingSlots: currentQR.remaining,
+            isFull: isFull
+          }));
+          
+          // Update storage using safe date conversion
+          const safeExpiryISO = safeToISOString(expiryTimeRef.current);
+          await storeQR(qrData, safeExpiryISO, currentQRIdRef.current, isFull);
+          
+          // Auto-generate only if QR is completely full (2/2) and not already generating
+          // AND only if screen is active
+          if (isFull && currentQR.current_usage === 2 && !isAutoGeneratingRef.current && isScreenActiveRef.current) {
+            console.log('QR is completely full (2/2), auto-generating new one...');
+            isAutoGeneratingRef.current = true;
+            await fetchQR(true, true);
           }
-        } catch (error) {
-          console.error('Error checking QR status:', error);
         }
       }
-    }, 10000); // Check every 10 seconds
+    } catch (error) {
+      console.error('Error checking QR status:', error);
+    }
+  };
 
-    return () => clearInterval(interval);
-  }, [venue?.id, currentQRId, qrData, expiryTime, isLoading]);
+  // Initial load
+  useEffect(() => {
+    fetchQR(false, false);
+    
+    // Set up interval for status checks only when screen is active
+    intervalRef.current = setInterval(() => {
+      if (isScreenActiveRef.current) {
+        checkAutoGeneration();
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => {
+      // Clean up interval on component unmount
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [venue?.id]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.venueName}>{venue.name}</Text>
-      <Text style={styles.capacity}>Capacity: {venue.capacity}</Text>
+      <Text style={styles.capacity}>Venue Capacity: {venue.capacity}</Text>
       
       {qrStats.isNew && (
         <View style={styles.newBadge}>
@@ -278,16 +337,8 @@ export default function QrScreen({ route, navigation }) {
             {qrStats.isFull && (
               <View style={styles.fullWarningContainer}>
                 <Text style={styles.fullWarning}>
-                  This QR is full. A new one will be generated automatically.
+                  This QR is full. {qrStats.currentUsage === 2 ? 'New QR generating...' : 'Scanning may fail.'}
                 </Text>
-                {!qrStats.isNew && (
-                  <TouchableOpacity 
-                    style={styles.forceNewButton}
-                    onPress={() => fetchQR(true, false)}
-                  >
-                    <Text style={styles.forceNewText}>Generate Now</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             )}
           </View>
@@ -298,10 +349,22 @@ export default function QrScreen({ route, navigation }) {
 
       <TouchableOpacity 
         style={styles.refreshButton}
-        onPress={() => fetchQR(false, false)} // Manual refresh - don't auto-generate
+        onPress={() => fetchQR(false, false)}
+        disabled={isLoading}
       >
         <Icon name="refresh" size={24} color="#2e86de" />
         <Text style={styles.refreshText}>Refresh Status</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.refreshButton, { marginTop: 10 }]}
+        onPress={() => fetchQR(true, false)}
+        disabled={isLoading}
+      >
+        <Icon name="add" size={24} color="#ff4757" />
+        <Text style={[styles.refreshText, { color: '#ff4757' }]}>
+          Generate New QR
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -340,20 +403,28 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: '#eee',
+    borderRadius: 10,
+    backgroundColor: '#f9f9f9',
   },
   expiry: {
     fontSize: 14,
     color: '#888',
     marginBottom: 10,
+    fontWeight: '500',
   },
   capacityInfo: {
     marginBottom: 20,
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 15,
+    borderRadius: 10,
+    width: '100%',
   },
   capacityText: {
     fontSize: 16,
     color: '#555',
     marginBottom: 5,
+    fontWeight: '600',
   },
   fullText: {
     color: 'red',
@@ -362,43 +433,42 @@ const styles = StyleSheet.create({
   fullWarningContainer: {
     alignItems: 'center',
     marginTop: 10,
+    padding: 10,
+    backgroundColor: '#fff5f5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffe6e6',
   },
   fullWarning: {
-    color: 'red',
+    color: '#e53e3e',
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 10,
-    fontStyle: 'italic',
-  },
-  forceNewButton: {
-    backgroundColor: '#ff4757',
-    padding: 10,
-    borderRadius: 5,
-  },
-  forceNewText: {
-    color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '500',
   },
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#f1f8ff',
+    borderRadius: 8,
+    marginTop: 10,
   },
   refreshText: {
     marginLeft: 10,
     color: '#2e86de',
     fontSize: 16,
+    fontWeight: '600',
   },
   error: {
     color: 'red',
     marginVertical: 20,
+    textAlign: 'center',
+    fontWeight: '500',
   }
 });
 
-
 // import React, { useState, useEffect } from 'react';
-// import { View, Text, StyleSheet, TouchableOpacity, Button } from 'react-native';
+// import { View, Text, StyleSheet, TouchableOpacity, Button, Alert } from 'react-native';
 // import Icon from 'react-native-vector-icons/MaterialIcons';
 // import QRCode from 'react-native-qrcode-svg';
 // import api from '../services/api';
@@ -411,9 +481,10 @@ const styles = StyleSheet.create({
 //   const [error, setError] = useState(null);
 //   const [currentQRId, setCurrentQRId] = useState(null);
 //   const [qrStats, setQrStats] = useState({
-//     maxCapacity: 2,
+//     maxCapacity: 0,
 //     currentUsage: 0,
-//     remainingSlots: 2
+//     remainingSlots: 0,
+//     isNew: false
 //   });
 
 //   if (!route?.params?.venue?.id) {
@@ -435,8 +506,9 @@ const styles = StyleSheet.create({
 //     try {
 //       const storedData = await AsyncStorage.getItem(`qr_${venue.id}`);
 //       if (storedData) {
-//         const { qrData, expiry, qrId } = JSON.parse(storedData);
-//         if (new Date(expiry) > new Date()) {
+//         const { qrData, expiry, qrId, isFull } = JSON.parse(storedData);
+//         // Don't use stored QR if it's full
+//         if (!isFull && new Date(expiry) > new Date()) {
 //           return { qrData, expiry, qrId };
 //         }
 //       }
@@ -448,12 +520,13 @@ const styles = StyleSheet.create({
 //   };
 
 //   // Store QR data for this venue
-//   const storeQR = async (qrData, expiry, qrId) => {
+//   const storeQR = async (qrData, expiry, qrId, isFull = false) => {
 //     try {
 //       await AsyncStorage.setItem(`qr_${venue.id}`, JSON.stringify({
 //         qrData,
 //         expiry,
-//         qrId
+//         qrId,
+//         isFull
 //       }));
 //     } catch (error) {
 //       console.error('Error storing QR:', error);
@@ -465,13 +538,40 @@ const styles = StyleSheet.create({
 //       setIsLoading(true);
 //       setError(null);
       
-//       // Check if we have a valid stored QR code
+//       // Check if we have a valid stored QR code that's not full
 //       if (!forceNew) {
 //         const stored = await getStoredQR();
 //         if (stored) {
 //           setQrData(stored.qrData);
 //           setExpiryTime(new Date(stored.expiry).toLocaleTimeString());
 //           setCurrentQRId(stored.qrId);
+          
+//           // Fetch current usage stats
+//           try {
+//             const statsResponse = await api.get('/admin/qr/manage', {
+//               params: { venue_id: venue.id }
+//             });
+            
+//             if (statsResponse.data && Array.isArray(statsResponse.data)) {
+//               const currentQR = statsResponse.data.find(qr => qr.id === stored.qrId);
+//               if (currentQR) {
+//                 setQrStats({
+//                   maxCapacity: currentQR.max_capacity,
+//                   currentUsage: currentQR.current_usage,
+//                   remainingSlots: currentQR.remaining,
+//                   isNew: false
+//                 });
+                
+//                 // Update storage if QR is now full
+//                 if (currentQR.current_usage >= currentQR.max_capacity) {
+//                   await storeQR(stored.qrData, stored.expiry, stored.qrId, true);
+//                 }
+//               }
+//             }
+//           } catch (statsError) {
+//             console.error('Error fetching QR stats:', statsError);
+//           }
+          
 //           setIsLoading(false);
 //           return;
 //         }
@@ -497,17 +597,30 @@ const styles = StyleSheet.create({
 //         setExpiryTime(expiry.toLocaleTimeString());
 //         setCurrentQRId(response.data.qr_id);
         
-//         // Update stats if available from the response
-//         if (response.data.max_capacity !== undefined && response.data.current_usage !== undefined) {
-//           setQrStats({
-//             maxCapacity: response.data.max_capacity,
-//             currentUsage: response.data.current_usage,
-//             remainingSlots: response.data.max_capacity - response.data.current_usage
-//           });
-//         }
+//         // Update stats - use venue capacity as max capacity
+//         const maxCapacity = venue.capacity || response.data.max_capacity || 2;
+//         const currentUsage = response.data.current_usage || 0;
+//         const remainingSlots = maxCapacity - currentUsage;
+        
+//         setQrStats({
+//           maxCapacity: maxCapacity,
+//           currentUsage: currentUsage,
+//           remainingSlots: remainingSlots,
+//           isNew: response.data.is_new || false
+//         });
         
 //         // Store the new QR code
-//         await storeQR(response.data.qr_string, expiry.toISOString(), response.data.qr_id);
+//         const isFull = currentUsage >= maxCapacity;
+//         await storeQR(response.data.qr_string, expiry.toISOString(), response.data.qr_id, isFull);
+        
+//         // Show alert if this is a new QR code
+//         if (response.data.is_new) {
+//           Alert.alert(
+//             'New QR Code Generated',
+//             'A new QR code has been created for this venue.',
+//             [{ text: 'OK' }]
+//           );
+//         }
 //       } else {
 //         throw new Error(response.data?.error || 'Invalid QR data received');
 //       }
@@ -519,17 +632,64 @@ const styles = StyleSheet.create({
 //     }
 //   };
 
+//   // Auto-refresh QR when it becomes full
+//   useEffect(() => {
+//     const checkQRStatus = async () => {
+//       if (currentQRId && qrStats.remainingSlots === 0 && !qrStats.isNew) {
+//         // QR is full, generate a new one automatically
+//         console.log('QR is full, generating new one...');
+//         await fetchQR(true);
+//       }
+//     };
+
+//     checkQRStatus();
+//   }, [qrStats.remainingSlots, currentQRId]);
+
 //   useEffect(() => {
 //     fetchQR();
-//     return () => {
-//       // Cleanup
-//     };
-//   }, [venue?.id]);
+    
+//     // Set up interval to check QR status every 30 seconds
+//     const interval = setInterval(async () => {
+//       if (currentQRId && !qrStats.isNew) {
+//         try {
+//           const statsResponse = await api.get('/admin/qr/manage', {
+//             params: { venue_id: venue.id }
+//           });
+          
+//           if (statsResponse.data && Array.isArray(statsResponse.data)) {
+//             const currentQR = statsResponse.data.find(qr => qr.id === currentQRId);
+//             if (currentQR) {
+//               setQrStats(prev => ({
+//                 ...prev,
+//                 currentUsage: currentQR.current_usage,
+//                 remainingSlots: currentQR.remaining
+//               }));
+              
+//               // Update storage if QR is now full
+//               if (currentQR.current_usage >= currentQR.max_capacity) {
+//                 await storeQR(qrData, new Date(expiryTime).toISOString(), currentQRId, true);
+//               }
+//             }
+//           }
+//         } catch (error) {
+//           console.error('Error checking QR status:', error);
+//         }
+//       }
+//     }, 30000); // Check every 30 seconds
+
+//     return () => clearInterval(interval);
+//   }, [venue?.id, currentQRId]);
 
 //   return (
 //     <View style={styles.container}>
 //       <Text style={styles.venueName}>{venue.name}</Text>
 //       <Text style={styles.capacity}>Capacity: {venue.capacity}</Text>
+      
+//       {qrStats.isNew && (
+//         <View style={styles.newBadge}>
+//           <Text style={styles.newBadgeText}>NEW QR CODE</Text>
+//         </View>
+//       )}
    
 //       {isLoading ? (
 //         <Text>Loading QR code...</Text>
@@ -552,12 +712,23 @@ const styles = StyleSheet.create({
 //           </View>
 //           <Text style={styles.expiry}>Valid until: {expiryTime}</Text>
 //           <View style={styles.capacityInfo}>
-//             <Text style={styles.capacityText}>
+//             <Text style={[
+//               styles.capacityText,
+//               qrStats.remainingSlots === 0 && styles.fullText
+//             ]}>
 //               Usage: {qrStats.currentUsage}/{qrStats.maxCapacity}
 //             </Text>
-//             <Text style={styles.capacityText}>
+//             <Text style={[
+//               styles.capacityText,
+//               qrStats.remainingSlots === 0 && styles.fullText
+//             ]}>
 //               Remaining: {qrStats.remainingSlots} slots
 //             </Text>
+//             {qrStats.remainingSlots === 0 && (
+//               <Text style={styles.fullWarning}>
+//                 This QR is full. A new one will be generated automatically.
+//               </Text>
+//             )}
 //           </View>
 //         </>
 //       ) : (
@@ -592,6 +763,17 @@ const styles = StyleSheet.create({
 //     color: '#666',
 //     marginBottom: 20,
 //   },
+//   newBadge: {
+//     backgroundColor: '#4CAF50',
+//     padding: 8,
+//     borderRadius: 12,
+//     marginBottom: 10,
+//   },
+//   newBadgeText: {
+//     color: 'white',
+//     fontWeight: 'bold',
+//     fontSize: 12,
+//   },
 //   qrContainer: {
 //     marginVertical: 20,
 //     padding: 10,
@@ -611,6 +793,17 @@ const styles = StyleSheet.create({
 //     fontSize: 16,
 //     color: '#555',
 //     marginBottom: 5,
+//   },
+//   fullText: {
+//     color: 'red',
+//     fontWeight: 'bold',
+//   },
+//   fullWarning: {
+//     color: 'red',
+//     fontSize: 14,
+//     textAlign: 'center',
+//     marginTop: 5,
+//     fontStyle: 'italic',
 //   },
 //   refreshButton: {
 //     flexDirection: 'row',
