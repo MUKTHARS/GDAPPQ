@@ -149,12 +149,13 @@ useEffect(() => {
     if (!userSeed) return;
 
     try {
+       const authData = await auth.getAuthData();
       // Get session level
       const sessionResponse = await api.student.getSession(sessionId);
       const level = sessionResponse.data?.level || 1;
       
       // Use the student API method
-      const questionsResponse = await api.student.getSurveyQuestions(level);
+      const questionsResponse = await api.student.getSurveyQuestions(level, sessionId, authData.userId);
       
       // Ensure we have an array of questions
       let questionsData = questionsResponse.data;

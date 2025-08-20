@@ -352,12 +352,16 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
     student_id: studentId
   }),
 
-  getSurveyQuestions: async (level, sessionId = '') => {
+  getSurveyQuestions: async (level, sessionId = '', studentId = '') => {
     try {
         const params = { level };
         // Add session_id parameter if provided
         if (sessionId) {
             params.session_id = sessionId;
+        }
+        // Add student_id parameter if provided
+        if (studentId) {
+            params.student_id = studentId;
         }
         
         // First try student-specific endpoint
@@ -373,7 +377,7 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
         
         // Fallback to admin endpoint if student endpoint fails
         const adminResponse = await api.get('/admin/questions', {
-            params: { level }, // Don't send session_id to admin endpoint
+            params: { level }, // Don't send session_id or student_id to admin endpoint
             validateStatus: (status) => status < 500
         });
         

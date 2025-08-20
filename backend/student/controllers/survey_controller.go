@@ -288,6 +288,7 @@ func HandleSurveyTimeout(sessionID string, studentID string, questionID int) err
 func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
     levelStr := r.URL.Query().Get("level")
     sessionID := r.URL.Query().Get("session_id")
+    studentID := r.URL.Query().Get("student_id") // Add student ID parameter
     
     level, err := strconv.Atoi(levelStr)
     if err != nil || level < 1 {
@@ -337,8 +338,11 @@ func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Shuffle questions based on session ID for consistent ordering per session
-    if sessionID != "" {
+    // Shuffle questions based on both session ID AND student ID for unique ordering per student
+    if sessionID != "" && studentID != "" {
+        uniqueSeed := sessionID + "-" + studentID
+        questions = shuffleQuestionsWithSeed(questions, uniqueSeed)
+    } else if sessionID != "" {
         questions = shuffleQuestionsWithSeed(questions, sessionID)
     }
 
