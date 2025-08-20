@@ -1,12 +1,9 @@
-// backend/admin/controllers/qr_controller.go
 package controllers
 
 import (
-	// "database/sql"
 	"encoding/json"
 	qr "gd/admin/utils"
 	"gd/database"
-	// "log"
 	"net/http"
 	"time"
 
@@ -24,67 +21,87 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
     // Check if force_new parameter is set
     forceNew := r.URL.Query().Get("force_new") == "true"
 
-    // If not forcing new, check for existing active QR code
+    // If not forcing new, check for existing active QR codes with available capacity
     if !forceNew {
-        var existingQR struct {
-            ID        string
-            QRData    string
-            ExpiresAt time.Time
+        var availableQR struct {
+            ID           string
+            QRData       string
+            ExpiresAt    time.Time
+            MaxCapacity  int
+            CurrentUsage int
         }
         
         err := database.GetDB().QueryRow(`
-            SELECT id, qr_data, expires_at 
+            SELECT id, qr_data, expires_at, max_capacity, current_usage
             FROM venue_qr_codes 
             WHERE venue_id = ? AND is_active = TRUE 
             AND expires_at > NOW()
+            AND current_usage < max_capacity
             ORDER BY created_at DESC LIMIT 1`,
             venueID,
-        ).Scan(&existingQR.ID, &existingQR.QRData, &existingQR.ExpiresAt)
+        ).Scan(&availableQR.ID, &availableQR.QRData, &availableQR.ExpiresAt, 
+              &availableQR.MaxCapacity, &availableQR.CurrentUsage)
 
         if err == nil {
-            // Found existing active QR code - return it
+            // Found available QR code - return it
             w.Header().Set("Content-Type", "application/json")
             json.NewEncoder(w).Encode(map[string]interface{}{
-                "success":    true,
-                "qr_string":  existingQR.QRData,
-                "expires_in": time.Until(existingQR.ExpiresAt).Minutes(),
-                "expires_at": existingQR.ExpiresAt.Format(time.RFC3339),
-                "qr_id":      existingQR.ID, 
+                "success":        true,
+                "qr_string":      availableQR.QRData,
+                "expires_in":     time.Until(availableQR.ExpiresAt).Minutes(),
+                "expires_at":     availableQR.ExpiresAt.Format(time.RFC3339),
+                "qr_id":          availableQR.ID,
+                "max_capacity":   availableQR.MaxCapacity,
+                "current_usage":  availableQR.CurrentUsage,
+                "remaining_slots": availableQR.MaxCapacity - availableQR.CurrentUsage,
+                "is_new":         false, // Indicate this is an existing QR
             })
             return
+        }
+        
+        // If we get here, no available QR was found (either expired or full)
+        // Check if there are any full QR codes that should be hidden
+        var fullQRCount int
+        database.GetDB().QueryRow(`
+            SELECT COUNT(*) FROM venue_qr_codes 
+            WHERE venue_id = ? AND is_active = TRUE 
+            AND expires_at > NOW()
+            AND current_usage >= max_capacity`,
+            venueID).Scan(&fullQRCount)
+            
+        if fullQRCount > 0 {
+            // There are full QR codes, so we should generate a new one
+            forceNew = true
         }
     }
 
     // Generate new QR code
     expiresAt := time.Now().Add(240 * time.Minute)
-    qrData, err := qr.GenerateSecureQR(venueID, 2400*time.Minute)
+    qrData, err := qr.GenerateSecureQR(venueID, 240*time.Minute)
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate QR code"})
         return
     }
 
-    // Deactivate any existing active QR codes for this venue
-    _, err = database.GetDB().Exec(`
-        UPDATE venue_qr_codes 
-        SET is_active = FALSE 
-        WHERE venue_id = ? AND is_active = TRUE`,
-        venueID)
+    // Generate a QR group ID for tracking
+    qrGroupID := uuid.New().String()
+    qrID := uuid.New().String()
+
+    // Get the venue's capacity to set appropriate max_capacity
+    var venueCapacity int
+    err = database.GetDB().QueryRow(`
+        SELECT capacity FROM venues WHERE id = ?`, venueID).Scan(&venueCapacity)
     if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "failed to deactivate existing QR codes"})
-        return
+        venueCapacity = 2 // Default fallback
     }
 
-    // Store the new QR code
-    qrID := uuid.New().String()
+    // Store the new QR code with proper capacity
     _, err = database.GetDB().Exec(`
         INSERT INTO venue_qr_codes 
-        (id, venue_id, qr_data, expires_at, is_active) 
-        VALUES (?, ?, ?, NOW() + INTERVAL 240 MINUTE, TRUE)`,
-        qrID,
-        venueID,
-        qrData)
+        (id, venue_id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id) 
+        VALUES (?, ?, ?, NOW() + INTERVAL 240 MINUTE, TRUE, ?, 0, ?)`,
+        qrID, venueID, qrData, venueCapacity, qrGroupID)
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "failed to store QR code"})
@@ -93,16 +110,175 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "success":    true,
-        "qr_string":  qrData,
-        "expires_in":240,
-        "expires_at": expiresAt.Format(time.RFC3339),
-        "qr_id":      qrID,
+        "success":        true,
+        "qr_string":      qrData,
+        "expires_in":     240,
+        "expires_at":     expiresAt.Format(time.RFC3339),
+        "qr_id":          qrID,
+        "max_capacity":   venueCapacity,
+        "current_usage":  0,
+        "remaining_slots": venueCapacity,
+        "qr_group_id":    qrGroupID,
+        "is_new":         true, // Indicate this is a new QR
     })
 }
+
+
+func IncrementQRUsage(qrID string) error {
+    _, err := database.GetDB().Exec(`
+        UPDATE venue_qr_codes 
+        SET current_usage = current_usage + 1 
+        WHERE id = ? AND is_active = TRUE 
+        AND current_usage < max_capacity
+        AND expires_at > NOW()`,
+        qrID)
+    return err
+}
+
+
+func GetQRDetails(qrID string) (map[string]interface{}, error) {
+    var details struct {
+        VenueID      string
+        MaxCapacity  int
+        CurrentUsage int
+        IsActive     bool
+        ExpiresAt    time.Time
+    }
+    
+    err := database.GetDB().QueryRow(`
+        SELECT venue_id, max_capacity, current_usage, is_active, expires_at
+        FROM venue_qr_codes 
+        WHERE id = ?`,
+        qrID).Scan(&details.VenueID, &details.MaxCapacity, 
+                   &details.CurrentUsage, &details.IsActive, &details.ExpiresAt)
+    
+    if err != nil {
+        return nil, err
+    }
+    
+    return map[string]interface{}{
+        "venue_id":      details.VenueID,
+        "max_capacity":  details.MaxCapacity,
+        "current_usage": details.CurrentUsage,
+        "is_active":     details.IsActive,
+        "expires_at":    details.ExpiresAt,
+        "is_full":       details.CurrentUsage >= details.MaxCapacity,
+        "is_expired":    time.Now().After(details.ExpiresAt),
+    }, nil
+}
+
 func CleanupExpiredQRCodes() error {
     _, err := database.GetDB().Exec(
         "UPDATE venue_qr_codes SET is_active = FALSE WHERE expires_at < UTC_TIMESTAMP() AND is_active = TRUE",
     )
     return err
 }
+
+// // backend/admin/controllers/qr_controller.go
+// package controllers
+
+// import (
+// 	// "database/sql"
+// 	"encoding/json"
+// 	qr "gd/admin/utils"
+// 	"gd/database"
+// 	// "log"
+// 	"net/http"
+// 	"time"
+
+// 	"github.com/google/uuid"
+// )
+
+// func GenerateQR(w http.ResponseWriter, r *http.Request) {
+//     venueID := r.URL.Query().Get("venue_id")
+//     if venueID == "" {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "venue_id parameter is required"})
+//         return
+//     }
+
+//     // Check if force_new parameter is set
+//     forceNew := r.URL.Query().Get("force_new") == "true"
+
+//     // If not forcing new, check for existing active QR code
+//     if !forceNew {
+//         var existingQR struct {
+//             ID        string
+//             QRData    string
+//             ExpiresAt time.Time
+//         }
+        
+//         err := database.GetDB().QueryRow(`
+//             SELECT id, qr_data, expires_at 
+//             FROM venue_qr_codes 
+//             WHERE venue_id = ? AND is_active = TRUE 
+//             AND expires_at > NOW()
+//             ORDER BY created_at DESC LIMIT 1`,
+//             venueID,
+//         ).Scan(&existingQR.ID, &existingQR.QRData, &existingQR.ExpiresAt)
+
+//         if err == nil {
+//             // Found existing active QR code - return it
+//             w.Header().Set("Content-Type", "application/json")
+//             json.NewEncoder(w).Encode(map[string]interface{}{
+//                 "success":    true,
+//                 "qr_string":  existingQR.QRData,
+//                 "expires_in": time.Until(existingQR.ExpiresAt).Minutes(),
+//                 "expires_at": existingQR.ExpiresAt.Format(time.RFC3339),
+//                 "qr_id":      existingQR.ID, 
+//             })
+//             return
+//         }
+//     }
+
+//     // Generate new QR code
+//     expiresAt := time.Now().Add(240 * time.Minute)
+//     qrData, err := qr.GenerateSecureQR(venueID, 2400*time.Minute)
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate QR code"})
+//         return
+//     }
+
+//     // Deactivate any existing active QR codes for this venue
+//     _, err = database.GetDB().Exec(`
+//         UPDATE venue_qr_codes 
+//         SET is_active = FALSE 
+//         WHERE venue_id = ? AND is_active = TRUE`,
+//         venueID)
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "failed to deactivate existing QR codes"})
+//         return
+//     }
+
+//     // Store the new QR code
+//     qrID := uuid.New().String()
+//     _, err = database.GetDB().Exec(`
+//         INSERT INTO venue_qr_codes 
+//         (id, venue_id, qr_data, expires_at, is_active) 
+//         VALUES (?, ?, ?, NOW() + INTERVAL 240 MINUTE, TRUE)`,
+//         qrID,
+//         venueID,
+//         qrData)
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "failed to store QR code"})
+//         return
+//     }
+
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "success":    true,
+//         "qr_string":  qrData,
+//         "expires_in":240,
+//         "expires_at": expiresAt.Format(time.RFC3339),
+//         "qr_id":      qrID,
+//     })
+// }
+// func CleanupExpiredQRCodes() error {
+//     _, err := database.GetDB().Exec(
+//         "UPDATE venue_qr_codes SET is_active = FALSE WHERE expires_at < UTC_TIMESTAMP() AND is_active = TRUE",
+//     )
+//     return err
+// }

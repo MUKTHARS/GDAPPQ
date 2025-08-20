@@ -161,7 +161,12 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
     log.Println("JoinSession endpoint hit")
-    
+    var qrCapacity struct {
+    MaxCapacity  int
+    CurrentUsage int
+    IsActive     bool
+}
+
     var request struct {
         QRData string `json:"qr_data"`
     }
@@ -221,7 +226,46 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
         }
         return
     }
+err = database.GetDB().QueryRow(`
+    SELECT max_capacity, current_usage, is_active
+    FROM venue_qr_codes 
+    WHERE qr_data = ? AND venue_id = ?`,
+    request.QRData, qrPayload.VenueID).Scan(&qrCapacity.MaxCapacity, &qrCapacity.CurrentUsage, &qrCapacity.IsActive)
 
+if err != nil {
+    log.Printf("QR capacity check error: %v", err)
+    w.WriteHeader(http.StatusInternalServerError)
+    json.NewEncoder(w).Encode(map[string]string{"error": "QR code validation failed"})
+    return
+}
+
+if !qrCapacity.IsActive {
+    log.Printf("QR code is not active")
+    w.WriteHeader(http.StatusUnauthorized)
+    json.NewEncoder(w).Encode(map[string]string{"error": "QR code is no longer active"})
+    return
+}
+
+if qrCapacity.CurrentUsage >= qrCapacity.MaxCapacity {
+    log.Printf("QR code is full: %d/%d", qrCapacity.CurrentUsage, qrCapacity.MaxCapacity)
+    w.WriteHeader(http.StatusForbidden)
+    json.NewEncoder(w).Encode(map[string]string{"error": "This QR code has reached its capacity limit"})
+    return
+}
+
+// Increment QR usage
+_, err = database.GetDB().Exec(`
+    UPDATE venue_qr_codes 
+    SET current_usage = current_usage + 1 
+    WHERE qr_data = ? AND venue_id = ?`,
+    request.QRData, qrPayload.VenueID)
+
+if err != nil {
+    log.Printf("Failed to update QR usage: %v", err)
+    w.WriteHeader(http.StatusInternalServerError)
+    json.NewEncoder(w).Encode(map[string]string{"error": "Failed to join session"})
+    return
+}
     // Check if QR data matches
     if dbQRData != request.QRData {
         log.Printf("QR code mismatch - stored: %s, received: %s", dbQRData, request.QRData)
@@ -472,7 +516,19 @@ func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 }
-
+func calculatePenalty(sessionID string, studentID string) (float64, error) {
+    var totalPenalty float64
+    err := database.GetDB().QueryRow(`
+        SELECT COALESCE(SUM(penalty_points), 0) 
+        FROM survey_penalties 
+        WHERE session_id = ? AND student_id = ?`,
+        sessionID, studentID).Scan(&totalPenalty)
+    
+    if err != nil {
+        return 0, fmt.Errorf("error calculating penalties: %v", err)
+    }
+    return totalPenalty, nil
+}
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)
@@ -612,6 +668,7 @@ for _, r := range results {
 
     // Calculate final scores
     for _, result := range studentResults {
+         result.Penalty = penalties[result.ID]
         result.FinalScore = result.TotalScore - result.Penalty
     }
 
