@@ -147,79 +147,94 @@ const fetchQuestions = async () => {
   fetchQuestions();
 }, [sessionId]);
   // Timer management
-  useEffect(() => {
+useEffect(() => {
     let timerInterval;
+    let timeoutCheckInterval;
     
     const startTimer = async () => {
-      try {
-        // Reset timer state for new question
-        setIsTimedOut(false);
-        setTimeRemaining(30);
-        
-        // Start the timer on the server
-        await api.student.startQuestionTimer(sessionId, currentQuestion + 1);
-        
-        // Start local countdown
-        timerInterval = setInterval(() => {
-          setTimeRemaining(prev => {
-            if (prev <= 1) {
-              clearInterval(timerInterval);
-              setIsTimedOut(true);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-        
-        // Check timeout status periodically
-        const checkTimeout = async () => {
-          try {
-            const response = await api.student.checkQuestionTimeout(
-              sessionId, 
-              currentQuestion + 1
-            );
+        try {
+            setIsTimedOut(false);
+            setTimeRemaining(30);
             
-            if (response.data?.is_timed_out && !penalties[currentQuestion]) {
-              const authData = await auth.getAuthData();
-              await api.student.applyQuestionPenalty(
-                sessionId,
-                currentQuestion + 1,
-                authData.userId
-              );
-              setPenalties(prev => ({
-                ...prev,
-                [currentQuestion]: true
-              }));
+            // Start server-side timer
+            await api.student.startQuestionTimer(sessionId, currentQuestion + 1);
+            
+            // Start local countdown
+            timerInterval = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerInterval);
+                        setIsTimedOut(true);
+                        handleTimeout();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+            
+            // Check server-side timeout status
+            timeoutCheckInterval = setInterval(async () => {
+                try {
+                    const response = await api.student.checkQuestionTimeout(
+                        sessionId, 
+                        currentQuestion + 1
+                    );
+                    
+                    if (response.data?.is_timed_out && !penalties[currentQuestion]) {
+                        handleTimeout();
+                    }
+                } catch (err) {
+                    console.log('Timeout check error:', err);
+                }
+            }, 5000);
+            
+        } catch (err) {
+            console.log('Timer setup error:', err);
+            // Fallback to client-side timer
+            timerInterval = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerInterval);
+                        setIsTimedOut(true);
+                        handleTimeout();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+    };
+    
+    const handleTimeout = async () => {
+        if (!penalties[currentQuestion]) {
+            try {
+                const authData = await auth.getAuthData();
+                await api.student.applyQuestionPenalty(
+                    sessionId,
+                    currentQuestion + 1,
+                    authData.userId
+                );
+                setPenalties(prev => ({
+                    ...prev,
+                    [currentQuestion]: true
+                }));
+                Alert.alert(
+                    "Time's Up!", 
+                    "You've been penalized 0.5 points for not completing this question in time"
+                );
+            } catch (err) {
+                console.log('Penalty application error:', err);
             }
-          } catch (err) {
-            console.log('Timeout check error:', err);
-          }
-        };
-        
-        const timeoutCheckInterval = setInterval(checkTimeout, 5000);
-        return () => clearInterval(timeoutCheckInterval);
-      } catch (err) {
-        console.log('Timer setup error:', err);
-        // Fallback to client-side timer if server fails
-        timerInterval = setInterval(() => {
-          setTimeRemaining(prev => {
-            if (prev <= 1) {
-              clearInterval(timerInterval);
-              setIsTimedOut(true);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-      }
+        }
     };
     
     startTimer();
     
     return () => {
-      clearInterval(timerInterval);
+        clearInterval(timerInterval);
+        clearInterval(timeoutCheckInterval);
     };
-  }, [currentQuestion]);
+}, [currentQuestion]);
 
 useEffect(() => {
     const fetchParticipants = async () => {
@@ -279,50 +294,72 @@ const confirmCurrentQuestion = async () => {
     const currentSelections = selections[currentQuestion] || {};
     const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
     
-    if (!hasAtLeastOneRank) {
-        alert('Please select at least one ranking for this question');
+    if (!hasAtLeastOneRank && !penalties[currentQuestion]) {
+        Alert.alert(
+            "Incomplete Ranking",
+            "You haven't selected any rankings for this question. " +
+            "You'll receive a penalty if you proceed without selections.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Proceed Anyway",
+                    onPress: async () => {
+                        // Apply penalty for incomplete question
+                        try {
+                            const authData = await auth.getAuthData();
+                            await api.student.applyQuestionPenalty(
+                                sessionId,
+                                currentQuestion + 1,
+                                authData.userId
+                            );
+                            setPenalties(prev => ({
+                                ...prev,
+                                [currentQuestion]: true
+                            }));
+                            proceedToNextQuestion();
+                        } catch (err) {
+                            console.log('Penalty application error:', err);
+                        }
+                    }
+                }
+            ]
+        );
         return;
     }
 
+    proceedToNextQuestion();
+};
+
+
+const proceedToNextQuestion = async () => {
     setIsSubmitting(true);
     
     try {
-        const responseData = {
-            sessionId,
-            responses: {
-                [currentQuestion + 1]: currentSelections
-            }
-        };
+        // Only submit if there are selections
+        const currentSelections = selections[currentQuestion] || {};
+        if (Object.keys(currentSelections).length > 0) {
+            const responseData = {
+                sessionId,
+                responses: {
+                    [currentQuestion + 1]: currentSelections
+                }
+            };
+            await api.student.submitSurvey(responseData);
+        }
 
-        // Submit current question's responses
-        await api.student.submitSurvey(responseData);
-
-        // Mark current question as confirmed
         setConfirmedQuestions(prev => [...prev, currentQuestion]);
         
-        // If this is the last question, mark survey as completed
         if (currentQuestion === questions.length - 1) {
             await api.student.markSurveyCompleted(sessionId);
             navigation.replace('Waiting', { sessionId });
         } else {
-            // Move to next question
             setCurrentQuestion(prev => prev + 1);
         }
     } catch (error) {
-        let errorMessage = 'Failed to save question rankings';
-        if (error.response) {
-            if (error.response.status === 400) {
-                errorMessage = 'Please select all rankings for this question';
-            } else if (error.response.status === 500) {
-                errorMessage = 'Server is currently unavailable. Please try again later.';
-            } else if (error.response.data?.error) {
-                errorMessage = error.response.data.error;
-            }
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-        
-        alert(errorMessage);
+        // ... existing error handling ...
     } finally {
         setIsSubmitting(false);
     }

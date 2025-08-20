@@ -210,16 +210,35 @@ func ApplyQuestionPenalty(w http.ResponseWriter, r *http.Request) {
     
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
         return
     }
 
-    // Apply penalty (0.5 points per unanswered question)
-    _, err := database.GetDB().Exec(`
+    // Check if penalty already exists
+    var exists bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM survey_penalties 
+            WHERE session_id = ? AND question_id = ? AND student_id = ?
+        )`, req.SessionID, req.QuestionID, req.StudentID).Scan(&exists)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    if exists {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{"status": "penalty_already_applied"})
+        return
+    }
+
+    // Apply penalty (0.5 points per question timeout)
+    _, err = database.GetDB().Exec(`
         INSERT INTO survey_penalties 
-        (session_id, student_id, question_id, penalty_points) 
-        VALUES (?, ?, ?, 0.5)
-        ON DUPLICATE KEY UPDATE penalty_points = penalty_points + 0.5`,
+        (id, session_id, student_id, question_id, penalty_points)
+        VALUES (UUID(), ?, ?, ?, 0.5)`,
         req.SessionID, req.StudentID, req.QuestionID)
     
     if err != nil {

@@ -78,7 +78,10 @@ router.Handle("/admin/bookings", middleware.AdminOnly(
 router.Handle("/admin/rules", middleware.AdminOnly(
     http.HandlerFunc(controllers.UpdateSessionRules)))
 	log.Println("Venue routes setup complete")
-
+router.Handle("/admin/qr/manage", middleware.AdminOnly(
+    http.HandlerFunc(controllers.GetVenueQRCodes)))
+router.Handle("/admin/qr/deactivate", middleware.AdminOnly(
+    http.HandlerFunc(controllers.DeactivateQR)))
 router.Handle("/admin/results/top", middleware.AdminOnly(
 	http.HandlerFunc(controllers.GetTopParticipants)))
 router.Handle("/admin/feedbacks", middleware.AdminOnly(
