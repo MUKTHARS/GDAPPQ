@@ -5,10 +5,9 @@ import (
 	// "database/sql"
 	"database/sql"
 	"encoding/json"
-	// "fmt"
 	"gd/database"
-	// "log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -286,7 +285,66 @@ func HandleSurveyTimeout(sessionID string, studentID string, questionID int) err
     return tx.Commit()
 }
 
+func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
+    levelStr := r.URL.Query().Get("level")
+    sessionID := r.URL.Query().Get("session_id")
+    
+    level, err := strconv.Atoi(levelStr)
+    if err != nil || level < 1 {
+        level = 1
+    }
 
+    // Get questions for the specified level
+    rows, err := database.GetDB().Query(`
+        SELECT id, question_text, weight 
+        FROM survey_questions
+        WHERE is_active = TRUE
+        AND id IN (
+            SELECT question_id FROM question_levels WHERE level = ?
+        )
+        ORDER BY created_at`, level)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer rows.Close()
+
+    var questions []map[string]interface{}
+    for rows.Next() {
+        var question struct {
+            ID     string
+            Text   string
+            Weight float64
+        }
+        if err := rows.Scan(&question.ID, &question.Text, &question.Weight); err != nil {
+            continue
+        }
+        questions = append(questions, map[string]interface{}{
+            "id":     question.ID,
+            "text":   question.Text,
+            "weight": question.Weight,
+        })
+    }
+
+    // If no questions found, return default questions
+    if len(questions) == 0 {
+        questions = []map[string]interface{}{
+            {"id": "q1", "text": "Clarity of arguments", "weight": 1.0},
+            {"id": "q2", "text": "Contribution to discussion", "weight": 1.0},
+            {"id": "q3", "text": "Teamwork and collaboration", "weight": 1.0},
+        }
+    }
+
+    // Shuffle questions based on session ID for consistent ordering per session
+    if sessionID != "" {
+        questions = shuffleQuestionsWithSeed(questions, sessionID)
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(questions)
+}
 type Participant struct {
     ID string
 }
@@ -359,4 +417,29 @@ func CalculateFinalResults(sessionID string) (map[string]float64, error) {
     }
     
     return results, nil
+}
+
+
+
+// shuffleQuestionsWithSeed shuffles questions consistently based on a seed
+func shuffleQuestionsWithSeed(questions []map[string]interface{}, seed string) []map[string]interface{} {
+    // Convert seed to a numeric value
+    seedValue := 0
+    for _, char := range seed {
+        seedValue = (seedValue*31 + int(char)) % 1000000
+    }
+
+    shuffled := make([]map[string]interface{}, len(questions))
+    copy(shuffled, questions)
+
+    // Fisher-Yates shuffle with deterministic seed
+    for i := len(shuffled) - 1; i > 0; i-- {
+        // Use the seed to generate a deterministic random index
+        seedValue = (seedValue*9301 + 49297) % 233280
+        j := int(float64(seedValue) / 233280 * float64(i+1))
+        
+        shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+    }
+
+    return shuffled
 }
