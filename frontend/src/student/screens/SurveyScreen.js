@@ -146,33 +146,42 @@ export default function SurveyScreen({ navigation, route }) {
 
 useEffect(() => {
   const fetchQuestions = async () => {
-    if (!userSeed) return;
+  if (!userSeed) return;
 
-    try {
-       const authData = await auth.getAuthData();
-      // Get session level
-      const sessionResponse = await api.student.getSession(sessionId);
-      const level = sessionResponse.data?.level || 1;
-      
-      // Use the student API method
-      const questionsResponse = await api.student.getSurveyQuestions(level, sessionId, authData.userId);
-      
-      // Ensure we have an array of questions
-      let questionsData = questionsResponse.data;
-      if (!Array.isArray(questionsData)) {
-        questionsData = [];
-      }
-      
-      // Set default questions if empty
-      if (questionsData.length === 0) {
-        questionsData = [
-          { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-          { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-          { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-        ];
-      }
-      
-      setAllQuestions(questionsData);
+  try {
+    const authData = await auth.getAuthData();
+    // Get session level
+    const sessionResponse = await api.student.getSession(sessionId);
+    const level = sessionResponse.data?.level || 1;
+    
+    console.log('Fetching questions for level:', level);
+    
+    // Use the student API method
+    const questionsResponse = await api.student.getSurveyQuestions(level, sessionId, authData.userId);
+    
+    console.log('Questions API response:', questionsResponse);
+    
+    // Ensure we have an array of questions
+    let questionsData = questionsResponse.data;
+    console.log('Raw questions data:', questionsData);
+    
+    if (!Array.isArray(questionsData)) {
+      console.log('Questions data is not array, converting');
+      questionsData = [];
+    }
+    
+    // Set default questions if empty
+    if (questionsData.length === 0) {
+      console.log('No questions returned, using fallback');
+      questionsData = [
+        { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+        { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+        { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+      ];
+    }
+    
+    console.log('Final questions to use:', questionsData);
+    setAllQuestions(questionsData);
       
       // Convert userSeed to a consistent numeric value
       let numericSeed = 0;

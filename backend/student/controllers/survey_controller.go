@@ -5,6 +5,7 @@ import (
 	// "database/sql"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"gd/database"
 	"net/http"
 	"strconv"
@@ -288,24 +289,24 @@ func HandleSurveyTimeout(sessionID string, studentID string, questionID int) err
 func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
     levelStr := r.URL.Query().Get("level")
     sessionID := r.URL.Query().Get("session_id")
-    studentID := r.URL.Query().Get("student_id") // Add student ID parameter
+    studentID := r.URL.Query().Get("student_id")
+    
+    fmt.Printf("GetSurveyQuestions called with level=%s, sessionID=%s, studentID=%s\n", levelStr, sessionID, studentID)
     
     level, err := strconv.Atoi(levelStr)
     if err != nil || level < 1 {
         level = 1
     }
 
-    // Get questions for the specified level
+    // Get questions for the specified level - FIXED SQL QUERY
     rows, err := database.GetDB().Query(`
         SELECT id, question_text, weight 
         FROM survey_questions
-        WHERE is_active = TRUE
-        AND id IN (
-            SELECT question_id FROM question_levels WHERE level = ?
-        )
+        WHERE is_active = TRUE AND level = ?
         ORDER BY created_at`, level)
     
     if err != nil {
+        fmt.Printf("Database error: %v\n", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
@@ -320,6 +321,7 @@ func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
             Weight float64
         }
         if err := rows.Scan(&question.ID, &question.Text, &question.Weight); err != nil {
+            fmt.Printf("Row scanning error: %v\n", err)
             continue
         }
         questions = append(questions, map[string]interface{}{
@@ -329,8 +331,40 @@ func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
         })
     }
 
-    // If no questions found, return default questions
+    // Check if we got any questions
+    fmt.Printf("Found %d questions for level %d in database\n", len(questions), level)
+    
+    // If no questions found for this level, try to get default level 1 questions
+    if len(questions) == 0 && level != 1 {
+        fmt.Printf("No questions found for level %d, trying level 1\n", level)
+        rows, err := database.GetDB().Query(`
+            SELECT id, question_text, weight 
+            FROM survey_questions
+            WHERE is_active = TRUE AND level = 1
+            ORDER BY created_at`)
+        
+        if err == nil {
+            defer rows.Close()
+            for rows.Next() {
+                var question struct {
+                    ID     string
+                    Text   string
+                    Weight float64
+                }
+                if err := rows.Scan(&question.ID, &question.Text, &question.Weight); err == nil {
+                    questions = append(questions, map[string]interface{}{
+                        "id":     question.ID,
+                        "text":   question.Text,
+                        "weight": question.Weight,
+                    })
+                }
+            }
+        }
+    }
+    
+    // If still no questions found, return default questions
     if len(questions) == 0 {
+        fmt.Println("No questions found in database, using fallback questions")
         questions = []map[string]interface{}{
             {"id": "q1", "text": "Clarity of arguments", "weight": 1.0},
             {"id": "q2", "text": "Contribution to discussion", "weight": 1.0},
@@ -341,14 +375,21 @@ func GetSurveyQuestions(w http.ResponseWriter, r *http.Request) {
     // Shuffle questions based on both session ID AND student ID for unique ordering per student
     if sessionID != "" && studentID != "" {
         uniqueSeed := sessionID + "-" + studentID
+        fmt.Printf("Shuffling with unique seed: %s\n", uniqueSeed)
         questions = shuffleQuestionsWithSeed(questions, uniqueSeed)
     } else if sessionID != "" {
+        fmt.Printf("Shuffling with session seed: %s\n", sessionID)
         questions = shuffleQuestionsWithSeed(questions, sessionID)
+    } else {
+        fmt.Println("No seed provided for shuffling")
     }
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(questions)
 }
+
+
+
 type Participant struct {
     ID string
 }

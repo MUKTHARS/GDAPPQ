@@ -127,11 +127,15 @@ func InitDB(db *sql.DB) error {
 
 
 
-        `CREATE TABLE IF NOT EXISTS gd_session_topics (
-    session_id VARCHAR(36) PRIMARY KEY,
-    topic TEXT NOT NULL,
+`CREATE TABLE IF NOT EXISTS gd_topics (
+    id VARCHAR(36) PRIMARY KEY,
+    level INT NOT NULL,
+    topic_text TEXT NOT NULL,
     prep_materials JSON,
-    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_level_topic (level, topic_text(255))
 )`,
 
 `CREATE TABLE IF NOT EXISTS session_phase_tracking (
@@ -197,6 +201,7 @@ CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalt
     question_text TEXT NOT NULL,
     weight DECIMAL(3,1) DEFAULT 1.0,
     is_active BOOLEAN DEFAULT TRUE,
+    level INT DEFAULT 1 ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )`,

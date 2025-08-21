@@ -152,14 +152,36 @@ export default function GdSessionScreen({ navigation, route }) {
 
     fetchSession();
   }, [sessionId, navigation]);
-
+  useEffect(() => {
+  if (session?.level) {
+    fetchSessionTopic(session.level);
+  }
+}, [session?.level]);
+const fetchSessionTopic = async (sessionLevel) => {
+  try {
+    const response = await api.student.getSessionTopic(sessionLevel);
+    if (response.data && response.data.topic_text) {
+      setSession(prevSession => ({
+        ...prevSession,
+        topic: response.data.topic_text
+      }));
+    }
+  } catch (error) {
+    console.log('Failed to fetch session topic:', error);
+    // Use a default topic if fetching fails
+    setSession(prevSession => ({
+      ...prevSession,
+      topic: "Discuss the impact of technology on modern education"
+    }));
+  }
+};
 const handlePhaseComplete = () => {
   if (phase === 'prep') {
     setPhase('discussion');
-    setTimeRemaining(session.discussion_time * 60); 
+    setTimeRemaining(session.discussion_time * 5); 
   } else if (phase === 'discussion') {
     setPhase('survey');
-    setTimeRemaining(session.survey_time * 60);
+    setTimeRemaining(session.survey_time * 5);
   } else {
     navigation.navigate('Survey', { 
       sessionId: sessionId,

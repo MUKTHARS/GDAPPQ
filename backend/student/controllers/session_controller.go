@@ -135,8 +135,8 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
             // Use defaults if parsing fails
         } else {
             // Ensure values are in minutes (not seconds)
-            if agenda.Discussion > 60 { // If somehow seconds got stored
-                agenda.Discussion = agenda.Discussion / 60
+            if agenda.Discussion > 5 { // If somehow seconds got stored
+                agenda.Discussion = agenda.Discussion / 5
             }
         }
     }
