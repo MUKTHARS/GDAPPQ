@@ -16,6 +16,7 @@ import BookingsScreen from '../screens/BookingsScreen';
 import TopParticipantsScreen from '../screens/TopParticipantsScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 import TopicManager from '../screens/TopicManager';
+import RankingPointsConfig from '../screens/RankingPointsConfig';
 const Stack = createStackNavigator();
 
 const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
@@ -66,6 +67,7 @@ const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
       <Stack.Screen name="QuestionBank" component={QuestionBank} />
     <Stack.Screen name="BookedStudents" component={BookingsScreen} />
     <Stack.Screen name="Feedback" component={FeedbackScreen} />
+    <Stack.Screen name="RankingPointsConfig" component={RankingPointsConfig} />
     <Stack.Screen name="TopicManager" component={TopicManager} options={{ title: 'GD Topics' }} />
     </Stack.Navigator>
   );
@@ -98,6 +100,8 @@ const getHeaderTitle = (route) => {
       return 'Booked Students';
     case 'TopParticipants':
       return 'Top Performers';
+    case 'RankingPointsConfig':
+      return 'Ranking Points Config';
     default:
       return '';
   }

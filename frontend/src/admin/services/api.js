@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.253.14:8080' 
+    ? 'http://10.150.255.208:8080' 
     : 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
@@ -63,7 +63,17 @@ createBulkSessions: (data) => {
 getSessionFeedbacks: (sessionId) => api.get('/admin/feedbacks', { 
     params: { session_id: sessionId } 
 }),
-  getVenues: () => api.get('/admin/venues'),
+ getRankingPoints: (level) => api.get('/admin/ranking-points', { 
+    params: level ? { level } : {} 
+  }),
+  updateRankingPoints: (data) => api.post('/admin/ranking-points', data),
+  deleteRankingPoints: (id) => api.delete('/admin/ranking-points', { 
+    params: { id } 
+  }),
+  toggleRankingPoints: (id) => api.put('/admin/ranking-points/toggle', null, { 
+    params: { id } 
+  }),
+    getVenues: () => api.get('/admin/venues'),
   getTopParticipants: (params = {}) => api.get('/admin/results/top', { params }),
 };
 

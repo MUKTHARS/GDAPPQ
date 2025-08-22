@@ -12,9 +12,9 @@ export default function QrScreen({ route, navigation }) {
   const [error, setError] = useState(null);
   const [currentQRId, setCurrentQRId] = useState(null);
   const [qrStats, setQrStats] = useState({
-    maxCapacity: 3,
+    maxCapacity: 13,
     currentUsage: 0,
-    remainingSlots: 3,
+    remainingSlots: 13,
     isNew: false,
     isFull: false
   });
@@ -144,7 +144,7 @@ export default function QrScreen({ route, navigation }) {
           setQrStats(prev => ({
             ...prev,
             isFull: isFull,
-            currentUsage: isFull ? 3 : 0 // Set usage to 2 if full
+            currentUsage: isFull ? 13 : 0 // Set usage to 2 if full
           }));
 
           // If stored QR is full and this is auto-generation, skip to generate new one
@@ -186,7 +186,7 @@ export default function QrScreen({ route, navigation }) {
         setCurrentQRId(response.data.qr_id);
         
         // Update stats
-        const maxCapacity = response.data.max_capacity || 3;
+        const maxCapacity = response.data.max_capacity || 13;
         const currentUsage = response.data.current_usage || 0;
         const remainingSlots = maxCapacity - currentUsage;
         const isFull = response.data.is_full || (remainingSlots === 0);
@@ -337,7 +337,7 @@ export default function QrScreen({ route, navigation }) {
             {qrStats.isFull && (
               <View style={styles.fullWarningContainer}>
                 <Text style={styles.fullWarning}>
-                  This QR is full. {qrStats.currentUsage === 3 ? 'New QR generating...' : 'Scanning may fail.'}
+                  This QR is full. {qrStats.currentUsage === 13 ? 'New QR generating...' : 'Scanning may fail.'}
                 </Text>
               </View>
             )}

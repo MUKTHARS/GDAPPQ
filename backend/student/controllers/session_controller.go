@@ -385,8 +385,6 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 }
 
 
-
-
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     studentID := r.Context().Value("studentID").(string)
     log.Printf("SubmitSurvey started for student %s", studentID)
@@ -412,8 +410,66 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     }
     defer tx.Rollback()
 
+    // Get session level first
+    var sessionLevel int
+    err = tx.QueryRow("SELECT level FROM gd_sessions WHERE id = ?", req.SessionID).Scan(&sessionLevel)
+    if err != nil {
+        log.Printf("Error getting session level: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    // Get all questions for this level to create a proper mapping
+    rows, err := tx.Query(`
+        SELECT id, weight 
+        FROM survey_questions 
+        WHERE level = ? AND is_active = TRUE 
+        ORDER BY created_at`,
+        sessionLevel)
+    if err != nil {
+        log.Printf("Error getting questions: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer rows.Close()
+
+    // Create a mapping of question order to weight
+    questionWeights := make(map[int]float64)
+    index := 1
+    for rows.Next() {
+        var questionID string
+        var weight float64
+        if err := rows.Scan(&questionID, &weight); err != nil {
+            continue
+        }
+        questionWeights[index] = weight
+        log.Printf("Question %d weight: %.2f", index, weight)
+        index++
+    }
+
+    // If no weights found, use default weights
+    if len(questionWeights) == 0 {
+        questionWeights = map[int]float64{
+            1: 1.0,
+            2: 1.0,
+            3: 1.0,
+        }
+        log.Printf("Using default weights: %v", questionWeights)
+    }
+
     // Process each question response
     for q, rankings := range req.Responses {
+        // Get question weight from the mapping
+        questionWeight, exists := questionWeights[q]
+        if !exists {
+            questionWeight = 1.0
+            log.Printf("Question weight not found for question %d, using default 1.0", q)
+        }
+
+        log.Printf("Processing question %d with weight %.2f", q, questionWeight)
+
         // Clear previous responses for this question if any
         _, err = tx.Exec(`
             DELETE FROM survey_results 
@@ -428,13 +484,25 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 
         // Save new rankings with is_current_session = 1
         for rank, responderID := range rankings {
-            score := 5 - rank // 1st=4, 2nd=3, 3rd=2
+            // Get base points from configurable ranking points
+            basePoints, err := getRankingPoints(sessionLevel, rank)
+            if err != nil {
+                log.Printf("Error getting ranking points: %v", err)
+                // Fallback to default calculation if config not found
+                basePoints = 5 - float64(rank) // 1st=4, 2nd=3, 3rd=2
+            }
+            
+            // Calculate final score as points × weight
+            finalScore := basePoints * questionWeight
+            
+            log.Printf("Saving: question %d, rank %d, base points %.1f, weight %.2f, final score %.2f", 
+                q, rank, basePoints, questionWeight, finalScore)
             
             _, err = tx.Exec(`
                 INSERT INTO survey_results 
-                (id, session_id, student_id, responder_id, question_number, ranks, score, is_current_session)
-                VALUES (UUID(), ?, ?, ?, ?, ?, ?, 1)`,
-                req.SessionID, studentID, responderID, q, rank, score)
+                (id, session_id, student_id, responder_id, question_number, ranks, score, weighted_score, is_current_session)
+                VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1)`,
+                req.SessionID, studentID, responderID, q, rank, finalScore, finalScore)
             if err != nil {
                 tx.Rollback()
                 log.Printf("Error saving survey response: %v", err)
@@ -445,7 +513,6 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Only mark as completed if all questions are answered (this check is now done client-side)
     if err := tx.Commit(); err != nil {
         log.Printf("Error committing transaction: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -457,6 +524,8 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
+
+
 
 func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
     var req struct {
@@ -512,6 +581,7 @@ func calculatePenalty(sessionID string, studentID string) (float64, error) {
     }
     return totalPenalty, nil
 }
+
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     studentID := r.Context().Value("studentID").(string)
@@ -609,7 +679,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Calculate scores for each student
+    // Calculate scores for each student - now using the pre-calculated scores
     type StudentResult struct {
         ID          string
         Name        string
@@ -632,26 +702,25 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Calculate total scores
-    // Calculate total scores
-for _, r := range results {
-    // Only count scores where the student is the responder (being evaluated)
-    if result, ok := studentResults[r.ResponderID]; ok {
-        result.TotalScore += r.Score
-        if r.Rank == 1 {
-            result.FirstPlaces++
+    // Calculate total scores using the pre-calculated scores (points × weight)
+    for _, r := range results {
+        // Only count scores where the student is the responder (being evaluated)
+        if result, ok := studentResults[r.ResponderID]; ok {
+            result.TotalScore += r.Score // This is already points × weight
+            if r.Rank == 1 {
+                result.FirstPlaces++
+            }
+        }
+        
+        // Also ensure we're not counting self-evaluations
+        if r.StudentID == r.ResponderID {
+            log.Printf("Warning: Self-evaluation found for student %s", r.StudentID)
         }
     }
-    
-    // Also ensure we're not counting self-evaluations
-    if r.StudentID == r.ResponderID {
-        log.Printf("Warning: Self-evaluation found for student %s", r.StudentID)
-    }
-}
 
     // Calculate final scores
     for _, result := range studentResults {
-         result.Penalty = penalties[result.ID]
+        result.Penalty = penalties[result.ID]
         result.FinalScore = result.TotalScore - result.Penalty
     }
 
@@ -689,257 +758,6 @@ for _, r := range results {
     })
 }
 
-// func GetResults(w http.ResponseWriter, r *http.Request) {
-//     sessionID := r.URL.Query().Get("session_id")
-//     studentID := r.Context().Value("studentID").(string)
-
-//     log.Printf("Fetching results for session %s, student %s", sessionID, studentID)
-
-//     // Verify student is part of this session
-//     var isParticipant bool
-//     err := database.GetDB().QueryRow(`
-//         SELECT EXISTS(
-//             SELECT 1 FROM session_participants 
-//             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
-//         )`, sessionID, studentID).Scan(&isParticipant)
-    
-//     if err != nil {
-//         log.Printf("Database error checking participant: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-//         return
-//     }
-
-//     if !isParticipant {
-//         log.Printf("Student %s not authorized for session %s", studentID, sessionID)
-//         w.WriteHeader(http.StatusForbidden)
-//         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view these results"})
-//         return
-//     }
-
-//     // Get all participants in this session
-//     var participants []string
-//     rows, err := database.GetDB().Query(`
-//         SELECT student_id FROM session_participants 
-//         WHERE session_id = ? AND is_dummy = FALSE`, sessionID)
-//     if err != nil {
-//         log.Printf("Error getting participants: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         return
-//     }
-//     defer rows.Close()
-    
-//     for rows.Next() {
-//         var id string
-//         if err := rows.Scan(&id); err != nil {
-//             continue
-//         }
-//         participants = append(participants, id)
-//     }
-
-//     // Get all survey responses for this session with question weights
-//     type SurveyResponse struct {
-//         QuestionNumber int
-//         ResponderID   string
-//         StudentID     string
-//         Rank          int
-//         Score         float64
-//         Weight        float64
-//     }
-    
-//     var responses []SurveyResponse
-//     rows, err = database.GetDB().Query(`
-//         SELECT sr.question_number, sr.responder_id, sr.student_id, sr.ranks, 
-//                COALESCE(sq.weight, 1.0) as question_weight
-//         FROM survey_results sr
-//         LEFT JOIN survey_questions sq ON sr.question_number = sq.id
-//         WHERE sr.session_id = ? AND sr.is_current_session = 1`, sessionID)
-//     if err != nil {
-//         log.Printf("Error getting survey responses: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         return
-//     }
-//     defer rows.Close()
-    
-//     for rows.Next() {
-//         var r SurveyResponse
-//         if err := rows.Scan(&r.QuestionNumber, &r.ResponderID, &r.StudentID, &r.Rank, &r.Weight); err != nil {
-//             continue
-//         }
-//         // Calculate weighted score (4 for 1st, 3 for 2nd, 2 for 3rd)
-//         r.Score = float64(5 - r.Rank) * r.Weight // Changed from 4 to 5 to give more weight
-//         responses = append(responses, r)
-//     }
-
-//     // Get survey completion times
-//     type SurveyTime struct {
-//         StudentID string
-//         StartTime time.Time
-//         EndTime   time.Time
-//     }
-//     var surveyTimes []SurveyTime
-//     rows, err = database.GetDB().Query(`
-//         SELECT student_id, MIN(submitted_at) as start_time, MAX(submitted_at) as end_time
-//         FROM survey_results 
-//         WHERE session_id = ? AND is_current_session = 1
-//         GROUP BY student_id`, sessionID)
-//     if err != nil {
-//         log.Printf("Error getting survey times: %v", err)
-//     } else {
-//         defer rows.Close()
-//         for rows.Next() {
-//             var st SurveyTime
-//             if err := rows.Scan(&st.StudentID, &st.StartTime, &st.EndTime); err != nil {
-//                 continue
-//             }
-//             surveyTimes = append(surveyTimes, st)
-//         }
-//     }
-
-//     // Calculate penalties for each student
-//     penalties := make(map[string]float64)
-//     rows, err = database.GetDB().Query(`
-//         SELECT student_id, SUM(penalty_points) 
-//         FROM survey_penalties 
-//         WHERE session_id = ?
-//         GROUP BY student_id`, sessionID)
-//     if err != nil {
-//         log.Printf("Error getting penalties: %v", err)
-//     } else {
-//         defer rows.Close()
-//         for rows.Next() {
-//             var studentID string
-//             var points float64
-//             if err := rows.Scan(&studentID, &points); err != nil {
-//                 continue
-//             }
-//             penalties[studentID] = points
-//         }
-//     }
-
-//     // Calculate average scores for each student
-//     type StudentResult struct {
-//         ID          string
-//         Name        string
-//         TotalScore  float64
-//         Penalty     float64
-//         FinalScore  float64
-//         SurveyTime  int
-//         FirstPlaces int
-//     }
-    
-//     studentResults := make(map[string]*StudentResult)
-    
-//     // Initialize results for all participants
-//     rows, err = database.GetDB().Query(`
-//         SELECT id, full_name FROM student_users 
-//         WHERE id IN (SELECT student_id FROM session_participants WHERE session_id = ?)`, 
-//         sessionID)
-//     if err != nil {
-//         log.Printf("Error getting participant names: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         return
-//     }
-//     defer rows.Close()
-    
-//     for rows.Next() {
-//         var id, name string
-//         if err := rows.Scan(&id, &name); err != nil {
-//             continue
-//         }
-//         studentResults[id] = &StudentResult{
-//             ID:         id,
-//             Name:       name,
-//             TotalScore: 0,
-//             Penalty:   penalties[id],
-//             SurveyTime: 0,
-//             FirstPlaces: 0,
-//         }
-//     }
-
-//     // Calculate total scores from all responders
-//     for _, r := range responses {
-//         if result, ok := studentResults[r.StudentID]; ok {
-//             result.TotalScore += r.Score
-//             if r.Rank == 1 {
-//                 result.FirstPlaces++
-//             }
-//         }
-//     }
-
-//     // Add survey times to results
-//     for _, st := range surveyTimes {
-//         if result, ok := studentResults[st.StudentID]; ok {
-//             result.SurveyTime = int(st.EndTime.Sub(st.StartTime).Seconds())
-//         }
-//     }
-
-//     // Apply penalties and calculate final scores
-//     for id, result := range studentResults {
-//         // Get penalty points
-//         result.Penalty = penalties[id]
-        
-//         // Calculate average score (total / number of questions * number of responders)
-//         responderCount := len(participants) - 1 // exclude self
-//         questionCount := 3 // default to 3 questions
-        
-//         // Get actual question count
-//         var qCount int
-//         err := database.GetDB().QueryRow(`
-//             SELECT COUNT(DISTINCT question_number) 
-//             FROM survey_results 
-//             WHERE session_id = ?`, sessionID).Scan(&qCount)
-//         if err == nil && qCount > 0 {
-//             questionCount = qCount
-//         }
-        
-//         if responderCount > 0 && questionCount > 0 {
-//             result.TotalScore = result.TotalScore / float64(responderCount * questionCount)
-//         }
-        
-//         result.FinalScore = result.TotalScore - result.Penalty
-//     }
-
-//     // Convert to slice for sorting
-//     var results []StudentResult
-//     for _, r := range studentResults {
-//         results = append(results, *r)
-//     }
-
-//     // Sort results:
-//     // 1. By final score (descending)
-//     // 2. By number of first places (descending)
-//     // 3. By survey time (ascending - faster is better)
-//     sort.Slice(results, func(i, j int) bool {
-//         if results[i].FinalScore != results[j].FinalScore {
-//             return results[i].FinalScore > results[j].FinalScore
-//         }
-//         if results[i].FirstPlaces != results[j].FirstPlaces {
-//             return results[i].FirstPlaces > results[j].FirstPlaces
-//         }
-//         return results[i].SurveyTime < results[j].SurveyTime
-//     })
-
-//     // Prepare response
-//     var response []map[string]interface{}
-//     for _, r := range results {
-//         response = append(response, map[string]interface{}{
-//             "responder_id":    r.ID,
-//             "name":           r.Name,
-//             "total_score":    fmt.Sprintf("%.2f", r.TotalScore),
-//             "penalty_points": fmt.Sprintf("%.2f", r.Penalty),
-//             "final_score":    fmt.Sprintf("%.2f", r.FinalScore),
-//             "survey_time":    r.SurveyTime,
-//             "first_places":   r.FirstPlaces,
-//         })
-//     }
-
-//     w.Header().Set("Content-Type", "application/json")
-//     json.NewEncoder(w).Encode(map[string]interface{}{
-//         "results":    response,
-//         "session_id": sessionID,
-//     })
-// }
 
 
 func BookVenue(w http.ResponseWriter, r *http.Request) {

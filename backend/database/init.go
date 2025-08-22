@@ -148,6 +148,20 @@ func InitDB(db *sql.DB) error {
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
 )`,
 
+`CREATE TABLE IF NOT EXISTS ranking_points_config (
+    id VARCHAR(36) PRIMARY KEY,
+    first_place_points DECIMAL(3,1) DEFAULT 4.0,
+    second_place_points DECIMAL(3,1) DEFAULT 3.0,
+    third_place_points DECIMAL(3,1) DEFAULT 2.0,
+    level INT DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES admin_users(id) ON DELETE SET NULL,
+    UNIQUE KEY unique_level_config (level)
+);`,
+
 `CREATE TABLE IF NOT EXISTS survey_results (
     id VARCHAR(36) PRIMARY KEY,
     session_id VARCHAR(36) NOT NULL,
@@ -155,7 +169,8 @@ func InitDB(db *sql.DB) error {
     responder_id VARCHAR(36) NOT NULL, 
     question_number INT NOT NULL,
     ranks INT NOT NULL,  
-    score INT NOT NULL, 
+    score DECIMAL(5,2) NOT NULL,          
+    weighted_score DECIMAL(5,2) NOT NULL, 
     is_current_session TINYINT(1) DEFAULT 0,
     is_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -169,10 +184,10 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_question ON survey_results
 CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalties (session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_survey_results_session_ranks ON survey_results (session_id, ranks);
 **/
-    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+     FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
     FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
-    UNIQUE KEY (session_id, student_id, question_number, ranks)  
+    UNIQUE KEY (session_id, student_id, question_number, ranks)   
 )`,
 
 `CREATE TABLE IF NOT EXISTS venue_qr_codes (
