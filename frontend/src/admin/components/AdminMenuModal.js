@@ -10,6 +10,7 @@ const AdminMenuModal = ({ visible, onClose, navigation }) => {
   const menuItems = [
     { name: 'Dashboard', title: 'Dashboard', icon: 'dashboard' },
     { name: 'VenueSetup', title: 'Venue Management', icon: 'place' },
+     { name: 'TopicManager', title: 'TopicManager', icon: 'check-circle' },
     { name: 'SessionConfig', title: 'Session Config', icon: 'settings' },
     { name: 'TopParticipants', title: 'Top Performers', icon: 'rule' },
     { name: 'SessionCalendar', title: 'Session Calendar', icon: 'calendar-today' },

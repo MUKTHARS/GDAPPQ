@@ -2,6 +2,7 @@ package routes
 
 import (
 	"gd/student/controllers"
+   s "gd/admin/controllers"
 	"gd/student/middleware"
 	"net/http"
 )
@@ -21,7 +22,8 @@ func SetupStudentRoutes() *http.ServeMux {
         http.HandlerFunc(controllers.JoinSession)))
     router.Handle("/student/session", middleware.StudentOnly(
         http.HandlerFunc(controllers.GetSessionDetails)))
-    
+    router.Handle("/student/topic", 
+    middleware.StudentOnly(http.HandlerFunc(controllers.GetTopicForLevel)))
     // Survey System
     router.Handle("/student/survey", middleware.StudentOnly(
         http.HandlerFunc(controllers.SubmitSurvey)))
@@ -53,6 +55,8 @@ func SetupStudentRoutes() *http.ServeMux {
     http.HandlerFunc(controllers.MarkSurveyCompleted)))
     router.Handle("/student/feedback", middleware.StudentOnly(
     http.HandlerFunc(controllers.SubmitFeedback)))
+    router.Handle("/student/session/rules", middleware.StudentOnly(
+        http.HandlerFunc(s.GetSessionRules)))
 
 
 

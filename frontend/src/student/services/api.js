@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.250.233:8080' 
+    ? 'http://10.150.253.14:8080' 
     : 'http://localhost:8080',
 });
 
@@ -352,13 +352,19 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
     student_id: studentId
   }),
 
-  getSurveyQuestions: async (level, sessionId = '') => {
+ getSurveyQuestions: async (level, sessionId = '', studentId = '') => {
     try {
         const params = { level };
         // Add session_id parameter if provided
         if (sessionId) {
             params.session_id = sessionId;
         }
+        // Add student_id parameter if provided
+        if (studentId) {
+            params.student_id = studentId;
+        }
+        
+        console.log('Fetching questions with params:', params);
         
         // First try student-specific endpoint
         const response = await api.get('/student/questions', { 
@@ -366,20 +372,25 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
             validateStatus: (status) => status < 500
         });
         
+        console.log('Questions response:', response.data);
+        
         // If we get valid data, use it
         if (response.data && Array.isArray(response.data)) {
             return response;
         }
         
         // Fallback to admin endpoint if student endpoint fails
+        console.log('Student endpoint failed, trying admin endpoint');
         const adminResponse = await api.get('/admin/questions', {
-            params: { level }, // Don't send session_id to admin endpoint
+            params: { level }, // Don't send session_id or student_id to admin endpoint
             validateStatus: (status) => status < 500
         });
         
+        console.log('Admin questions response:', adminResponse.data);
+        
         return adminResponse;
     } catch (error) {
-        console.log('Questions fallback triggered');
+        console.log('Questions fallback triggered due to error:', error.message);
         return {
             data: [
                 { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
@@ -388,9 +399,80 @@ checkQuestionTimeout: (sessionId, questionId) => api.get('/student/survey/check-
             ]
         };
     }
-}
+},
 
-
+getSessionTopic: (level) => api.get('/student/topic', { 
+  params: { level },
+  validateStatus: function (status) {
+    return status < 500;
+  },
+  transformResponse: [
+    function (data) {
+      try {
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        return parsed;
+      } catch (e) {
+        console.error('Topic response parsing error:', e);
+        return {
+          topic_text: "Discuss the impact of technology on modern education",
+          prep_materials: {}
+        };
+      }
+    }
+  ]
+}).catch(error => {
+  console.error('Topic API error:', error);
+  return {
+    data: {
+      topic_text: "Discuss the impact of technology on modern education",
+      prep_materials: {}
+    }
   };
+}),
+
+
+getSessionRules: (sessionId) => api.get('/student/session/rules', { 
+    params: { session_id: sessionId },
+    validateStatus: function (status) {
+        return status < 500;
+    },
+    transformResponse: [
+        function (data) {
+            try {
+                const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+                // Ensure we have default values if API fails
+                return {
+                    prep_time: parsed.prep_time || 5,
+                    discussion_time: parsed.discussion_time || 20,
+                    survey_time: parsed.survey_time || 5,
+                    level: parsed.level || 1
+                };
+            } catch (e) {
+                console.error('Session rules parsing error:', e);
+                // Return sensible defaults
+                return {
+                    prep_time: 5,
+                    discussion_time: 20,
+                    survey_time: 5,
+                    level: 1
+                };
+            }
+        }
+    ]
+}).catch(error => {
+    console.error('Session rules API error:', error);
+    // Return defaults on error
+    return {
+        data: {
+            prep_time: 5,
+            discussion_time: 20,
+            survey_time: 5,
+            level: 1
+        }
+    };
+}),
+  };
+
+  
 
 export default api;

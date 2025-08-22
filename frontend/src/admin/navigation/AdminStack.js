@@ -15,6 +15,7 @@ import AdminHamburgerHeader from '../components/AdminHamburgerHeader';
 import BookingsScreen from '../screens/BookingsScreen';
 import TopParticipantsScreen from '../screens/TopParticipantsScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
+import TopicManager from '../screens/TopicManager';
 const Stack = createStackNavigator();
 
 const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
@@ -65,6 +66,7 @@ const AdminStack = ({ initialRouteName = 'Login', onLoginSuccess }) => {
       <Stack.Screen name="QuestionBank" component={QuestionBank} />
     <Stack.Screen name="BookedStudents" component={BookingsScreen} />
     <Stack.Screen name="Feedback" component={FeedbackScreen} />
+    <Stack.Screen name="TopicManager" component={TopicManager} options={{ title: 'GD Topics' }} />
     </Stack.Navigator>
   );
 }
