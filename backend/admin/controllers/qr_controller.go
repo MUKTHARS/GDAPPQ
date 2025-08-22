@@ -131,7 +131,7 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
     qrID := uuid.New().String()
 
     // Set max capacity to 2 (not 15) - keep 15 commented as requested
-    maxCapacity := 3 // 15 // Keep 15 commented near 2
+    maxCapacity := 13 // 15 // Keep 15 commented near 2
 
     // Store the new QR code with fixed capacity of 2
     _, err = database.GetDB().Exec(`
