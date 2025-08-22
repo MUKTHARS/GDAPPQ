@@ -1,9 +1,8 @@
-// C:\xampp\htdocs\GDAPPC\backend\student\controllers\question_controller.go
 package controllers
 
 import (
-	// "database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -14,22 +13,27 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
     levelStr := r.URL.Query().Get("level")
     studentID := r.Context().Value("studentID").(string)
     
+    log.Printf("GetQuestionsForStudent called with level: %s, studentID: %s", levelStr, studentID)
+    
     level, err := strconv.Atoi(levelStr)
     if err != nil {
+        log.Printf("Invalid level parameter: %s", levelStr)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid level"})
         return
     }
 
-    // Get questions for the specified level
+    log.Printf("Querying questions for level: %d", level)
+    
+    // FIXED: Direct query without JOIN since level is in survey_questions table
     rows, err := database.GetDB().Query(`
         SELECT id, question_text, weight 
-        FROM survey_questions sq
-        JOIN question_levels ql ON sq.id = ql.question_id
-        WHERE ql.level = ? AND sq.is_active = TRUE
-        ORDER BY sq.created_at`, level)
+        FROM survey_questions 
+        WHERE level = ? AND is_active = TRUE
+        ORDER BY created_at`, level)
     
     if err != nil {
+        log.Printf("Database error: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
@@ -44,6 +48,7 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
             Weight float64
         }
         if err := rows.Scan(&question.ID, &question.Text, &question.Weight); err != nil {
+            log.Printf("Error scanning row: %v", err)
             continue
         }
         questions = append(questions, map[string]interface{}{
@@ -53,8 +58,11 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
         })
     }
 
+    log.Printf("Found %d questions for level %d", len(questions), level)
+
     // If no questions found, use defaults
     if len(questions) == 0 {
+        log.Printf("No questions found for level %d, using fallback questions", level)
         questions = []map[string]interface{}{
             {"id": "q1", "text": "Clarity of arguments", "weight": 1.0},
             {"id": "q2", "text": "Contribution to discussion", "weight": 1.0},
@@ -63,12 +71,13 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
     }
 
     // Create a consistent but user-specific shuffle seed
-    // Using student ID + session ID (if available) for consistent ordering per user
     sessionID := r.URL.Query().Get("session_id")
     shuffleSeed := studentID
     if sessionID != "" {
         shuffleSeed += sessionID
     }
+
+    log.Printf("Shuffling questions with seed: %s", shuffleSeed)
 
     // Shuffle questions using a consistent seed for this user
     shuffledQuestions := shuffleQuestionsWithSeed(questions, shuffleSeed)
@@ -76,50 +85,3 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(shuffledQuestions)
 }
-
-// func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
-//     // Get level from query params
-//     levelStr := r.URL.Query().Get("level")
-//     level, err := strconv.Atoi(levelStr)
-//     if err != nil || level < 1 {
-//         level = 1 // Default to level 1 if invalid
-//     }
-
-//     log.Printf("Fetching questions for level %d", level)
-
-//     // Get active questions for the student's level
-//     rows, err := database.GetDB().Query(`
-//         SELECT id, question_text, weight 
-//         FROM survey_questions
-//         WHERE is_active = TRUE
-//         ORDER BY created_at`)
-//     if err != nil {
-//         log.Printf("Database error: %v", err)
-//         http.Error(w, "Database error", http.StatusInternalServerError)
-//         return
-//     }
-//     defer rows.Close()
-
-//     type Question struct {
-//         ID      string  `json:"id"`
-//         Text    string  `json:"text"`
-//         Weight  float32 `json:"weight"`
-//     }
-
-//     var questions []Question
-//     for rows.Next() {
-//         var q Question
-//         if err := rows.Scan(&q.ID, &q.Text, &q.Weight); err != nil {
-//             log.Printf("Error scanning question: %v", err)
-//             continue
-//         }
-//         questions = append(questions, q)
-//     }
-
-//     log.Printf("Returning %d questions", len(questions))
-    
-//     w.Header().Set("Content-Type", "application/json")
-//     if err := json.NewEncoder(w).Encode(questions); err != nil {
-//         log.Printf("Error encoding response: %v", err)
-//     }
-// }

@@ -63,7 +63,17 @@ createBulkSessions: (data) => {
 getSessionFeedbacks: (sessionId) => api.get('/admin/feedbacks', { 
     params: { session_id: sessionId } 
 }),
-  getVenues: () => api.get('/admin/venues'),
+ getRankingPoints: (level) => api.get('/admin/ranking-points', { 
+    params: level ? { level } : {} 
+  }),
+  updateRankingPoints: (data) => api.post('/admin/ranking-points', data),
+  deleteRankingPoints: (id) => api.delete('/admin/ranking-points', { 
+    params: { id } 
+  }),
+  toggleRankingPoints: (id) => api.put('/admin/ranking-points/toggle', null, { 
+    params: { id } 
+  }),
+    getVenues: () => api.get('/admin/venues'),
   getTopParticipants: (params = {}) => api.get('/admin/results/top', { params }),
 };
 

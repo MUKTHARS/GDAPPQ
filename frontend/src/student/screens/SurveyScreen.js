@@ -145,159 +145,120 @@ export default function SurveyScreen({ navigation, route }) {
 
 
 useEffect(() => {
-  const fetchQuestions = async () => {
+  
+ const fetchQuestions = async () => {
   if (!userSeed) return;
 
   try {
     const authData = await auth.getAuthData();
-    // Get session level
-    const sessionResponse = await api.student.getSession(sessionId);
-    const level = sessionResponse.data?.level || 1;
     
-    console.log('Fetching questions for level:', level);
+    // Get the student's level from auth data (stored during login)
+    const studentLevel = parseInt(authData.level) || 1;
+    console.log('Student level from auth:', studentLevel);
     
-    // Use the student API method
-    const questionsResponse = await api.student.getSurveyQuestions(level, sessionId, authData.userId);
+    // Use the student-specific endpoint with proper parameters
+    const questionsResponse = await api.get('/student/questions', {
+      params: { 
+        level: studentLevel, // Use the student's actual level
+        session_id: sessionId,
+      }
+    });
     
-    console.log('Questions API response:', questionsResponse);
+    console.log('Questions API response status:', questionsResponse.status);
+    console.log('Questions API response data:', questionsResponse.data);
     
-    // Ensure we have an array of questions
+    // Handle different response formats
     let questionsData = questionsResponse.data;
-    console.log('Raw questions data:', questionsData);
+    
+    // If response is an object with data property, extract it
+    if (questionsData && typeof questionsData === 'object' && !Array.isArray(questionsData)) {
+      if (questionsData.data && Array.isArray(questionsData.data)) {
+        questionsData = questionsData.data;
+      } else if (Array.isArray(questionsData)) {
+        // Already an array
+      } else {
+        // Try to extract any array from the object
+        const arrayKeys = Object.keys(questionsData).filter(key => Array.isArray(questionsData[key]));
+        if (arrayKeys.length > 0) {
+          questionsData = questionsData[arrayKeys[0]];
+        } else {
+          questionsData = [];
+        }
+      }
+    }
     
     if (!Array.isArray(questionsData)) {
-      console.log('Questions data is not array, converting');
+      console.log('Questions data is not array, using empty array');
       questionsData = [];
     }
     
+    console.log('Processed questions data:', questionsData);
+    
     // Set default questions if empty
     if (questionsData.length === 0) {
-      console.log('No questions returned, using fallback');
+      console.log('No questions returned from database, using fallback');
       questionsData = [
         { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
         { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
         { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
       ];
+    } else {
+      console.log(`Found ${questionsData.length} questions from database`);
     }
     
-    console.log('Final questions to use:', questionsData);
     setAllQuestions(questionsData);
-      
-      // Convert userSeed to a consistent numeric value
+    
+    // Convert userSeed to a consistent numeric value
+    let numericSeed = 0;
+    for (let i = 0; i < userSeed.length; i++) {
+      numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
+    }
+    
+    // Shuffle the questions using the user-specific seed
+    const shuffled = seededShuffle(questionsData, numericSeed);
+    setShuffledQuestions(shuffled);
+    setQuestions(shuffled);
+    
+    // Initialize selections for shuffled questions
+    const initialSelections = {};
+    shuffled.forEach((_, index) => {
+      initialSelections[index] = {};
+    });
+    setSelections(initialSelections);
+    
+  } catch (error) {
+    console.error('Questions fetch error:', error.response?.data || error.message);
+    // Set default questions if there's an error
+    const defaultQuestions = [
+      { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
+      { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
+      { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
+    ];
+    
+    setAllQuestions(defaultQuestions);
+    
+    // Use userSeed for shuffling even with default questions
+    if (userSeed) {
       let numericSeed = 0;
       for (let i = 0; i < userSeed.length; i++) {
         numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
       }
-      
-      // Shuffle the questions using the user-specific seed
-      const shuffled = seededShuffle(questionsData, numericSeed);
+      const shuffled = seededShuffle(defaultQuestions, numericSeed);
       setShuffledQuestions(shuffled);
       setQuestions(shuffled);
       
-      // Initialize selections for shuffled questions
       const initialSelections = {};
       shuffled.forEach((_, index) => {
         initialSelections[index] = {};
       });
       setSelections(initialSelections);
-      
-    } catch (error) {
-      console.error('Questions fetch error:', error);
-      // Set default questions if there's an error
-      const defaultQuestions = [
-        { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-        { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-        { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-      ];
-      
-      setAllQuestions(defaultQuestions);
-      
-      // Use userSeed for shuffling even with default questions
-      if (userSeed) {
-        let numericSeed = 0;
-        for (let i = 0; i < userSeed.length; i++) {
-          numericSeed = (numericSeed * 31 + userSeed.charCodeAt(i)) % 1000000;
-        }
-        const shuffled = seededShuffle(defaultQuestions, numericSeed);
-        setShuffledQuestions(shuffled);
-        setQuestions(shuffled);
-        
-        const initialSelections = {};
-        shuffled.forEach((_, index) => {
-          initialSelections[index] = {};
-        });
-        setSelections(initialSelections);
-      }
     }
-  };
+  }
+};
 
   fetchQuestions();
 }, [sessionId, userSeed]);
 
-
-  // useEffect(() => {
-  //   const fetchQuestions = async () => {
-  //     try {
-  //       // Get session level
-  //       const sessionResponse = await api.student.getSession(sessionId);
-  //       const level = sessionResponse.data?.level || 1;
-        
-  //       // Use the student API method
-  //       const questionsResponse = await api.student.getSurveyQuestions(level);
-        
-  //       // Ensure we have an array of questions
-  //       let questionsData = questionsResponse.data;
-  //       if (!Array.isArray(questionsData)) {
-  //         questionsData = [];
-  //       }
-        
-  //       // Set default questions if empty
-  //       if (questionsData.length === 0) {
-  //         questionsData = [
-  //           { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-  //           { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-  //           { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-  //         ];
-  //       }
-        
-  //       setAllQuestions(questionsData);
-        
-  //       // Shuffle the questions for this student
-  //       const shuffled = shuffleArray(questionsData);
-  //       setShuffledQuestions(shuffled);
-  //       setQuestions(shuffled); // Also set the original questions state for compatibility
-        
-  //       // Initialize selections for shuffled questions
-  //       const initialSelections = {};
-  //       shuffled.forEach((_, index) => {
-  //         initialSelections[index] = {};
-  //       });
-  //       setSelections(initialSelections);
-        
-  //     } catch (error) {
-  //       console.error('Questions fetch error:', error);
-  //       // Set default questions if there's an error
-  //       const defaultQuestions = [
-  //         { id: 'q1', text: 'Clarity of arguments', weight: 1.0 },
-  //         { id: 'q2', text: 'Contribution to discussion', weight: 1.0 },
-  //         { id: 'q3', text: 'Teamwork and collaboration', weight: 1.0 }
-  //       ];
-        
-  //       setAllQuestions(defaultQuestions);
-  //       const shuffled = shuffleArray(defaultQuestions);
-  //       setShuffledQuestions(shuffled);
-  //       setQuestions(shuffled); // Also set the original questions state for compatibility
-        
-  //       const initialSelections = {};
-  //       shuffled.forEach((_, index) => {
-  //         initialSelections[index] = {};
-  //       });
-  //       setSelections(initialSelections);
-  //     }
-  //   };
-
-  //   fetchQuestions();
-  // }, [sessionId]);
 
   // Timer management
   useEffect(() => {

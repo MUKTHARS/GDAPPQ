@@ -18,14 +18,15 @@ const ResultItem = ({ item, index }) => {
           {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`}
         </Text>
       </View>
-      <View style={styles.detailsContainer}>
-        <Text style={styles.nameText}>{item.name}</Text>
-        <View style={styles.scoresContainer}>
-          <Text style={styles.scoreText}>Received: {totalScore.toFixed(1)}</Text>
-          <Text style={styles.penaltyText}>Penalties: -{penaltyPoints.toFixed(1)}</Text>
-          <Text style={styles.finalScoreText}>Final: {finalScore.toFixed(1)}</Text>
-        </View>
-      </View>
+      <View style={styles.resultCard}>
+    <Text style={styles.resultName}>{item.name}</Text>
+    <View style={styles.scoreDetails}>
+      <Text style={styles.scoreText}>Total: {item.total_score}</Text>
+      <Text style={styles.penaltyText}>Penalty: -{item.penalty_points}</Text>
+      <Text style={styles.finalScoreText}>Final: {item.final_score}</Text>
+    </View>
+    <Text style={styles.firstPlacesText}>🥇: {item.first_places}</Text>
+  </View>
     </View>
   );
 };

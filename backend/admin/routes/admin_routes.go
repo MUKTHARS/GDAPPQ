@@ -88,6 +88,24 @@ router.Handle("/admin/topics", middleware.AdminOnly(
         }
     }),
 ))
+router.Handle("/admin/ranking-points", middleware.AdminOnly(
+    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        switch r.Method {
+        case http.MethodGet:
+            controllers.GetRankingPointsConfig(w, r)
+        case http.MethodPost:
+            controllers.UpdateRankingPointsConfig(w, r)
+        case http.MethodDelete:
+            controllers.DeleteRankingPointsConfig(w, r)
+        default:
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        }
+    }),
+))
+
+router.Handle("/admin/ranking-points/toggle", middleware.AdminOnly(
+    http.HandlerFunc(controllers.ToggleRankingPointsConfig),
+))
 router.Handle("/admin/bookings", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetStudentBookings)))
 router.Handle("/admin/rules", middleware.AdminOnly(
