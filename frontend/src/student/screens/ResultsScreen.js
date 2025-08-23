@@ -36,43 +36,43 @@ export default function ResultsScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-useEffect(() => {
-  const fetchResults = async () => {
-    try {
-      setLoading(true);
-      const response = await api.student.getResults(sessionId);
-      
-      if (response.data?.results) {
-        // Process results to ensure correct data types
-        const processedResults = response.data.results
-          .map(item => ({
-            ...item,
-            // Ensure numeric values - handle both string and number types
-            total_score: typeof item.total_score === 'string' ? 
-              parseFloat(item.total_score) : item.total_score || 0,
-            penalty_points: typeof item.penalty_points === 'string' ? 
-              parseFloat(item.penalty_points) : item.penalty_points || 0,
-            final_score: typeof item.final_score === 'string' ? 
-              parseFloat(item.final_score) : 
-              (item.total_score || 0) - (item.penalty_points || 0)
-          }))
-          // Sort by final_score descending as backup
-          .sort((a, b) => b.final_score - a.final_score);
+  useEffect(() => {
+    const fetchResults = async () => {
+      try {
+        setLoading(true);
+        const response = await api.student.getResults(sessionId);
         
-        setResults(processedResults);
-      } else {
-        setError('No results available for this session');
+        if (response.data?.results) {
+          // Process results to ensure correct data types
+          const processedResults = response.data.results
+            .map(item => ({
+              ...item,
+              // Ensure numeric values - handle both string and number types
+              total_score: typeof item.total_score === 'string' ? 
+                parseFloat(item.total_score) : item.total_score || 0,
+              penalty_points: typeof item.penalty_points === 'string' ? 
+                parseFloat(item.penalty_points) : item.penalty_points || 0,
+              final_score: typeof item.final_score === 'string' ? 
+                parseFloat(item.final_score) : 
+                (item.total_score || 0) - (item.penalty_points || 0)
+            }))
+            // Sort by final_score descending as backup
+            .sort((a, b) => b.final_score - a.final_score);
+          
+          setResults(processedResults);
+        } else {
+          setError('No results available for this session');
+        }
+      } catch (err) {
+        setError('Failed to load results');
+        console.error('Results error:', err);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Failed to load results');
-      console.error('Results error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  fetchResults();
-}, [sessionId]);
+    fetchResults();
+  }, [sessionId]);
 
   if (loading) {
     return (
@@ -97,7 +97,7 @@ useEffect(() => {
       
       <FlatList
         data={results}
-        keyExtractor={item => item.responder_id}
+        keyExtractor={(item, index) => item.student_id || `result-${index}`}
         renderItem={({ item, index }) => <ResultItem item={item} index={index} />}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
