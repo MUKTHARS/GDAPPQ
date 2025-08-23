@@ -203,7 +203,7 @@ checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', {
 }),
 
 
-submitSurvey: (data) => {
+submitSurvey: (data, isFinal = false) => {
     console.log('[API] Submitting survey with data:', JSON.stringify(data, null, 2));
     return api.post('/student/survey', {
         session_id: data.sessionId,
@@ -224,7 +224,9 @@ submitSurvey: (data) => {
                 acc[questionNum] = formattedRankings;
             }
             return acc;
-        }, {})
+        }, {}),
+        is_partial: false, // Set this appropriately
+        is_final: isFinal  // Make sure this is sent
     }, {
         validateStatus: function (status) {
             console.log('[API] Received status:', status);

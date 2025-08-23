@@ -454,30 +454,29 @@ const proceedToNextQuestion = async (isPartial = false) => {
     try {
         const currentSelections = selections[currentQuestion] || {};
         if (Object.keys(currentSelections).length > 0) {
-            // Get the actual question from the shuffled array
             const shuffledQuestion = shuffledQuestions[currentQuestion];
-            
-            // Use question NUMBER (index + 1) instead of question ID as the key
-            // The backend expects question numbers (1, 2, 3) not question IDs
             const questionNumber = currentQuestion + 1;
+            
+            // Determine if this is the final submission
+            const isFinal = !isPartial && (currentQuestion === shuffledQuestions.length - 1);
             
             const responseData = {
                 sessionId,
                 responses: {
-                    [questionNumber]: currentSelections // Use question NUMBER as key
+                    [questionNumber]: currentSelections
                 },
-                isPartial: isPartial // Indicate if this is a partial submission
+                isPartial: isPartial,
+                isFinal: isFinal // Make sure this is included
             };
             
-            console.log('Submitting survey data:', JSON.stringify(responseData, null, 2));
-            await api.student.submitSurvey(responseData);
+            console.log('Submitting survey data - isFinal:', isFinal, 'isPartial:', isPartial);
+            await api.student.submitSurvey(responseData, isFinal);
         }
 
         setConfirmedQuestions(prev => [...prev, currentQuestion]);
         
         if (currentQuestion === shuffledQuestions.length - 1) {
-            // Final submission - mark as completed
-            await api.student.markSurveyCompleted(sessionId);
+            // For final submission, wait for the API response before navigating
             navigation.replace('Waiting', { sessionId });
         } else {
             setCurrentQuestion(prev => prev + 1);

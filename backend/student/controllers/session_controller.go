@@ -392,6 +392,7 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         SessionID string                   `json:"session_id"`
         Responses map[int]map[int]string   `json:"responses"` // question_number -> rank -> studentID
         IsPartial bool                     `json:"is_partial"`
+        IsFinal   bool                     `json:"is_final"` // This flag should be used
     }
     
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -459,6 +460,9 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         index++
     }
 
+    totalQuestions := len(questionMappings)
+    log.Printf("Total questions for level %d: %d", sessionLevel, totalQuestions)
+
     // Process each question response
     for questionNumber, rankings := range req.Responses {
         // Get question mapping
@@ -498,13 +502,17 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
             log.Printf("Saving: responder %s ranked student %s as rank %d with score %.2f for question %s", 
                 studentID, rankedStudentID, rank, finalScore, questionMapping.ID)
             
-            // FIXED: Correct parameter order in SQL query
-            // The order must match: session_id, student_id (being ranked), responder_id, question_id, ranks, score, weighted_score
+            // Set is_completed based on whether this is the final submission
+            isCompleted := 0
+            if req.IsFinal {
+                isCompleted = 1
+            }
+            
             _, err = tx.Exec(`
                 INSERT INTO survey_results 
-                (id, session_id, student_id, responder_id, question_id, ranks, score, weighted_score, is_current_session)
-                VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1)`,
-                req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore)
+                (id, session_id, student_id, responder_id, question_id, ranks, score, weighted_score, is_current_session, is_completed)
+                VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+                req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore, isCompleted)
             if err != nil {
                 tx.Rollback()
                 log.Printf("Error saving survey response: %v", err)
@@ -515,21 +523,34 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // If this is a partial submission (Confirm & Next), we don't mark as completed
-    if !req.IsPartial {
-        // Mark survey as completed for final submission
-        _, err = tx.Exec(`
-            INSERT INTO survey_completion (session_id, student_id)
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE completed_at = NOW()`,
-            req.SessionID, studentID)
-        
-        if err != nil {
-            log.Printf("Error marking survey completion: %v", err)
-            w.WriteHeader(http.StatusInternalServerError)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
-            return
-        }
+    // CRITICAL FIX: Mark survey as completed in survey_completion table for ALL submissions
+    // This ensures the survey_completion table gets populated regardless of is_final flag
+    log.Printf("Marking survey completion for student %s in session %s", studentID, req.SessionID)
+    
+    _, err = tx.Exec(`
+        INSERT INTO survey_completion (session_id, student_id, completed_at)
+        VALUES (?, ?, NOW())
+        ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+        req.SessionID, studentID)
+    
+    if err != nil {
+        log.Printf("Error marking survey completion: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+        return
+    }
+    
+    log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
+    
+    // Also update all survey_results records for this student to mark as completed
+    _, err = tx.Exec(`
+        UPDATE survey_results 
+        SET is_completed = 1 
+        WHERE session_id = ? AND responder_id = ?`,
+        req.SessionID, studentID)
+    if err != nil {
+        log.Printf("Error updating survey_results completion status: %v", err)
+        // Don't fail the whole request for this
     }
 
     if err := tx.Commit(); err != nil {
@@ -539,12 +560,13 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    log.Printf("Successfully processed survey submission for student %s in session %s (partial: %v)", 
-        studentID, req.SessionID, req.IsPartial)
+    log.Printf("Successfully processed survey submission for student %s in session %s (partial: %v, final: %v)", 
+        studentID, req.SessionID, req.IsPartial, req.IsFinal)
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
         "status": "success",
         "partial": req.IsPartial,
+        "final": req.IsFinal,
     })
 }
 
@@ -1150,7 +1172,6 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// In survey_controller.go, modify the CheckSurveyCompletion function
 func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
     if sessionID == "" {
