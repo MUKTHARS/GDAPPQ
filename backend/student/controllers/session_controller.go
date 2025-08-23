@@ -392,7 +392,7 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         SessionID string                   `json:"session_id"`
         Responses map[int]map[int]string   `json:"responses"` // question_number -> rank -> studentID
         IsPartial bool                     `json:"is_partial"`
-        IsFinal   bool                     `json:"is_final"` // This flag should be used
+        IsFinal   bool                     `json:"is_final"`
     }
     
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -502,17 +502,11 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
             log.Printf("Saving: responder %s ranked student %s as rank %d with score %.2f for question %s", 
                 studentID, rankedStudentID, rank, finalScore, questionMapping.ID)
             
-            // Set is_completed based on whether this is the final submission
-            isCompleted := 0
-            if req.IsFinal {
-                isCompleted = 1
-            }
-            
             _, err = tx.Exec(`
                 INSERT INTO survey_results 
                 (id, session_id, student_id, responder_id, question_id, ranks, score, weighted_score, is_current_session, is_completed)
-                VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-                req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore, isCompleted)
+                VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+                req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore)
             if err != nil {
                 tx.Rollback()
                 log.Printf("Error saving survey response: %v", err)
@@ -523,34 +517,56 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // CRITICAL FIX: Mark survey as completed in survey_completion table for ALL submissions
-    // This ensures the survey_completion table gets populated regardless of is_final flag
-    log.Printf("Marking survey completion for student %s in session %s", studentID, req.SessionID)
-    
-    _, err = tx.Exec(`
-        INSERT INTO survey_completion (session_id, student_id, completed_at)
-        VALUES (?, ?, NOW())
-        ON DUPLICATE KEY UPDATE completed_at = NOW()`,
-        req.SessionID, studentID)
+    // Check if ALL questions have been answered by counting responses
+    var answeredQuestionsCount int
+    err = tx.QueryRow(`
+        SELECT COUNT(DISTINCT question_id) 
+        FROM survey_results 
+        WHERE session_id = ? AND responder_id = ?`,
+        req.SessionID, studentID).Scan(&answeredQuestionsCount)
     
     if err != nil {
-        log.Printf("Error marking survey completion: %v", err)
+        log.Printf("Error counting answered questions: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
         return
     }
-    
-    log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
-    
-    // Also update all survey_results records for this student to mark as completed
-    _, err = tx.Exec(`
-        UPDATE survey_results 
-        SET is_completed = 1 
-        WHERE session_id = ? AND responder_id = ?`,
-        req.SessionID, studentID)
-    if err != nil {
-        log.Printf("Error updating survey_results completion status: %v", err)
-        // Don't fail the whole request for this
+
+    log.Printf("Student %s has answered %d out of %d questions", studentID, answeredQuestionsCount, totalQuestions)
+
+    // Only mark as completed if ALL questions are answered
+    if answeredQuestionsCount >= totalQuestions {
+        log.Printf("All questions completed for student %s in session %s", studentID, req.SessionID)
+        
+        // Mark survey as completed in survey_completion table
+        _, err = tx.Exec(`
+            INSERT INTO survey_completion (session_id, student_id, completed_at)
+            VALUES (?, ?, NOW())
+            ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+            req.SessionID, studentID)
+        
+        if err != nil {
+            log.Printf("Error marking survey completion: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+            return
+        }
+        
+        // Update all survey_results records for this student to mark as completed
+        _, err = tx.Exec(`
+            UPDATE survey_results 
+            SET is_completed = 1 
+            WHERE session_id = ? AND responder_id = ?`,
+            req.SessionID, studentID)
+        if err != nil {
+            log.Printf("Error updating survey_results completion status: %v", err)
+            // Don't fail the whole request for this
+        }
+        
+        log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
+    } else {
+        log.Printf("Survey not yet completed for student %s (%d/%d questions)", 
+            studentID, answeredQuestionsCount, totalQuestions)
     }
 
     if err := tx.Commit(); err != nil {
@@ -560,15 +576,202 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    log.Printf("Successfully processed survey submission for student %s in session %s (partial: %v, final: %v)", 
-        studentID, req.SessionID, req.IsPartial, req.IsFinal)
+    log.Printf("Successfully processed survey submission for student %s in session %s", 
+        studentID, req.SessionID)
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
         "status": "success",
-        "partial": req.IsPartial,
-        "final": req.IsFinal,
+        "completed": answeredQuestionsCount >= totalQuestions,
+        "questions_answered": answeredQuestionsCount,
+        "total_questions": totalQuestions,
     })
 }
+
+// func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
+//     studentID := r.Context().Value("studentID").(string)
+//     log.Printf("SubmitSurvey started for student %s", studentID)
+    
+//     var req struct {
+//         SessionID string                   `json:"session_id"`
+//         Responses map[int]map[int]string   `json:"responses"` // question_number -> rank -> studentID
+//         IsPartial bool                     `json:"is_partial"`
+//         IsFinal   bool                     `json:"is_final"` // This flag should be used
+//     }
+    
+//     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+//         log.Printf("Survey decode error: %v", err)
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+//         return
+//     }
+
+//     tx, err := database.GetDB().Begin()
+//     if err != nil {
+//         log.Printf("Failed to begin transaction: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer tx.Rollback()
+
+//     // Get session level first
+//     var sessionLevel int
+//     err = tx.QueryRow("SELECT level FROM gd_sessions WHERE id = ?", req.SessionID).Scan(&sessionLevel)
+//     if err != nil {
+//         log.Printf("Error getting session level: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+
+//     // Get all active questions for this level with their IDs and weights, ordered by display_order
+//     rows, err := tx.Query(`
+//         SELECT id, weight 
+//         FROM survey_questions 
+//         WHERE level = ? AND is_active = TRUE 
+//         ORDER BY display_order`,
+//         sessionLevel)
+//     if err != nil {
+//         log.Printf("Error getting questions: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//         return
+//     }
+//     defer rows.Close()
+
+//     // Create a mapping of question number to question ID and weight
+//     questionMappings := make(map[int]struct {
+//         ID     string
+//         Weight float64
+//     })
+    
+//     index := 1
+//     for rows.Next() {
+//         var questionID string
+//         var weight float64
+//         if err := rows.Scan(&questionID, &weight); err != nil {
+//             continue
+//         }
+//         questionMappings[index] = struct {
+//             ID     string
+//             Weight float64
+//         }{
+//             ID:     questionID,
+//             Weight: weight,
+//         }
+//         log.Printf("Question %d: ID=%s, Weight=%.2f", index, questionID, weight)
+//         index++
+//     }
+
+//     totalQuestions := len(questionMappings)
+//     log.Printf("Total questions for level %d: %d", sessionLevel, totalQuestions)
+
+//     // Process each question response
+//     for questionNumber, rankings := range req.Responses {
+//         // Get question mapping
+//         questionMapping, exists := questionMappings[questionNumber]
+//         if !exists {
+//             log.Printf("Question mapping not found for question number %d, skipping", questionNumber)
+//             continue
+//         }
+
+//         log.Printf("Processing question %d with ID %s and weight %.2f", questionNumber, questionMapping.ID, questionMapping.Weight)
+
+//         // Clear previous responses for this question and responder if any
+//         _, err = tx.Exec(`
+//             DELETE FROM survey_results 
+//             WHERE session_id = ? AND responder_id = ? AND question_id = ?`,
+//             req.SessionID, studentID, questionMapping.ID)
+//         if err != nil {
+//             log.Printf("Error clearing previous responses: %v", err)
+//             w.WriteHeader(http.StatusInternalServerError)
+//             json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+//             return
+//         }
+
+//         // Save new rankings with proper question_id foreign key
+//         for rank, rankedStudentID := range rankings {
+//             // Get base points from configurable ranking points
+//             basePoints, err := getRankingPoints(sessionLevel, rank)
+//             if err != nil {
+//                 log.Printf("Error getting ranking points: %v", err)
+//                 // Fallback to default calculation if config not found
+//                 basePoints = 5 - float64(rank) // 1st=4, 2nd=3, 3rd=2
+//             }
+            
+//             // Calculate final score as points × weight
+//             finalScore := basePoints * questionMapping.Weight
+            
+//             log.Printf("Saving: responder %s ranked student %s as rank %d with score %.2f for question %s", 
+//                 studentID, rankedStudentID, rank, finalScore, questionMapping.ID)
+            
+//             // Set is_completed based on whether this is the final submission
+//             isCompleted := 0
+//             if req.IsFinal {
+//                 isCompleted = 1
+//             }
+            
+//             _, err = tx.Exec(`
+//                 INSERT INTO survey_results 
+//                 (id, session_id, student_id, responder_id, question_id, ranks, score, weighted_score, is_current_session, is_completed)
+//                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+//                 req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore, isCompleted)
+//             if err != nil {
+//                 tx.Rollback()
+//                 log.Printf("Error saving survey response: %v", err)
+//                 w.WriteHeader(http.StatusInternalServerError)
+//                 json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
+//                 return
+//             }
+//         }
+//     }
+
+//     // CRITICAL FIX: Mark survey as completed in survey_completion table for ALL submissions
+//     // This ensures the survey_completion table gets populated regardless of is_final flag
+//     log.Printf("Marking survey completion for student %s in session %s", studentID, req.SessionID)
+    
+//     _, err = tx.Exec(`
+//         INSERT INTO survey_completion (session_id, student_id, completed_at)
+//         VALUES (?, ?, NOW())
+//         ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+//         req.SessionID, studentID)
+    
+//     if err != nil {
+//         log.Printf("Error marking survey completion: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+//         return
+//     }
+    
+//     log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
+    
+//     // Also update all survey_results records for this student to mark as completed
+//     _, err = tx.Exec(`
+//         UPDATE survey_results 
+//         SET is_completed = 1 
+//         WHERE session_id = ? AND responder_id = ?`,
+//         req.SessionID, studentID)
+//     if err != nil {
+//         log.Printf("Error updating survey_results completion status: %v", err)
+//         // Don't fail the whole request for this
+//     }
+
+//     if err := tx.Commit(); err != nil {
+//         log.Printf("Error committing transaction: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey"})
+//         return
+//     }
+
+//     log.Printf("Successfully processed survey submission for student %s in session %s (partial: %v, final: %v)", 
+//         studentID, req.SessionID, req.IsPartial, req.IsFinal)
+//     w.Header().Set("Content-Type", "application/json")
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "status": "success",
+//         "partial": req.IsPartial,
+//         "final": req.IsFinal,
+//     })
+// }
 
 
 
