@@ -1,27 +1,24 @@
-// App.js
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { ActivityIndicator, View, Modal, Button } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AdminStack from './admin/navigation/AdminStack';
 import StudentStack from './student/navigation/StudentStack';
-import AdminLoginScreen from './admin/screens/LoginScreen';
+import LoginScreen from './screens/LoginScreen';
 
 export default function App() {
-  const [userRole, setUserRole] = useState('student');
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = await AsyncStorage.getItem('token');
-        if (token) {
-          const role = await AsyncStorage.getItem('role');
-          setUserRole(role || 'student');
+        const [token, role] = await AsyncStorage.multiGet(['token', 'role']);
+        if (token[1] && role[1]) {
+          setUserRole(role[1]);
         }
       } catch (error) {
-        console.error(error);
+        console.error('Auth check error:', error);
       } finally {
         setLoading(false);
       }
@@ -30,13 +27,17 @@ export default function App() {
     checkAuth();
   }, []);
 
-  const handleAdminSwitch = () => {
-    setShowAdminLogin(true);
+  const handleLoginSuccess = (role) => {
+    setUserRole(role);
   };
 
-  const handleAdminLoginSuccess = () => {
-    setUserRole('admin');
-    setShowAdminLogin(false);
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.multiRemove(['token', 'role', 'level', 'userId']);
+      setUserRole(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   if (loading) {
@@ -49,22 +50,14 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      {userRole === 'admin' ? (
-        <AdminStack />
+      {userRole ? (
+        userRole === 'admin' ? (
+          <AdminStack onLogout={handleLogout} />
+        ) : (
+          <StudentStack onLogout={handleLogout} />
+        )
       ) : (
-        <>
-          <StudentStack onAdminSwitch={handleAdminSwitch} />
-          <Modal
-            visible={showAdminLogin}
-            animationType="slide"
-            transparent={false}
-          >
-            <AdminLoginScreen 
-              onLoginSuccess={handleAdminLoginSuccess}
-              onCancel={() => setShowAdminLogin(false)}
-            />
-          </Modal>
-        </>
+        <LoginScreen onLoginSuccess={handleLoginSuccess} />
       )}
     </NavigationContainer>
   );
@@ -72,18 +65,19 @@ export default function App() {
 
 
 
-
-
+// // App.js
 // import React, { useState, useEffect } from 'react';
 // import { NavigationContainer } from '@react-navigation/native';
-// import { ActivityIndicator, View } from 'react-native';
+// import { ActivityIndicator, View, Modal, Button } from 'react-native';
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 // import AdminStack from './admin/navigation/AdminStack';
 // import StudentStack from './student/navigation/StudentStack';
+// import AdminLoginScreen from './admin/screens/LoginScreen';
 
 // export default function App() {
-//   const [userRole, setUserRole] = useState(null);
+//   const [userRole, setUserRole] = useState('student');
 //   const [loading, setLoading] = useState(true);
+//   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
 //   useEffect(() => {
 //     const checkAuth = async () => {
@@ -91,7 +85,7 @@ export default function App() {
 //         const token = await AsyncStorage.getItem('token');
 //         if (token) {
 //           const role = await AsyncStorage.getItem('role');
-//           setUserRole(role);
+//           setUserRole(role || 'student');
 //         }
 //       } catch (error) {
 //         console.error(error);
@@ -103,6 +97,15 @@ export default function App() {
 //     checkAuth();
 //   }, []);
 
+//   const handleAdminSwitch = () => {
+//     setShowAdminLogin(true);
+//   };
+
+//   const handleAdminLoginSuccess = () => {
+//     setUserRole('admin');
+//     setShowAdminLogin(false);
+//   };
+
 //   if (loading) {
 //     return (
 //       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -113,19 +116,23 @@ export default function App() {
 
 //   return (
 //     <NavigationContainer>
-//       {userRole === 'admin' ? <AdminStack /> : <StudentStack />}
-//     </NavigationContainer>
-//   );
-// }
-
-// import React from 'react';
-// import { NavigationContainer } from '@react-navigation/native';
-// import AdminStack from './admin/navigation/AdminStack';
-// /////////
-// export default function App() {
-//   return (
-//     <NavigationContainer>
-//       <AdminStack />
+//       {userRole === 'admin' ? (
+//         <AdminStack />
+//       ) : (
+//         <>
+//           <StudentStack onAdminSwitch={handleAdminSwitch} />
+//           <Modal
+//             visible={showAdminLogin}
+//             animationType="slide"
+//             transparent={false}
+//           >
+//             <AdminLoginScreen 
+//               onLoginSuccess={handleAdminLoginSuccess}
+//               onCancel={() => setShowAdminLogin(false)}
+//             />
+//           </Modal>
+//         </>
+//       )}
 //     </NavigationContainer>
 //   );
 // }

@@ -3,6 +3,19 @@ import api from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default {
+
+  verifyToken: async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) return false;
+    
+    // Add token verification logic here if needed
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+,
   login: async (email, password) => {
     try {
       const response = await api.post('admin/login', { 
