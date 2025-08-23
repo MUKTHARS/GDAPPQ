@@ -176,18 +176,17 @@ export default function QrScannerScreen({ navigation }) {
       <View style={styles.overlay}>
         {/* Header Section */}
         <View style={styles.header}>
-          {/* <TouchableOpacity 
+          <TouchableOpacity 
             style={styles.backButton}
             onPress={() => navigation.goBack()}
-          > */}
+          >
             {/* <LinearGradient
               colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.4)']}
               style={styles.backButtonGradient}
-            > */}
-              {/* <Icon name="arrow-back" size={24} color="#fff" /> */}
-            {/* </LinearGradient> */}
-          {/* </TouchableOpacity> */}
-          {/* <Text style={styles.headerTitle}>Scan QR Code</Text> */}
+            >
+              <Icon name="arrow-back" size={24} color="#fff" />
+            </LinearGradient> */}
+          </TouchableOpacity>
           <View style={styles.headerSpacer} />
         </View>
 
