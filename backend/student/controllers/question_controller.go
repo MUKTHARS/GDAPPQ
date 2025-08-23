@@ -25,11 +25,11 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Querying questions for level: %d", level)
     
-    // FIXED: Direct query without JOIN since level is in survey_questions table
+    // FIXED: Enhanced query with better error handling
     rows, err := database.GetDB().Query(`
         SELECT id, question_text, weight 
         FROM survey_questions 
-        WHERE level = ? AND is_active = TRUE
+        WHERE level = ? AND is_active = 1
         ORDER BY created_at`, level)
     
     if err != nil {
@@ -41,10 +41,12 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
 
     var questions []map[string]interface{}
+    var questionCount int
+    
     for rows.Next() {
         var question struct {
-            ID    string
-            Text  string
+            ID     string
+            Text   string
             Weight float64
         }
         if err := rows.Scan(&question.ID, &question.Text, &question.Weight); err != nil {
@@ -56,13 +58,46 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
             "text":   question.Text,
             "weight": question.Weight,
         })
+        questionCount++
+        
+        log.Printf("Found question: ID=%s, Text=%s, Weight=%.1f", 
+            question.ID, question.Text, question.Weight)
     }
 
-    log.Printf("Found %d questions for level %d", len(questions), level)
+    // Check for any errors during iteration
+    if err := rows.Err(); err != nil {
+        log.Printf("Row iteration error: %v", err)
+    }
+
+    log.Printf("Total questions found for level %d: %d", level, questionCount)
 
     // If no questions found, use defaults
     if len(questions) == 0 {
         log.Printf("No questions found for level %d, using fallback questions", level)
+        
+        // Debug: Check what's actually in the database
+        debugRows, debugErr := database.GetDB().Query(`
+            SELECT id, question_text, weight, level, is_active 
+            FROM survey_questions 
+            ORDER BY created_at`)
+        
+        if debugErr == nil {
+            defer debugRows.Close()
+            var debugCount int
+            for debugRows.Next() {
+                var id, text string
+                var weight float64
+                var dbLevel int
+                var isActive bool
+                if err := debugRows.Scan(&id, &text, &weight, &dbLevel, &isActive); err == nil {
+                    log.Printf("DB Question: ID=%s, Text=%s, Level=%d, Active=%t", 
+                        id, text, dbLevel, isActive)
+                    debugCount++
+                }
+            }
+            log.Printf("Total questions in database: %d", debugCount)
+        }
+        
         questions = []map[string]interface{}{
             {"id": "q1", "text": "Clarity of arguments", "weight": 1.0},
             {"id": "q2", "text": "Contribution to discussion", "weight": 1.0},
@@ -77,11 +112,13 @@ func GetQuestionsForStudent(w http.ResponseWriter, r *http.Request) {
         shuffleSeed += sessionID
     }
 
-    log.Printf("Shuffling questions with seed: %s", shuffleSeed)
+    log.Printf("Shuffling %d questions with seed: %s", len(questions), shuffleSeed)
 
     // Shuffle questions using a consistent seed for this user
     shuffledQuestions := shuffleQuestionsWithSeed(questions, shuffleSeed)
 
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(shuffledQuestions)
+    if err := json.NewEncoder(w).Encode(shuffledQuestions); err != nil {
+        log.Printf("Error encoding response: %v", err)
+    }
 }

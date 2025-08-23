@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.255.208:8080' 
+    ? 'http://10.150.251.158:8080' 
     : 'http://localhost:8080',
 });
 
@@ -25,6 +25,7 @@ api.interceptors.request.use(async (config) => {
   console.error('Request error:', error);
   return Promise.reject(error);
 });
+
 
 api.interceptors.response.use(response => {
   console.log('Response received:', {
@@ -289,6 +290,8 @@ getResults: (sessionId) => {
     return { data: null };
   });
 },
+
+
 submitFeedback: (sessionId, rating, comments) => api.post('/student/feedback', {
     session_id: sessionId,
     rating: rating,
