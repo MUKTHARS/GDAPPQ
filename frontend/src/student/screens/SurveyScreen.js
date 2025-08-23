@@ -406,86 +406,127 @@ useEffect(() => {
     }));
   };
 
-  const confirmCurrentQuestion = async () => {
+const confirmCurrentQuestion = async () => {
     const currentSelections = selections[currentQuestion] || {};
     const hasAtLeastOneRank = Object.keys(currentSelections).length > 0;
     
     if (!hasAtLeastOneRank && !penalties[currentQuestion]) {
-      Alert.alert(
-        "Incomplete Ranking",
-        "You haven't selected any rankings for this question. " +
-        "You'll receive a penalty if you proceed without selections.",
-        [
-          {
-            text: "Cancel",
-            style: "cancel"
-          },
-          {
-            text: "Proceed Anyway",
-            onPress: async () => {
-              // Apply penalty for incomplete question
-              try {
-                const authData = await auth.getAuthData();
-                await api.student.applyQuestionPenalty(
-                  sessionId,
-                  currentQuestion + 1,
-                  authData.userId
-                );
-                setPenalties(prev => ({
-                  ...prev,
-                  [currentQuestion]: true
-                }));
-                proceedToNextQuestion();
-              } catch (err) {
-                console.log('Penalty application error:', err);
-              }
-            }
-          }
-        ]
-      );
-      return;
+        Alert.alert(
+            "Incomplete Ranking",
+            "You haven't selected any rankings for this question. " +
+            "You'll receive a penalty if you proceed without selections.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Proceed Anyway",
+                    onPress: async () => {
+                        try {
+                            const authData = await auth.getAuthData();
+                            await api.student.applyQuestionPenalty(
+                                sessionId,
+                                currentQuestion + 1,
+                                authData.userId
+                            );
+                            setPenalties(prev => ({
+                                ...prev,
+                                [currentQuestion]: true
+                            }));
+                            proceedToNextQuestion(true); // Pass true for partial submission
+                        } catch (err) {
+                            console.log('Penalty application error:', err);
+                        }
+                    }
+                }
+            ]
+        );
+        return;
     }
 
-    proceedToNextQuestion();
-  };
+    proceedToNextQuestion(true); // Pass true for partial submission
+};
 
-    const proceedToNextQuestion = async () => {
+const proceedToNextQuestion = async (isPartial = false) => {
     setIsSubmitting(true);
     
     try {
-      // Only submit if there are selections
-      const currentSelections = selections[currentQuestion] || {};
-      if (Object.keys(currentSelections).length > 0) {
-        // Get the original question from the shuffled array
-        const shuffledQuestion = shuffledQuestions[currentQuestion];
-        
-        // Find the original index in allQuestions
-        const originalQuestionIndex = allQuestions.findIndex(q => q.id === shuffledQuestion.id);
-        
-        const responseData = {
-          sessionId,
-          responses: {
-            [originalQuestionIndex + 1]: currentSelections // Use original question number
-          }
-        };
-        await api.student.submitSurvey(responseData);
-      }
+        const currentSelections = selections[currentQuestion] || {};
+        if (Object.keys(currentSelections).length > 0) {
+            const shuffledQuestion = shuffledQuestions[currentQuestion];
+            const questionNumber = currentQuestion + 1;
+            
+            // Determine if this is the final submission
+            const isFinal = !isPartial && (currentQuestion === shuffledQuestions.length - 1);
+            
+            const responseData = {
+                sessionId,
+                responses: {
+                    [questionNumber]: currentSelections
+                },
+                isPartial: isPartial,
+                isFinal: isFinal // Make sure this is included
+            };
+            
+            console.log('Submitting survey data - isFinal:', isFinal, 'isPartial:', isPartial);
+            await api.student.submitSurvey(responseData, isFinal);
+        }
 
-      setConfirmedQuestions(prev => [...prev, currentQuestion]);
-      
-      if (currentQuestion === shuffledQuestions.length - 1) {
-        await api.student.markSurveyCompleted(sessionId);
-        navigation.replace('Waiting', { sessionId });
-      } else {
-        setCurrentQuestion(prev => prev + 1);
-      }
+        setConfirmedQuestions(prev => [...prev, currentQuestion]);
+        
+        if (currentQuestion === shuffledQuestions.length - 1) {
+            // For final submission, wait for the API response before navigating
+            navigation.replace('Waiting', { sessionId });
+        } else {
+            setCurrentQuestion(prev => prev + 1);
+        }
     } catch (error) {
-      console.error('Error submitting survey:', error);
-      Alert.alert('Error', 'Failed to submit survey. Please try again.');
+        console.error('Error submitting survey:', error);
+        Alert.alert('Error', 'Failed to submit survey. Please try again.');
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
-  };
+};
+
+
+  //   const proceedToNextQuestion = async () => {
+  //   setIsSubmitting(true);
+    
+  //   try {
+  //     // Only submit if there are selections
+  //     const currentSelections = selections[currentQuestion] || {};
+  //     if (Object.keys(currentSelections).length > 0) {
+  //       // Get the original question from the shuffled array
+  //       const shuffledQuestion = shuffledQuestions[currentQuestion];
+        
+  //       // Find the original index in allQuestions
+  //       const originalQuestionIndex = allQuestions.findIndex(q => q.id === shuffledQuestion.id);
+        
+  //       const responseData = {
+  //         sessionId,
+  //         responses: {
+  //           [originalQuestionIndex + 1]: currentSelections // Use original question number
+  //         }
+  //       };
+  //       await api.student.submitSurvey(responseData);
+  //     }
+
+  //     setConfirmedQuestions(prev => [...prev, currentQuestion]);
+      
+  //     if (currentQuestion === shuffledQuestions.length - 1) {
+  //       await api.student.markSurveyCompleted(sessionId);
+  //       navigation.replace('Waiting', { sessionId });
+  //     } else {
+  //       setCurrentQuestion(prev => prev + 1);
+  //     }
+  //   } catch (error) {
+  //     console.error('Error submitting survey:', error);
+  //     Alert.alert('Error', 'Failed to submit survey. Please try again.');
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
 
   if (loading) {
     return (

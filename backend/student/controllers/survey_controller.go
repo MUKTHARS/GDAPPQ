@@ -83,12 +83,12 @@ func ApplySurveyPenalties(w http.ResponseWriter, r *http.Request) {
 		UPDATE survey_results sr
 		JOIN (
 			SELECT 
-				question_number,
+				question_id,
 				AVG(score) as avg_score
 			FROM survey_results
 			WHERE session_id = ?
-			GROUP BY question_number
-		) as averages ON sr.question_number = averages.question_number
+			GROUP BY question_id
+		) as averages ON sr.question_id = averages.question_id
 		SET sr.penalty_points = CASE
 			WHEN sr.score < (averages.avg_score - 2) THEN 1
 			ELSE 0
@@ -464,11 +464,9 @@ func CalculateFinalResults(sessionID string) (map[string]float64, error) {
     return results, nil
 }
 
-func getRankingPoints(level int, rank int) (float64, error) {
+func getRankingPoints(level, rank int) (float64, error) {
     var points float64
-    var isActive bool
     
-    // Try to get configured points first
     err := database.GetDB().QueryRow(`
         SELECT 
             CASE ?
@@ -476,40 +474,29 @@ func getRankingPoints(level int, rank int) (float64, error) {
                 WHEN 2 THEN second_place_points  
                 WHEN 3 THEN third_place_points
                 ELSE 0
-            END as points,
-            is_active
+            END as points
         FROM ranking_points_config 
-        WHERE level = ?
-        ORDER BY created_at DESC LIMIT 1`,
-        rank, level).Scan(&points, &isActive)
+        WHERE level = ? AND is_active = TRUE`,
+        rank, level).Scan(&points)
     
     if err != nil {
         if err == sql.ErrNoRows {
-            // Fallback to default points if no config found
-            return getDefaultPoints(rank), nil
+            // Return default values if no config found
+            switch rank {
+            case 1:
+                return 4.0, nil
+            case 2:
+                return 3.0, nil
+            case 3:
+                return 2.0, nil
+            default:
+                return 0.0, nil
+            }
         }
-        return 0, err
-    }
-    
-    // If config exists but is inactive, use default points
-    if !isActive {
-        return getDefaultPoints(rank), nil
+        return 0.0, fmt.Errorf("error getting ranking points: %v", err)
     }
     
     return points, nil
-}
-
-func getDefaultPoints(rank int) float64 {
-    switch rank {
-    case 1:
-        return 4.0
-    case 2:
-        return 3.0
-    case 3:
-        return 2.0
-    default:
-        return 0
-    }
 }
 
 func shuffleQuestionsWithSeed(questions []map[string]interface{}, seed string) []map[string]interface{} {

@@ -18,15 +18,14 @@ const ResultItem = ({ item, index }) => {
           {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`}
         </Text>
       </View>
-      <View style={styles.resultCard}>
-    <Text style={styles.resultName}>{item.name}</Text>
-    <View style={styles.scoreDetails}>
-      <Text style={styles.scoreText}>Total: {item.total_score}</Text>
-      <Text style={styles.penaltyText}>Penalty: -{item.penalty_points}</Text>
-      <Text style={styles.finalScoreText}>Final: {item.final_score}</Text>
-    </View>
-    <Text style={styles.firstPlacesText}>🥇: {item.first_places}</Text>
-  </View>
+      <View style={styles.detailsContainer}>
+        <Text style={styles.nameText}>{item.name}</Text>
+        <View style={styles.scoresContainer}>
+          <Text style={styles.scoreText}>Received: {totalScore.toFixed(1)}</Text>
+          <Text style={styles.penaltyText}>Penalties: -{penaltyPoints.toFixed(1)}</Text>
+          <Text style={styles.finalScoreText}>Final: {finalScore.toFixed(1)}</Text>
+        </View>
+      </View>
     </View>
   );
 };
@@ -44,10 +43,11 @@ export default function ResultsScreen({ route, navigation }) {
         const response = await api.student.getResults(sessionId);
         
         if (response.data?.results) {
-          // Process results to ensure correct sorting
+          // Process results to ensure correct data types
           const processedResults = response.data.results
             .map(item => ({
               ...item,
+              // Ensure numeric values - handle both string and number types
               total_score: typeof item.total_score === 'string' ? 
                 parseFloat(item.total_score) : item.total_score || 0,
               penalty_points: typeof item.penalty_points === 'string' ? 
@@ -55,7 +55,9 @@ export default function ResultsScreen({ route, navigation }) {
               final_score: typeof item.final_score === 'string' ? 
                 parseFloat(item.final_score) : 
                 (item.total_score || 0) - (item.penalty_points || 0)
-            }));
+            }))
+            // Sort by final_score descending as backup
+            .sort((a, b) => b.final_score - a.final_score);
           
           setResults(processedResults);
         } else {
@@ -95,7 +97,7 @@ export default function ResultsScreen({ route, navigation }) {
       
       <FlatList
         data={results}
-        keyExtractor={item => item.responder_id}
+        keyExtractor={(item, index) => item.student_id || `result-${index}`}
         renderItem={({ item, index }) => <ResultItem item={item} index={index} />}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={

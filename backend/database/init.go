@@ -163,32 +163,46 @@ func InitDB(db *sql.DB) error {
 );`,
 
 `CREATE TABLE IF NOT EXISTS survey_results (
-    id VARCHAR(36) PRIMARY KEY,
+     id VARCHAR(36) PRIMARY KEY,
     session_id VARCHAR(36) NOT NULL,
     student_id VARCHAR(36) NOT NULL,  
     responder_id VARCHAR(36) NOT NULL, 
-    question_number INT NOT NULL,
+    question_id VARCHAR(36) NOT NULL,
     ranks INT NOT NULL,  
-    score DECIMAL(5,2) NOT NULL,          
-    weighted_score DECIMAL(5,2) NOT NULL, 
+    score DECIMAL(5,2) NOT NULL,         
+    weighted_score DECIMAL(5,2) NOT NULL,
     is_current_session TINYINT(1) DEFAULT 0,
     is_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-/**    Dont remove this ----- > CREATE INDEX IF NOT EXISTS idx_survey_results_session_completed ON survey_results (session_id, is_completed) 
+/**    Dont remove this ----- >
+ CREATE INDEX IF NOT EXISTS idx_survey_results_session_completed ON survey_results (session_id, is_completed) 
 CREATE INDEX IF NOT EXISTS idx_survey_completion_session ON survey_completion (session_id);
 CREATE INDEX IF NOT EXISTS idx_survey_results_session_student ON survey_results (session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_survey_results_session_responder ON survey_results (session_id, responder_id);
 CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalties (session_id, student_id);
 
-CREATE INDEX IF NOT EXISTS idx_survey_results_session_question ON survey_results (session_id, question_number);
+CREATE INDEX IF NOT EXISTS idx_survey_results_session_question ON survey_results (session_id, question_id);
 CREATE INDEX IF NOT EXISTS idx_survey_penalties_session_student ON survey_penalties (session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_survey_results_session_ranks ON survey_results (session_id, ranks);
+
+
+if above shows error try the below straightly
+
+INDEX idx_survey_results_session_completed (session_id, is_completed),
+    INDEX idx_survey_results_session_student (session_id, student_id),
+    INDEX idx_survey_results_session_responder (session_id, responder_id),
+    INDEX idx_survey_results_session_question (session_id, question_id),
+    INDEX idx_survey_results_session_ranks (session_id, ranks)
+);
+
 **/
      FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
     FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
-    UNIQUE KEY (session_id, student_id, question_number, ranks)   
-)`,
+    UNIQUE KEY unique_response (session_id, responder_id, question_id, ranks)   
+
+
+    )`,
 
 `CREATE TABLE IF NOT EXISTS venue_qr_codes (
     id VARCHAR(36) PRIMARY KEY,
@@ -221,6 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_ranks ON survey_results (s
     weight DECIMAL(3,1) DEFAULT 1.0,
     is_active BOOLEAN DEFAULT TRUE,
     level INT DEFAULT 1 ,
+    display_order INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )`,
@@ -300,7 +315,6 @@ CREATE INDEX IF NOT EXISTS idx_survey_results_session_ranks ON survey_results (s
 ('student1', 'student1@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'John Doe', 'CS', 3, TRUE),
 ('student2', 'student2@example.com', '$2a$10$xJwL5v5Jz5TZfN5D5M7zOeJz5TZfN5D5M7zOeJz5TZfN5D5M7zOe', 'Jane Smith', 'ECE', 2, TRUE)
 `,
-
 
 // Venues
         `INSERT IGNORE INTO venues (id, name, capacity, qr_secret, created_by) VALUES 

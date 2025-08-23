@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.255.208:8080' 
+    ? 'http://10.150.251.158:8080' 
     : 'http://localhost:8080',
 });
 
@@ -25,6 +25,7 @@ api.interceptors.request.use(async (config) => {
   console.error('Request error:', error);
   return Promise.reject(error);
 });
+
 
 api.interceptors.response.use(response => {
   console.log('Response received:', {
@@ -202,7 +203,7 @@ checkSurveyCompletion: (sessionId) => api.get('/student/survey/completion', {
 }),
 
 
-submitSurvey: (data) => {
+submitSurvey: (data, isFinal = false) => {
     console.log('[API] Submitting survey with data:', JSON.stringify(data, null, 2));
     return api.post('/student/survey', {
         session_id: data.sessionId,
@@ -223,7 +224,9 @@ submitSurvey: (data) => {
                 acc[questionNum] = formattedRankings;
             }
             return acc;
-        }, {})
+        }, {}),
+        is_partial: false, // Set this appropriately
+        is_final: isFinal  // Make sure this is sent
     }, {
         validateStatus: function (status) {
             console.log('[API] Received status:', status);
@@ -289,6 +292,8 @@ getResults: (sessionId) => {
     return { data: null };
   });
 },
+
+
 submitFeedback: (sessionId, rating, comments) => api.post('/student/feedback', {
     session_id: sessionId,
     rating: rating,
