@@ -2,8 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, FlatList, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth'; 
-import { globalStyles, colors } from '../assets/globalStyles';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
 import { useNavigation } from '@react-navigation/native';
+import FloatingActionButton from '../components/FloatingActionButton';
+import HamburgerHeader from '../components/HamburgerHeader';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
 export default function SessionBooking() {
   const [venues, setVenues] = useState([]);
   const [level, setLevel] = useState(1);
@@ -166,48 +170,57 @@ export default function SessionBooking() {
 
   return (
     <View style={globalStyles.container}>
-      <Text style={globalStyles.title}>Available Venues (Level {level})</Text>
+      <HamburgerHeader title="Available Sessions" showMenu={false} />
       
-      <View style={[globalStyles.row, globalStyles.spaceBetween, { marginBottom: 20 }]}>
-        {[1, 2, 3].map((lvl) => (
-          <TouchableOpacity
-            key={lvl}
-            style={[
-              globalStyles.button,
-              level === lvl ? globalStyles.primaryButton : globalStyles.secondaryButton,
-              { width: '30%' }
-            ]}
-            onPress={() => handleLevelChange(lvl)}
-            disabled={loading}
-          >
-            <Text style={level === lvl ? globalStyles.buttonText : globalStyles.secondaryButtonText}>
-              Level {lvl}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} />
-      ) : error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={[globalStyles.button, { marginTop: 10 }]}
-            onPress={() => fetchVenues(level)}
-          >
-            <Text style={globalStyles.buttonText}>Retry</Text>
-          </TouchableOpacity>
+      <View style={styles.content}>
+        <Text style={globalStyles.title}>Available Venues (Level {level})</Text>
+        
+        <View style={[globalStyles.row, globalStyles.spaceBetween, { marginBottom: 20 }]}>
+          {[1, 2, 3].map((lvl) => (
+            <TouchableOpacity
+              key={lvl}
+              style={[
+                globalStyles.button,
+                level === lvl ? globalStyles.primaryButton : globalStyles.secondaryButton,
+                { width: '30%' }
+              ]}
+              onPress={() => handleLevelChange(lvl)}
+              disabled={loading}
+            >
+              <Text style={level === lvl ? globalStyles.buttonText : globalStyles.secondaryButtonText}>
+                Level {lvl}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      ) : venues.length === 0 ? (
-        <Text style={styles.noVenuesText}>No venues available for this level</Text>
-      ) : (
-        <FlatList
-          data={venues}
-          keyExtractor={item => item.id}
-          renderItem={renderVenueItem}
+
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} />
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={[globalStyles.button, { marginTop: 10 }]}
+              onPress={() => fetchVenues(level)}
+            >
+              <Text style={globalStyles.buttonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : venues.length === 0 ? (
+          <Text style={styles.noVenuesText}>No venues available for this level</Text>
+        ) : (
+          <FlatList
+            data={venues}
+            keyExtractor={item => item.id}
+            renderItem={renderVenueItem}
+          />
+        )}
+
+        <FloatingActionButton 
+          onPress={() => navigation.navigate('QrScanner')}
+          iconName="qr-code-scanner"
         />
-      )}
+      </View>
 
       {/* Venue Details Modal */}
       <Modal
@@ -394,5 +407,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
   },
 });

@@ -4,6 +4,9 @@ import api from '../services/api';
 import auth from '../services/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Timer from '../components/Timer';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import HamburgerHeader from '../components/HamburgerHeader';
 
 export default function GdSessionScreen({ navigation, route }) {
   const { sessionId } = route.params || {};
@@ -12,7 +15,7 @@ export default function GdSessionScreen({ navigation, route }) {
   const [timerActive, setTimerActive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState(0);
-  const [topic, setTopic] = useState(""); // Separate state for topic
+  const [topic, setTopic] = useState("");
 
   useEffect(() => {
     const syncPhaseWithServer = async () => {

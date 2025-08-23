@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Alert } from 'react-native';
 import api from '../services/api';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function WaitingScreen({ navigation, route }) {
     const { sessionId } = route.params;

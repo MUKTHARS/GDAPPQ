@@ -5,17 +5,19 @@ import {
   StyleSheet, 
   ActivityIndicator, 
   FlatList,
-  TouchableOpacity,
-  ImageBackground
+  TouchableOpacity
 } from 'react-native';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { globalStyles, colors, layout } from '../assets/globalStyles';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function LobbyScreen({ navigation, route }) {
     const { sessionId } = route.params;
     const [participants, setParticipants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isReady, setIsReady] = useState(false);
+
 
     const fetchParticipants = async () => {
         try {

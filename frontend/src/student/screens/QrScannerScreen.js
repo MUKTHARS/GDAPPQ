@@ -4,6 +4,7 @@ import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 're
 import auth from '../services/auth';
 import api from '../services/api';
 import { useIsFocused } from '@react-navigation/native';
+import HamburgerHeader from '../components/HamburgerHeader';
 
 export default function QrScannerScreen({ navigation }) {
   const [hasPermission, setHasPermission] = useState(false);
@@ -105,6 +106,7 @@ export default function QrScannerScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* <HamburgerHeader title="Scan QR Code" /> */}
       <Camera
         ref={camera}
         style={StyleSheet.absoluteFill}
