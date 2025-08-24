@@ -17,6 +17,7 @@ import (
 	// "gd/student/models"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -1103,7 +1104,6 @@ func CancelBooking(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
 }
-
 func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     
@@ -1134,7 +1134,8 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     // 2. Have scanned QR (have phase tracking)
     // 3. Have active phase tracking within last 5 minutes
     rows, err := database.GetDB().Query(`
-        SELECT DISTINCT su.id, su.full_name, su.department 
+        SELECT DISTINCT su.id, su.full_name, su.department, 
+               COALESCE(su.photo_url, '') as profileImage 
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
@@ -1160,11 +1161,12 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     var participants []map[string]interface{}
     for rows.Next() {
         var participant struct {
-            ID         string
-            FullName   string
-            Department string
+            ID           string
+            FullName     string
+            Department   string
+            ProfileImage string // Changed from sql.NullString to string
         }
-        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
+        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department, &participant.ProfileImage); err != nil {
             log.Printf("Error scanning participant: %v", err)
             continue
         }
@@ -1174,10 +1176,18 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
+        // Use default image if profile image is not available
+        imageURL := participant.ProfileImage
+        if imageURL == "" {
+            imageURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(participant.FullName) + "&background=random"
+        }
+
         participants = append(participants, map[string]interface{}{
-            "id":         participant.ID,
-            "name":      participant.FullName,
-            "department": participant.Department,
+            "id":           participant.ID,
+            "name":         participant.FullName,
+            "email":        "", 
+            "department":   participant.Department,
+            "profileImage": imageURL,
         })
     }
 
@@ -1185,6 +1195,88 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
         "data": participants,
     })
 }
+
+// func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
+//     w.Header().Set("Content-Type", "application/json")
+    
+//     sessionID := r.URL.Query().Get("session_id")
+//     if sessionID == "" {
+//         w.WriteHeader(http.StatusBadRequest)
+//         json.NewEncoder(w).Encode(map[string]interface{}{
+//             "error": "session_id is required",
+//             "data": []interface{}{},
+//         })
+//         return
+//     }
+
+//     studentID := r.Context().Value("studentID").(string)
+    
+//     // First, clean up any stale phase tracking (users who left unexpectedly)
+//     _, err := database.GetDB().Exec(`
+//         DELETE FROM session_phase_tracking 
+//         WHERE session_id = ? 
+//         AND start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`, 
+//         sessionID)
+//     if err != nil {
+//         log.Printf("Error cleaning up stale phase tracking: %v", err)
+//     }
+
+//     // Get current active participants who:
+//     // 1. Are booked for this session
+//     // 2. Have scanned QR (have phase tracking)
+//     // 3. Have active phase tracking within last 5 minutes
+//     rows, err := database.GetDB().Query(`
+//         SELECT DISTINCT su.id, su.full_name, su.department 
+//         FROM session_participants sp
+//         JOIN student_users su ON sp.student_id = su.id
+//         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
+//                                       AND sp.student_id = spt.student_id
+//         WHERE sp.session_id = ? 
+//           AND sp.is_dummy = FALSE
+//           AND su.is_active = TRUE
+//           AND spt.start_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+//         ORDER BY su.full_name`, 
+//         sessionID)
+
+//     if err != nil {
+//         log.Printf("Database error fetching participants: %v", err)
+//         w.WriteHeader(http.StatusInternalServerError)
+//         json.NewEncoder(w).Encode(map[string]interface{}{
+//             "error": "Database error",
+//             "data": []interface{}{},
+//         })
+//         return
+//     }
+//     defer rows.Close()
+
+//     var participants []map[string]interface{}
+//     for rows.Next() {
+//         var participant struct {
+//             ID         string
+//             FullName   string
+//             Department string
+//         }
+//         if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
+//             log.Printf("Error scanning participant: %v", err)
+//             continue
+//         }
+
+//         // Skip the current student
+//         if participant.ID == studentID {
+//             continue
+//         }
+
+//         participants = append(participants, map[string]interface{}{
+//             "id":         participant.ID,
+//             "name":      participant.FullName,
+//             "department": participant.Department,
+//         })
+//     }
+
+//     json.NewEncoder(w).Encode(map[string]interface{}{
+//         "data": participants,
+//     })
+// }
 
 
 func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {

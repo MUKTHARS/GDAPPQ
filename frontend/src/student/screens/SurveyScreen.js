@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image,TouchableOpacity, ActivityIndicator } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth'; 
 
@@ -36,11 +36,30 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
 
   return (
     <View style={[styles.memberCard, isSelected && { borderColor: getRankColor(currentRank), borderWidth: 2 }]}>
-      <View style={styles.memberInfo}>
-        <Text style={styles.memberName}>{member.name}</Text>
-        <Text style={styles.memberDetails}>{member.email}</Text>
+      {/* Profile Image and Info */}
+      <View style={styles.memberInfoContainer}>
+       <Image
+  source={{ 
+    uri: member.profileImage || member.photo_url || 
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random`
+  }}
+  style={styles.profileImage}
+  onError={(e) => {
+    console.log('Image load error:', e.nativeEvent.error);
+    // Fallback to placeholder if image fails to load
+    e.target.src = 'https://ui-avatars.com/api/?name=User&background=random';
+  }}
+/>
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName}>{member.name}</Text>
+          <Text style={styles.memberDetails}>{member.email}</Text>
+          {member.department && (
+            <Text style={styles.memberDepartment}>{member.department}</Text>
+          )}
+        </View>
       </View>
       
+      {/* Ranking Buttons or Selected Status */}
       {isSelected ? (
         <View style={styles.selectedRankContainer}>
           <View style={[styles.rankBadge, { backgroundColor: getRankColor(currentRank) }]}>
@@ -66,7 +85,7 @@ const MemberCard = ({ member, onSelect, selections, currentRankings }) => {
                   isRankTaken && styles.disabledButton
                 ]}
                 onPress={() => !isRankTaken && onSelect(rank, member.id)}
-                disabled={!!isRankTaken}  // Fixed: Ensure boolean value
+                disabled={!!isRankTaken}
               >
                 <Text style={[styles.rankButtonText, isRankTaken && styles.disabledText]}>
                   {rank === 1 && '🥇'}
@@ -350,51 +369,58 @@ useEffect(() => {
     };
   }, [currentQuestion]);
 
-  useEffect(() => {
-    const fetchParticipants = async () => {
-      try {
-        setLoading(true);
-        const response = await api.student.getSessionParticipants(sessionId);
-        
-        // Handle both response formats:
-        // 1. Direct array of participants (response.data)
-        // 2. Object with data property (response.data.data)
-        let participants = [];
-        if (Array.isArray(response.data)) {
-          participants = response.data;
-        } else if (response.data?.data) {
-          participants = response.data.data;
-        }
-        
-        const authData = await auth.getAuthData();
-        const filteredParticipants = participants.filter(
-          participant => participant.id !== authData.userId
-        );
-        
-        setMembers(filteredParticipants);
-        setError(null);
-        
-        setSelections(prev => {
-          const newSelections = {...prev};
-          shuffledQuestions.forEach((_, index) => {
-            if (!newSelections[index]) {
-              newSelections[index] = {};
-            }
-          });
-          return newSelections;
-        });
-      } catch (err) {
-        setError('Failed to load participants');
-        setMembers([]);
-      } finally {
-        setLoading(false);
+useEffect(() => {
+  const fetchParticipants = async () => {
+    try {
+      setLoading(true);
+      const response = await api.student.getSessionParticipants(sessionId);
+      
+      // Handle both response formats:
+      // 1. Direct array of participants (response.data)
+      // 2. Object with data property (response.data.data)
+      let participants = [];
+      if (Array.isArray(response.data)) {
+        participants = response.data;
+      } else if (response.data?.data) {
+        participants = response.data.data;
       }
-    };
-
-    if (shuffledQuestions.length > 0) {
-      fetchParticipants();
+      
+      // Map photo_url to profileImage for compatibility
+      const mappedParticipants = participants.map(participant => ({
+        ...participant,
+        profileImage: participant.photo_url || participant.profileImage || 
+                     `https://ui-avatars.com/api/?name=${encodeURIComponent(participant.name)}&background=random`
+      }));
+      
+      const authData = await auth.getAuthData();
+      const filteredParticipants = mappedParticipants.filter(
+        participant => participant.id !== authData.userId
+      );
+      
+      setMembers(filteredParticipants);
+      setError(null);
+      
+      setSelections(prev => {
+        const newSelections = {...prev};
+        shuffledQuestions.forEach((_, index) => {
+          if (!newSelections[index]) {
+            newSelections[index] = {};
+          }
+        });
+        return newSelections;
+      });
+    } catch (err) {
+      setError('Failed to load participants');
+      setMembers([]);
+    } finally {
+      setLoading(false);
     }
-  }, [sessionId, shuffledQuestions]);
+  };
+
+  if (shuffledQuestions.length > 0) {
+    fetchParticipants();
+  }
+}, [sessionId, shuffledQuestions]);
 
   const handleSelect = (rank, memberId) => {
     setSelections(prev => ({
@@ -697,7 +723,7 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
   },
-  memberCard: {
+ memberCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -713,6 +739,18 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  memberInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  profileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+    backgroundColor: '#f0f0f0',
+  },
   memberInfo: {
     flex: 1,
   },
@@ -720,11 +758,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+    marginBottom: 2,
   },
   memberDetails: {
     fontSize: 14,
     color: '#666',
-    marginTop: 2,
+    marginBottom: 2,
+  },
+  memberDepartment: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
   },
   rankingButtons: {
     flexDirection: 'row',
@@ -777,6 +821,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: '#ff4444',
     borderRadius: 15,
+  },
+  removeButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
   removeButtonText: {
     color: 'white',
