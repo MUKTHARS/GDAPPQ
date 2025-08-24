@@ -280,8 +280,33 @@ export default function ResultsScreen({ route, navigation }) {
               </View>
             )}
           </View>
+          
+        </View>
+        <View style={styles.bottomContainer}>
+          <TouchableOpacity 
+            style={styles.feedbackButton}
+            onPress={() => navigation.navigate('Feedback', { sessionId })}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#FF6B35', '#F7931E']}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={styles.feedbackButtonGradient}
+            >
+              <View style={styles.feedbackButtonContent}>
+                <Icon name="feedback" size={24} color="#fff" />
+                <Text style={styles.feedbackButtonText}>Give Feedback</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <Text style={styles.feedbackHint}>
+            Help us improve your experience
+          </Text>
         </View>
       </View>
+      
     </LinearGradient>
   );
 }
@@ -582,6 +607,42 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     lineHeight: 20,
+  },
+   bottomContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  feedbackButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  feedbackButtonGradient: {
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+  },
+  feedbackButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  feedbackHint: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
