@@ -669,14 +669,19 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get all participants in this session (including the current student)
-    participants := make(map[string]string) // id -> name
+    // Get all participants in this session (including the current student) with photo_url
+    participants := make(map[string]struct {
+        Name      string
+        PhotoURL  string
+    })
+    
     rows, err := database.GetDB().Query(`
-        SELECT su.id, su.full_name 
+        SELECT su.id, su.full_name, COALESCE(su.photo_url, '') as photo_url
         FROM student_users su
         JOIN session_participants sp ON su.id = sp.student_id
         WHERE sp.session_id = ? AND sp.is_dummy = FALSE`, 
         sessionID)
+    
     if err != nil {
         log.Printf("Error getting participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -686,11 +691,23 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
     
     for rows.Next() {
-        var id, name string
-        if err := rows.Scan(&id, &name); err != nil {
+        var id, name, photoURL string
+        if err := rows.Scan(&id, &name, &photoURL); err != nil {
             continue
         }
-        participants[id] = name
+        
+        // Use default avatar if no photo URL
+        if photoURL == "" {
+            photoURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(name) + "&background=random&color=fff"
+        }
+        
+        participants[id] = struct {
+            Name      string
+            PhotoURL  string
+        }{
+            Name:     name,
+            PhotoURL: photoURL,
+        }
     }
 
     // Get all survey responses for this session
@@ -771,6 +788,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     type StudentResult struct {
         ID          string
         Name        string
+        PhotoURL    string  // Add PhotoURL field
         TotalScore  float64
         Penalty     float64
         FinalScore  float64
@@ -780,9 +798,11 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     var sortedResults []StudentResult
     for id, data := range studentScores {
         finalScore := data.TotalScore - data.Penalty
+        participant := participants[id]
         sortedResults = append(sortedResults, StudentResult{
             ID:          id,
-            Name:        participants[id],
+            Name:        participant.Name,  // Access the Name field of the struct
+            PhotoURL:    participant.PhotoURL,  // Access the PhotoURL field of the struct
             TotalScore:  data.TotalScore,
             Penalty:     data.Penalty,
             FinalScore:  finalScore,
@@ -804,6 +824,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         response = append(response, map[string]interface{}{
             "student_id":     r.ID,
             "name":           r.Name,
+            "photo_url":      r.PhotoURL,  // Use the PhotoURL from the struct
             "total_score":    fmt.Sprintf("%.2f", r.TotalScore),
             "penalty_points": fmt.Sprintf("%.2f", r.Penalty),
             "final_score":    fmt.Sprintf("%.2f", r.FinalScore),
@@ -1195,88 +1216,6 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
         "data": participants,
     })
 }
-
-// func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
-//     w.Header().Set("Content-Type", "application/json")
-    
-//     sessionID := r.URL.Query().Get("session_id")
-//     if sessionID == "" {
-//         w.WriteHeader(http.StatusBadRequest)
-//         json.NewEncoder(w).Encode(map[string]interface{}{
-//             "error": "session_id is required",
-//             "data": []interface{}{},
-//         })
-//         return
-//     }
-
-//     studentID := r.Context().Value("studentID").(string)
-    
-//     // First, clean up any stale phase tracking (users who left unexpectedly)
-//     _, err := database.GetDB().Exec(`
-//         DELETE FROM session_phase_tracking 
-//         WHERE session_id = ? 
-//         AND start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)`, 
-//         sessionID)
-//     if err != nil {
-//         log.Printf("Error cleaning up stale phase tracking: %v", err)
-//     }
-
-//     // Get current active participants who:
-//     // 1. Are booked for this session
-//     // 2. Have scanned QR (have phase tracking)
-//     // 3. Have active phase tracking within last 5 minutes
-//     rows, err := database.GetDB().Query(`
-//         SELECT DISTINCT su.id, su.full_name, su.department 
-//         FROM session_participants sp
-//         JOIN student_users su ON sp.student_id = su.id
-//         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
-//                                       AND sp.student_id = spt.student_id
-//         WHERE sp.session_id = ? 
-//           AND sp.is_dummy = FALSE
-//           AND su.is_active = TRUE
-//           AND spt.start_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
-//         ORDER BY su.full_name`, 
-//         sessionID)
-
-//     if err != nil {
-//         log.Printf("Database error fetching participants: %v", err)
-//         w.WriteHeader(http.StatusInternalServerError)
-//         json.NewEncoder(w).Encode(map[string]interface{}{
-//             "error": "Database error",
-//             "data": []interface{}{},
-//         })
-//         return
-//     }
-//     defer rows.Close()
-
-//     var participants []map[string]interface{}
-//     for rows.Next() {
-//         var participant struct {
-//             ID         string
-//             FullName   string
-//             Department string
-//         }
-//         if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
-//             log.Printf("Error scanning participant: %v", err)
-//             continue
-//         }
-
-//         // Skip the current student
-//         if participant.ID == studentID {
-//             continue
-//         }
-
-//         participants = append(participants, map[string]interface{}{
-//             "id":         participant.ID,
-//             "name":      participant.FullName,
-//             "department": participant.Department,
-//         })
-//     }
-
-//     json.NewEncoder(w).Encode(map[string]interface{}{
-//         "data": participants,
-//     })
-// }
 
 
 func CheckSurveyCompletion(w http.ResponseWriter, r *http.Request) {

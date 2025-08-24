@@ -247,7 +247,7 @@ export default function SessionBooking() {
         colors={['#667eea', '#764ba2']}
         style={styles.headerGradient}
       >
-        <HamburgerHeader title="Available Sessions" showMenu={false} />
+        {/* <HamburgerHeader title="Available Sessions" showMenu={false} /> */}
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Find Your Perfect Session</Text>
           <Text style={styles.headerSubtitle}>Level {level} Venues</Text>

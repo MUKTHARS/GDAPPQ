@@ -6,7 +6,7 @@ import {
   ActivityIndicator, 
   FlatList,
   TouchableOpacity,
-  ImageBackground,
+  Image,
 } from 'react-native';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -111,37 +111,48 @@ export default function LobbyScreen({ navigation, route }) {
         );
     }
 
-    const renderParticipantItem = ({ item, index }) => (
-        <View style={[styles.participantCard, { opacity: 0.8 + (index * 0.02) }]}>
-            <LinearGradient
-                colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 1}}
-                style={styles.participantGradient}
-            >
-                <View style={styles.participantHeader}>
-                    <View style={styles.participantAvatar}>
+   const renderParticipantItem = ({ item, index }) => (
+    <View style={[styles.participantCard, { opacity: 0.8 + (index * 0.02) }]}>
+        <LinearGradient
+            colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}
+            style={styles.participantGradient}
+        >
+            <View style={styles.participantHeader}>
+                <View style={styles.participantAvatar}>
+                    {item.profileImage ? (
+                        <Image
+                            source={{ uri: item.profileImage }}
+                            style={styles.avatarImage}
+                            onError={(e) => {
+                                // Fallback to gradient avatar if image fails to load
+                                console.log('Image load error:', e.nativeEvent.error);
+                            }}
+                        />
+                    ) : (
                         <LinearGradient
                             colors={['#4CAF50', '#43A047']}
                             style={styles.avatarGradient}
                         >
                             <Icon name="person" size={20} color="#fff" />
                         </LinearGradient>
-                    </View>
-                    <View style={styles.participantInfo}>
-                        <Text style={styles.participantName}>{item.name}</Text>
-                        {item.department && (
-                            <Text style={styles.participantDept}>{item.department}</Text>
-                        )}
-                    </View>
-                    <View style={styles.onlineIndicator}>
-                        <View style={styles.onlineDot} />
-                        <Text style={styles.onlineText}>Online</Text>
-                    </View>
+                    )}
                 </View>
-            </LinearGradient>
-        </View>
-    );
+                <View style={styles.participantInfo}>
+                    <Text style={styles.participantName}>{item.name}</Text>
+                    {item.department && (
+                        <Text style={styles.participantDept}>{item.department}</Text>
+                    )}
+                </View>
+                <View style={styles.onlineIndicator}>
+                    <View style={styles.onlineDot} />
+                    <Text style={styles.onlineText}>Online</Text>
+                </View>
+            </View>
+        </LinearGradient>
+    </View>
+);
 
     return (
         <LinearGradient
