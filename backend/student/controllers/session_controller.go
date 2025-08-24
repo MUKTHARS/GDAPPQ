@@ -17,6 +17,7 @@ import (
 	// "gd/student/models"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -668,14 +669,19 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get all participants in this session (including the current student)
-    participants := make(map[string]string) // id -> name
+    // Get all participants in this session (including the current student) with photo_url
+    participants := make(map[string]struct {
+        Name      string
+        PhotoURL  string
+    })
+    
     rows, err := database.GetDB().Query(`
-        SELECT su.id, su.full_name 
+        SELECT su.id, su.full_name, COALESCE(su.photo_url, '') as photo_url
         FROM student_users su
         JOIN session_participants sp ON su.id = sp.student_id
         WHERE sp.session_id = ? AND sp.is_dummy = FALSE`, 
         sessionID)
+    
     if err != nil {
         log.Printf("Error getting participants: %v", err)
         w.WriteHeader(http.StatusInternalServerError)
@@ -685,11 +691,23 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
     
     for rows.Next() {
-        var id, name string
-        if err := rows.Scan(&id, &name); err != nil {
+        var id, name, photoURL string
+        if err := rows.Scan(&id, &name, &photoURL); err != nil {
             continue
         }
-        participants[id] = name
+        
+        // Use default avatar if no photo URL
+        if photoURL == "" {
+            photoURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(name) + "&background=random&color=fff"
+        }
+        
+        participants[id] = struct {
+            Name      string
+            PhotoURL  string
+        }{
+            Name:     name,
+            PhotoURL: photoURL,
+        }
     }
 
     // Get all survey responses for this session
@@ -770,6 +788,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     type StudentResult struct {
         ID          string
         Name        string
+        PhotoURL    string  // Add PhotoURL field
         TotalScore  float64
         Penalty     float64
         FinalScore  float64
@@ -779,9 +798,11 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     var sortedResults []StudentResult
     for id, data := range studentScores {
         finalScore := data.TotalScore - data.Penalty
+        participant := participants[id]
         sortedResults = append(sortedResults, StudentResult{
             ID:          id,
-            Name:        participants[id],
+            Name:        participant.Name,  // Access the Name field of the struct
+            PhotoURL:    participant.PhotoURL,  // Access the PhotoURL field of the struct
             TotalScore:  data.TotalScore,
             Penalty:     data.Penalty,
             FinalScore:  finalScore,
@@ -803,6 +824,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         response = append(response, map[string]interface{}{
             "student_id":     r.ID,
             "name":           r.Name,
+            "photo_url":      r.PhotoURL,  // Use the PhotoURL from the struct
             "total_score":    fmt.Sprintf("%.2f", r.TotalScore),
             "penalty_points": fmt.Sprintf("%.2f", r.Penalty),
             "final_score":    fmt.Sprintf("%.2f", r.FinalScore),
@@ -1103,7 +1125,6 @@ func CancelBooking(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
 }
-
 func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     
@@ -1134,7 +1155,8 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     // 2. Have scanned QR (have phase tracking)
     // 3. Have active phase tracking within last 5 minutes
     rows, err := database.GetDB().Query(`
-        SELECT DISTINCT su.id, su.full_name, su.department 
+        SELECT DISTINCT su.id, su.full_name, su.department, 
+               COALESCE(su.photo_url, '') as profileImage 
         FROM session_participants sp
         JOIN student_users su ON sp.student_id = su.id
         JOIN session_phase_tracking spt ON sp.session_id = spt.session_id 
@@ -1160,11 +1182,12 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
     var participants []map[string]interface{}
     for rows.Next() {
         var participant struct {
-            ID         string
-            FullName   string
-            Department string
+            ID           string
+            FullName     string
+            Department   string
+            ProfileImage string // Changed from sql.NullString to string
         }
-        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department); err != nil {
+        if err := rows.Scan(&participant.ID, &participant.FullName, &participant.Department, &participant.ProfileImage); err != nil {
             log.Printf("Error scanning participant: %v", err)
             continue
         }
@@ -1174,10 +1197,18 @@ func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
+        // Use default image if profile image is not available
+        imageURL := participant.ProfileImage
+        if imageURL == "" {
+            imageURL = "https://ui-avatars.com/api/?name=" + url.QueryEscape(participant.FullName) + "&background=random"
+        }
+
         participants = append(participants, map[string]interface{}{
-            "id":         participant.ID,
-            "name":      participant.FullName,
-            "department": participant.Department,
+            "id":           participant.ID,
+            "name":         participant.FullName,
+            "email":        "", 
+            "department":   participant.Department,
+            "profileImage": imageURL,
         })
     }
 

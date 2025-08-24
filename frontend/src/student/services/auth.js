@@ -42,17 +42,5 @@ export default {
       role: role[1],
       level: level[1]
     };
-  },
-  verifyToken: async () => {
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) return false;
-    
-    // Add token verification logic here if needed
-    return true;
-  } catch (error) {
-    return false;
   }
-}
 };
-
