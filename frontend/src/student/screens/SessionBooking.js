@@ -22,39 +22,67 @@ export default function SessionBooking() {
   const navigation = useNavigation();
 
   // Function to get different gradient colors based on venue ID
-  const getVenueGradientColors = (venueId) => {
-    // Create an array of different gradient color combinations
-    const gradientColors = [
-      ['#ec5934ff', '#d7fe7bff'],   // warm sunset
-      ['#6a11cb', '#2575fc'],   // purple to blue
-      ['#43cea2', '#185a9d'],   // teal to navy
-      ['#ff4e50', '#f9d423'],   // fiery red to yellow
-      ['#00c6ff', '#0072ff'],   // light blue to deep blue
-      ['#f7971e', '#ffd200'],   // orange to gold
-      ['#654ea3', '#eaafc8'],   // violet to soft pink
-      ['#11998e', '#38ef7d'],   // green to lime
-      ['#ee0979', '#ff6a00'],   // pink to orange
-      ['#8360c3', '#2ebf91'],   // purple to green
-    ];
-    
-    // Convert venueId to a number if it's a string
-    // Use a simple hash function to get a consistent index
-    let id;
-    if (typeof venueId === 'string') {
-      // Simple hash function to convert string to number
-      let hash = 0;
-      for (let i = 0; i < venueId.length; i++) {
-        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
-        hash = hash & hash; // Convert to 32-bit integer
-      }
-      id = Math.abs(hash);
-    } else {
-      id = venueId || 0;
+ const getVenueGradientColors = (venueId) => {
+  // Array of unique gradient color combinations with reduced darkness
+  const gradientColors = [
+    ['#2a2a2a', '#555555'],       // Lighter charcoal to medium gray
+    ['#3d005f', '#6d3ab0'],       // Lighter deep purple to vibrant purple
+    ['#1a2940', '#243b5a'],       // Lighter navy blue to dark blue
+    ['#2f3874', '#5aa0d9'],       // Lighter deep indigo to light blue
+    ['#3d5069', '#ff6b6b'],       // Lighter dark blue to coral red
+    ['#4d0a9b', '#ff4d94'],       // Lighter royal purple to hot pink
+    ['#1c067d', '#6dd5ff'],       // Lighter deep blue to bright cyan
+    ['#333842', '#4a5059'],       // Lighter dark slate to medium slate
+    ['#3d1a36', '#e03e57'],       // Lighter burgundy to crimson
+    ['#1f3458', '#2a5088'],       // Lighter dark navy to medium blue
+    ['#55067a', '#6d3a9e'],       // Lighter deep violet to purple
+    ['#24323c', '#4a9ac7'],       // Lighter almost black to steel blue
+    ['#2a3f6b', '#6a7fa5'],       // Lighter dark blue to muted blue
+    ['#4a00a8', '#b3008f'],       // Lighter electric purple to magenta
+    ['#241075', '#4d3ca3'],       // Lighter deep indigo to medium purple
+    ['#3c3e52', '#a4aec4'],       // Lighter dark blue-gray to light gray-blue
+    ['#2c2965', '#4d629e'],       // Lighter deep blue to periwinkle
+    ['#3a3242', '#4a4452'],       // Lighter dark purple-gray to medium gray
+    ['#2d3d60', '#2e7d32'],       // Lighter navy blue to forest green
+    ['#4e0787', '#8a13bf'],       // Lighter deep purple to vibrant purple
+    ['#333842', '#00c9d6'],       // Lighter dark slate to teal
+    ['#242642', '#1a4580'],       // Lighter deep navy to dark blue
+    ['#3d0048', '#a52d9f'],       // Lighter deep purple to magenta
+    ['#1f3458', '#1a4580'],       // Lighter navy blue variations
+    ['#2e3034', '#65737e'],       // Lighter almost black to dark gray-blue
+    ['#3d445a', '#3d3a8d'],       // Lighter dark blue to deep purple
+    ['#2c2d31', '#4e5259'],       // Lighter charcoal to dark gray
+    ['#3c3c74', '#5d5da5'],       // Lighter deep purple-blue variations
+    ['#2e313b', '#3d445a'],       // Lighter dark blue-gray variations
+    ['#3d1a36', '#a01a46'],       // Lighter deep burgundy to dark red
+    ['#2f3874', '#3d5a9b'],       // Lighter navy blue to medium blue
+    ['#3d005f', '#6600a0'],       // Lighter deep purple variations
+    ['#242542', '#2a5088'],       // Lighter dark indigo to blue
+    ['#333842', '#4a5059'],       // Lighter dark slate variations
+    ['#3d5069', '#2f3874'],       // Lighter dark blue to navy
+    ['#4a00a8', '#5a00ff'],       // Lighter electric purple to bright purple
+    ['#241075', '#3d2a8d'],       // Lighter deep indigo variations
+    ['#3c3e52', '#555770'],       // Lighter blue-gray variations
+    ['#2c2965', '#2f3874'],       // Lighter deep blue variations
+    ['#3a3242', '#4d3c64'],       // Lighter purple-gray variations
+  ];
+  
+  // Convert venueId to a consistent number
+  let id;
+  if (typeof venueId === 'string') {
+    let hash = 0;
+    for (let i = 0; i < venueId.length; i++) {
+      hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+      hash = hash & hash;
     }
-    
-    const colorIndex = id % gradientColors.length;
-    return gradientColors[colorIndex] || ['#667eea', '#764ba2']; // Fallback colors
-  };
+    id = Math.abs(hash);
+  } else {
+    id = venueId || 0;
+  }
+  
+  const colorIndex = id % gradientColors.length;
+  return gradientColors[colorIndex] || ['#2a2a2a', '#555555']; // Fallback to lighter charcoal
+};
 
   const fetchVenues = async (lvl) => {
     try {
