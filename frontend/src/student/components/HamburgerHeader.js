@@ -13,7 +13,7 @@ const HamburgerHeader = ({ title, showMenu = true }) => {
     <View style={styles.container}>
       <StatusBar backgroundColor="#667eea" barStyle="light-content" />
       <LinearGradient
-        colors={['#667eea', '#764ba2']}
+       colors={['#e21549', '#7b1fa2']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
