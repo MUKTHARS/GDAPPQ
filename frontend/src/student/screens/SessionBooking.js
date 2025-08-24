@@ -21,6 +21,42 @@ export default function SessionBooking() {
   const [bookedVenues, setBookedVenues] = useState([]);
   const navigation = useNavigation();
 
+  // Function to get different gradient colors based on venue ID
+// Function to get different gradient colors based on venue ID
+const getVenueGradientColors = (venueId) => {
+  // Create an array of different gradient color combinations
+  const gradientColors = [
+    ['#ec5934ff', '#d7fe7bff'],   // warm sunset
+    ['#6a11cb', '#2575fc'],   // purple to blue
+    ['#43cea2', '#185a9d'],   // teal to navy
+    ['#ff4e50', '#f9d423'],   // fiery red to yellow
+    ['#00c6ff', '#0072ff'],   // light blue to deep blue
+    ['#f7971e', '#ffd200'],   // orange to gold
+    ['#654ea3', '#eaafc8'],   // violet to soft pink
+    ['#11998e', '#38ef7d'],   // green to lime
+    ['#ee0979', '#ff6a00'],   // pink to orange
+    ['#8360c3', '#2ebf91'],   // purple to green
+  ];
+  
+  // Convert venueId to a number if it's a string
+  // Use a simple hash function to get a consistent index
+  let id;
+  if (typeof venueId === 'string') {
+    // Simple hash function to convert string to number
+    let hash = 0;
+    for (let i = 0; i < venueId.length; i++) {
+      hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    id = Math.abs(hash);
+  } else {
+    id = venueId || 0;
+  }
+  
+  const colorIndex = id % gradientColors.length;
+  return gradientColors[colorIndex] || ['#667eea', '#764ba2']; // Fallback colors
+};
+
   const fetchVenues = async (lvl) => {
     try {
       setLoading(true);
@@ -166,9 +202,7 @@ export default function SessionBooking() {
       activeOpacity={0.8}
     >
       <LinearGradient
-        colors={bookedVenues.includes(item.id) ? 
-          ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)'] : 
-          ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+        colors={getVenueGradientColors(item.id)}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 1}}
         style={styles.gradientBackground}
@@ -478,6 +512,7 @@ export default function SessionBooking() {
   );
 }
 
+// Keep the styles object exactly the same as before
 const styles = StyleSheet.create({
   container: {
     flex: 1,
