@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    paddingTop: 50,
+    paddingTop: 25,
     paddingHorizontal: 20,
   },
   loadingContainer: {
@@ -1010,7 +1010,7 @@ const styles = StyleSheet.create({
   profileImage: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: 60,
   },
   defaultProfileIcon: {
     position: 'absolute',

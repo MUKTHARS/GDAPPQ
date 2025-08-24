@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     padding: 20,
-    paddingTop: 50,
+    paddingTop: 25,
   },
   header: {
     alignItems: 'center',
