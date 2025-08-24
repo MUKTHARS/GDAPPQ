@@ -6,14 +6,15 @@ import {
   ActivityIndicator, 
   FlatList,
   TouchableOpacity,
-  Image,
+  ImageBackground,
+  Image
 } from 'react-native';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { globalStyles, colors, layout } from '../assets/globalStyles';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
-
+import HamburgerHeader from '../components/HamburgerHeader';
 export default function LobbyScreen({ navigation, route }) {
     const { sessionId } = route.params;
     const [participants, setParticipants] = useState([]);
@@ -119,6 +120,7 @@ export default function LobbyScreen({ navigation, route }) {
             end={{x: 1, y: 1}}
             style={styles.participantGradient}
         >
+            
             <View style={styles.participantHeader}>
                 <View style={styles.participantAvatar}>
                     {item.profileImage ? (
@@ -158,15 +160,17 @@ export default function LobbyScreen({ navigation, route }) {
         <LinearGradient
             colors={['#667eea', '#764ba2', '#667eea']}
             style={styles.container}
-        >
+        ><HamburgerHeader/>
             <View style={styles.contentContainer}>
                 {/* Header Section */}
+                
                 <View style={styles.header}>
                     <View style={styles.headerIconContainer}>
                         <LinearGradient
                             colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
                             style={styles.headerIconGradient}
                         >
+                            
                             <Icon name="groups" size={32} color="#fff" />
                         </LinearGradient>
                     </View>
@@ -325,7 +329,7 @@ const styles = StyleSheet.create({
     contentContainer: {
         flex: 1,
         padding: 20,
-        paddingTop: 50,
+        paddingTop: 25,
     },
     header: {
         alignItems: 'center',

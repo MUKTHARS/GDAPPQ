@@ -351,7 +351,7 @@ export default function GdSessionScreen({ navigation, route }) {
                   >
                     <Icon 
                       name={getPhaseIcon(stepPhase)} 
-                      size={16} 
+                      size={26} 
                       color={phase === stepPhase || index < ['prep', 'discussion', 'survey'].indexOf(phase) ? '#fff' : 'rgba(255,255,255,0.6)'} 
                     />
                   </LinearGradient>
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     padding: 20,
-    paddingTop: 50,
+    paddingTop: 25,
   },
   loadingContainer: {
     flex: 1,
@@ -572,6 +572,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.6)',
     fontWeight: '500',
+    padding: 7,
   },
   stepLabelActive: {
     color: '#fff',
