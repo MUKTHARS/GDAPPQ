@@ -1,4 +1,4 @@
-// C:\xampp\htdocs\GDAPPC\frontend\src\student\assets\globalStyles.js
+// Updated globalStyles.js with minimalist theme
 import { StyleSheet, Dimensions } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -7,7 +7,7 @@ export const globalStyles = StyleSheet.create({
   // Layout
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#ffffff', // Changed from '#f8f9fa' to pure white
   },
   content: {
     flex: 1,
@@ -51,7 +51,7 @@ export const globalStyles = StyleSheet.create({
     shadowRadius: 6,
   },
   primaryButton: {
-    backgroundColor: '#4299E1',
+    backgroundColor: '#2D3748', // Changed from blue to dark gray
   },
   secondaryButton: {
     backgroundColor: '#E2E8F0',
@@ -113,7 +113,7 @@ export const globalStyles = StyleSheet.create({
   // New unified styles
   screenContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#ffffff', // Changed from '#f8f9fa' to pure white
   },
   cardTitle: {
     fontSize: 18,
@@ -138,17 +138,17 @@ export const globalStyles = StyleSheet.create({
   },
 });
 
-// Updated color palette for consistent theming
+// Updated color palette for minimalist theming
 export const colors = {
-  primary: '#4299E1',
-  primaryLight: '#90CDF4',
-  primaryDark: '#3182CE',
+  primary: '#2D3748', // Changed from blue to dark gray
+  primaryLight: '#4A5568', // Changed from blue to medium gray
+  primaryDark: '#1A202C', // Changed from blue to darker gray
   secondary: '#E2E8F0',
   success: '#48BB78',
   danger: '#F56565',
   warning: '#ECC94B',
-  info: '#4299E1',
-  light: '#f8f9fa',
+  info: '#2D3748', // Changed from blue to dark gray
+  light: '#ffffff', // Changed from '#f8f9fa' to pure white
   dark: '#2D3748',
   white: '#fff',
   black: '#000',
@@ -209,7 +209,6 @@ export const layout = {
     xl: 24,
   },
 };
-
 
 // // C:\xampp\htdocs\GDAPPC\frontend\src\student\assets\globalStyles.js
 // import { StyleSheet } from 'react-native';

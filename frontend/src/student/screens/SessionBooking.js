@@ -22,31 +22,58 @@ export default function SessionBooking() {
   const navigation = useNavigation();
 
   // Function to get different gradient colors based on venue ID
-// Function to get different gradient colors based on venue ID
-const getVenueGradientColors = (venueId) => {
-  // Create an array of different gradient color combinations
+ const getVenueGradientColors = (venueId) => {
+  // Array of unique gradient color combinations with reduced darkness
   const gradientColors = [
-    ['#ec5934ff', '#d7fe7bff'],   // warm sunset
-    ['#6a11cb', '#2575fc'],   // purple to blue
-    ['#43cea2', '#185a9d'],   // teal to navy
-    ['#ff4e50', '#f9d423'],   // fiery red to yellow
-    ['#00c6ff', '#0072ff'],   // light blue to deep blue
-    ['#f7971e', '#ffd200'],   // orange to gold
-    ['#654ea3', '#eaafc8'],   // violet to soft pink
-    ['#11998e', '#38ef7d'],   // green to lime
-    ['#ee0979', '#ff6a00'],   // pink to orange
-    ['#8360c3', '#2ebf91'],   // purple to green
+    ['#2a2a2a', '#555555'],       // Lighter charcoal to medium gray
+    ['#3d005f', '#6d3ab0'],       // Lighter deep purple to vibrant purple
+    ['#1a2940', '#243b5a'],       // Lighter navy blue to dark blue
+    ['#2f3874', '#5aa0d9'],       // Lighter deep indigo to light blue
+    ['#3d5069', '#ff6b6b'],       // Lighter dark blue to coral red
+    ['#4d0a9b', '#ff4d94'],       // Lighter royal purple to hot pink
+    ['#1c067d', '#6dd5ff'],       // Lighter deep blue to bright cyan
+    ['#333842', '#4a5059'],       // Lighter dark slate to medium slate
+    ['#3d1a36', '#e03e57'],       // Lighter burgundy to crimson
+    ['#1f3458', '#2a5088'],       // Lighter dark navy to medium blue
+    ['#55067a', '#6d3a9e'],       // Lighter deep violet to purple
+    ['#24323c', '#4a9ac7'],       // Lighter almost black to steel blue
+    ['#2a3f6b', '#6a7fa5'],       // Lighter dark blue to muted blue
+    ['#4a00a8', '#b3008f'],       // Lighter electric purple to magenta
+    ['#241075', '#4d3ca3'],       // Lighter deep indigo to medium purple
+    ['#3c3e52', '#a4aec4'],       // Lighter dark blue-gray to light gray-blue
+    ['#2c2965', '#4d629e'],       // Lighter deep blue to periwinkle
+    ['#3a3242', '#4a4452'],       // Lighter dark purple-gray to medium gray
+    ['#2d3d60', '#2e7d32'],       // Lighter navy blue to forest green
+    ['#4e0787', '#8a13bf'],       // Lighter deep purple to vibrant purple
+    ['#333842', '#00c9d6'],       // Lighter dark slate to teal
+    ['#242642', '#1a4580'],       // Lighter deep navy to dark blue
+    ['#3d0048', '#a52d9f'],       // Lighter deep purple to magenta
+    ['#1f3458', '#1a4580'],       // Lighter navy blue variations
+    ['#2e3034', '#65737e'],       // Lighter almost black to dark gray-blue
+    ['#3d445a', '#3d3a8d'],       // Lighter dark blue to deep purple
+    ['#2c2d31', '#4e5259'],       // Lighter charcoal to dark gray
+    ['#3c3c74', '#5d5da5'],       // Lighter deep purple-blue variations
+    ['#2e313b', '#3d445a'],       // Lighter dark blue-gray variations
+    ['#3d1a36', '#a01a46'],       // Lighter deep burgundy to dark red
+    ['#2f3874', '#3d5a9b'],       // Lighter navy blue to medium blue
+    ['#3d005f', '#6600a0'],       // Lighter deep purple variations
+    ['#242542', '#2a5088'],       // Lighter dark indigo to blue
+    ['#333842', '#4a5059'],       // Lighter dark slate variations
+    ['#3d5069', '#2f3874'],       // Lighter dark blue to navy
+    ['#4a00a8', '#5a00ff'],       // Lighter electric purple to bright purple
+    ['#241075', '#3d2a8d'],       // Lighter deep indigo variations
+    ['#3c3e52', '#555770'],       // Lighter blue-gray variations
+    ['#2c2965', '#2f3874'],       // Lighter deep blue variations
+    ['#3a3242', '#4d3c64'],       // Lighter purple-gray variations
   ];
   
-  // Convert venueId to a number if it's a string
-  // Use a simple hash function to get a consistent index
+  // Convert venueId to a consistent number
   let id;
   if (typeof venueId === 'string') {
-    // Simple hash function to convert string to number
     let hash = 0;
     for (let i = 0; i < venueId.length; i++) {
       hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     id = Math.abs(hash);
   } else {
@@ -54,7 +81,7 @@ const getVenueGradientColors = (venueId) => {
   }
   
   const colorIndex = id % gradientColors.length;
-  return gradientColors[colorIndex] || ['#667eea', '#764ba2']; // Fallback colors
+  return gradientColors[colorIndex] || ['#2a2a2a', '#555555']; // Fallback to lighter charcoal
 };
 
   const fetchVenues = async (lvl) => {
@@ -286,12 +313,6 @@ const getVenueGradientColors = (venueId) => {
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerIconContainer}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
-              style={styles.headerIconGradient}
-            >
-              <Icon name="event-available" size={32} color="#fff" />
-            </LinearGradient>
           </View>
           <Text style={styles.title}>Find Your Perfect Session</Text>
           <Text style={styles.subtitle}>Level {level} Venues</Text>
@@ -382,137 +403,135 @@ const getVenueGradientColors = (venueId) => {
         />
       </View>
 
-      {/* Modal with matching design */}
-      <Modal
-        visible={isModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2', '#667eea']}
-              style={styles.modalGradient}
+      {/* Modal with card popup style */}
+      
+<Modal
+  visible={isModalVisible}
+  animationType="fade"
+  transparent={true}
+  onRequestClose={() => setIsModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalCardContainer}>
+      {selectedVenue && (
+        <LinearGradient
+          colors={getVenueGradientColors(selectedVenue.id)}
+          style={styles.modalCardGradient}
+        >
+          <View style={styles.modalCardHeader}>
+            <View>
+              <Text style={styles.modalCardTitle}>{selectedVenue.venue_name}</Text>
+              <Text style={styles.modalCardSubtitle}>Session Details</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => {
+                setIsModalVisible(false);
+                setCancelText('');
+              }}
             >
-              {selectedVenue && (
-                <>
-                  <View style={styles.modalHeader}>
-                    <View>
-                      <Text style={styles.modalTitle}>{selectedVenue.venue_name}</Text>
-                      <Text style={styles.modalSubtitle}>Session Details</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.modalCloseButton}
-                      onPress={() => {
-                        setIsModalVisible(false);
-                        setCancelText('');
-                      }}
-                    >
-                      <Icon name="close" size={24} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.modalContent}>
-                    <View style={styles.modalInfoGrid}>
-                      <View style={styles.modalInfoItem}>
-                        <Icon name="schedule" size={20} color="rgba(255,255,255,0.8)" />
-                        <Text style={styles.modalInfoLabel}>Timing</Text>
-                        <Text style={styles.modalInfoValue}>{selectedVenue.session_timing}</Text>
-                      </View>
-                      
-                      <View style={styles.modalInfoItem}>
-                        <Icon name="table-restaurant" size={20} color="rgba(255,255,255,0.8)" />
-                        <Text style={styles.modalInfoLabel}>Table</Text>
-                        <Text style={styles.modalInfoValue}>{selectedVenue.table_details}</Text>
-                      </View>
-                      
-                      <View style={styles.modalInfoItem}>
-                        <Icon name="group" size={20} color="rgba(255,255,255,0.8)" />
-                        <Text style={styles.modalInfoLabel}>Capacity</Text>
-                        <Text style={styles.modalInfoValue}>{selectedVenue.capacity}</Text>
-                      </View>
-                      
-                      <View style={styles.modalInfoItem}>
-                        <Icon name="event-available" size={20} color="rgba(255,255,255,0.8)" />
-                        <Text style={styles.modalInfoLabel}>Available</Text>
-                        <Text style={styles.modalInfoValue}>{selectedVenue.remaining}</Text>
-                      </View>
-                    </View>
-                    
-                    {isBooked ? (
-                      <View style={styles.bookedSection}>
-                        <View style={styles.bookedStatus}>
-                          <Icon name="check-circle" size={24} color="#4CAF50" />
-                          <Text style={styles.bookedStatusText}>You have booked this venue</Text>
-                        </View>
-                        
-                        <TextInput
-                          style={styles.cancelInput}
-                          placeholder="Type 'cancel' to confirm cancellation"
-                          placeholderTextColor="rgba(255,255,255,0.6)"
-                          value={cancelText}
-                          onChangeText={setCancelText}
-                        />
-                        
-                        <TouchableOpacity
-                          style={styles.actionButton}
-                          onPress={() => {
-                            if (cancelText.toLowerCase() === 'cancel') {
-                              Alert.alert(
-                                'Confirm Cancellation',
-                                'Are you sure you want to cancel this booking?',
-                                [
-                                  { text: 'No', style: 'cancel' },
-                                  { text: 'Yes', onPress: handleCancelBooking }
-                                ]
-                              );
-                            }
-                          }}
-                          disabled={loading || cancelText.toLowerCase() !== 'cancel'}
-                        >
-                          <LinearGradient
-                            colors={cancelText.toLowerCase() === 'cancel' ? 
-                              ['#F44336', '#E53935'] : 
-                              ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-                            style={styles.actionButtonGradient}
-                          >
-                            <Icon name="cancel" size={20} color="#fff" />
-                            <Text style={styles.actionButtonText}>Cancel Booking</Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={handleBookVenue}
-                        disabled={loading || selectedVenue.remaining <= 0}
-                      >
-                        <LinearGradient
-                          colors={selectedVenue.remaining <= 0 ? 
-                            ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] : 
-                            ['#4CAF50', '#43A047']}
-                          style={styles.actionButtonGradient}
-                        >
-                          <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>
-                            {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Now'}
-                          </Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </>
-              )}
-            </LinearGradient>
+              <Icon name="close" size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+
+          <View style={styles.modalCardContent}>
+            <View style={styles.modalCardInfoGrid}>
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="schedule" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Timing</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.session_timing}</Text>
+              </View>
+              
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="table-restaurant" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Table</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.table_details}</Text>
+              </View>
+              
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="group" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Capacity</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.capacity}</Text>
+              </View>
+              
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="event-available" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Available</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.remaining}</Text>
+              </View>
+            </View>
+            
+            {isBooked ? (
+              <View style={styles.modalCardBookedSection}>
+                <View style={styles.modalCardBookedStatus}>
+                  <Icon name="check-circle" size={24} color="#4CAF50" />
+                  <Text style={styles.modalCardBookedStatusText}>You have booked this venue</Text>
+                </View>
+                
+                <TextInput
+                  style={styles.modalCardCancelInput}
+                  placeholder="Type 'cancel' to confirm cancellation"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  value={cancelText}
+                  onChangeText={setCancelText}
+                />
+                
+                <TouchableOpacity
+                  style={styles.modalCardActionButton}
+                  onPress={() => {
+                    if (cancelText.toLowerCase() === 'cancel') {
+                      Alert.alert(
+                        'Confirm Cancellation',
+                        'Are you sure you want to cancel this booking?',
+                        [
+                          { text: 'No', style: 'cancel' },
+                          { text: 'Yes', onPress: handleCancelBooking }
+                        ]
+                      );
+                    }
+                  }}
+                  disabled={loading || cancelText.toLowerCase() !== 'cancel'}
+                >
+                  <LinearGradient
+                    colors={cancelText.toLowerCase() === 'cancel' ? 
+                      ['#F44336', '#E53935'] : 
+                      ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                    style={styles.modalCardActionButtonGradient}
+                  >
+                    <Icon name="cancel" size={20} color="#fff" />
+                    <Text style={styles.modalCardActionButtonText}>Cancel Booking</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.modalCardActionButton}
+                onPress={handleBookVenue}
+                disabled={loading || selectedVenue.remaining <= 0}
+              >
+                <LinearGradient
+                  colors={selectedVenue.remaining <= 0 ? 
+                    ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] : 
+                    ['#4CAF50', '#43A047']}
+                  style={styles.modalCardActionButtonGradient}
+                >
+                  <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={20} color="#fff" />
+                  <Text style={styles.modalCardActionButtonText}>
+                    {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Now'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+          </View>
+        </LinearGradient>
+      )}
+    </View>
+  </View>
+</Modal>
     </LinearGradient>
   );
 }
 
-// Keep the styles object exactly the same as before
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -520,7 +539,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
-    paddingTop: 30,
+    paddingTop: 20,
   },
   header: {
     alignItems: 'center',
@@ -535,7 +554,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
     color: '#fff',
     textAlign: 'center',
@@ -793,6 +812,7 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingBottom: 100,
   },
+  // Modal styles for card popup
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -800,31 +820,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  modalContainer: {
-    width: '100%',
-    maxHeight: '90%',
+  modalCardContainer: {
+    width: '90%',
+    maxWidth: 400,
     borderRadius: 24,
     overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
   },
-  modalGradient: {
-    flex: 1,
+  modalCardGradient: {
+    padding: 0,
   },
-  modalHeader: {
+  modalCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 24,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  modalTitle: {
-    fontSize: 24,
+  modalCardTitle: {
+    fontSize: 22,
     fontWeight: '700',
     color: '#fff',
     marginBottom: 4,
   },
-  modalSubtitle: {
-    fontSize: 16,
+  modalCardSubtitle: {
+    fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
   },
   modalCloseButton: {
@@ -832,74 +857,75 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  modalContent: {
-    padding: 24,
+  modalCardContent: {
+    padding: 20,
   },
-  modalInfoGrid: {
+  modalCardInfoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 24,
-  },
-  modalInfoItem: {
-    width: '50%',
-    alignItems: 'center',
     marginBottom: 20,
   },
-  modalInfoLabel: {
+  modalCardInfoItem: {
+    width: '50%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalCardInfoLabel: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
     marginTop: 8,
     marginBottom: 4,
   },
-  modalInfoValue: {
+  modalCardInfoValue: {
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
   },
-  bookedSection: {
-    marginTop: 16,
+  modalCardBookedSection: {
+    marginTop: 10,
   },
-  bookedStatus: {
+  modalCardBookedStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
     paddingVertical: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  bookedStatusText: {
+  modalCardBookedStatusText: {
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
     marginLeft: 8,
   },
-  cancelInput: {
+  modalCardCancelInput: {
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 16,
     fontSize: 16,
     color: '#fff',
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  actionButton: {
+  modalCardActionButton: {
     borderRadius: 12,
     overflow: 'hidden',
   },
-  actionButtonGradient: {
+  modalCardActionButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
     paddingHorizontal: 24,
   },
-  actionButtonText: {
+  modalCardActionButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
   },
 });
+

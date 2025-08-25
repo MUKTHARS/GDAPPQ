@@ -171,8 +171,11 @@ func InitDB(db *sql.DB) error {
     ranks INT NOT NULL,  
     score DECIMAL(5,2) NOT NULL,         
     weighted_score DECIMAL(5,2) NOT NULL,
+    penalty_points DECIMAL(3,1) DEFAULT 0.0,
+    is_biased BOOLEAN DEFAULT FALSE,
     is_current_session TINYINT(1) DEFAULT 0,
     is_completed BOOLEAN DEFAULT FALSE,
+    expected_ranks JSON DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 /**    Dont remove this ----- >
  CREATE INDEX IF NOT EXISTS idx_survey_results_session_completed ON survey_results (session_id, is_completed) 
@@ -218,7 +221,17 @@ INDEX idx_survey_results_session_completed (session_id, is_completed),
     FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
 )`,
 
-
+`CREATE TABLE IF NOT EXISTS consensus_rankings (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    consensus_rank INT NOT NULL,
+    total_votes INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_session_student (session_id, student_id)
+);`,
 
 `CREATE TABLE IF NOT EXISTS question_timers (
     session_id VARCHAR(36),
@@ -382,3 +395,4 @@ if err != nil {
 
     return nil
 }
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image,ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image,Modal,ActivityIndicator, TouchableOpacity } from 'react-native';
 import api from '../services/api';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -12,11 +12,11 @@ const ResultItem = ({ item, index }) => {
     parseFloat(item.penalty_points) : item.penalty_points || 0;
   const finalScore = typeof item.final_score === 'string' ? 
     parseFloat(item.final_score) : totalScore - penaltyPoints;
-
+  const biasedQuestions = item.biased_questions || 0;
   // Use the photo_url from the item, fallback to avatar API
   const profileImage = item.photo_url || 
     `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random&color=fff`;
-
+  const [showPenaltyDetails, setShowPenaltyDetails] = useState(false);
   const getRankIcon = (position) => {
     switch (position) {
       case 0: return 'emoji-events';
@@ -35,47 +35,79 @@ const ResultItem = ({ item, index }) => {
     }
   };
 
-  return (
+ return (
     <View style={[styles.resultItem, { opacity: 0.9 + (index * 0.01) }]}>
       <LinearGradient
         colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 1}}
         style={styles.resultGradient}
       >
         <View style={styles.resultHeader}>
           <View style={styles.rankContainer}>
             <LinearGradient
               colors={getRankColors(index)}
-              style={styles.rankGradient}
+              style={styles.rankBadge}
             >
-              <Icon name={getRankIcon(index)} size={24} color="#fff" />
+              <Text style={styles.rankText}>{index + 1}</Text>
             </LinearGradient>
-            <Text style={styles.rankPosition}>#{index + 1}</Text>
           </View>
           
-          {/* Profile Image */}
-          <View style={styles.profileImageContainer}>
+          <View style={styles.profileContainer}>
             <Image
               source={{ uri: profileImage }}
               style={styles.profileImage}
-              onError={(e) => {
-                console.log('Image load error:', e.nativeEvent.error);
-              }}
+              onError={() => console.log('Image load error')}
             />
           </View>
           
           <View style={styles.detailsContainer}>
             <Text style={styles.nameText}>{item.name}</Text>
+            
+            {/* Penalty Indicator */}
+            {penaltyPoints > 0 && (
+              <TouchableOpacity 
+                onPress={() => setShowPenaltyDetails(!showPenaltyDetails)}
+                style={styles.penaltyIndicator}
+              >
+                <Icon name="warning" size={16} color="#FF9800" />
+                <Text style={styles.penaltyIndicatorText}>
+                  -{penaltyPoints.toFixed(1)} points ({penaltyDetails.length} penalties)
+                </Text>
+                <Icon 
+                  name={showPenaltyDetails ? "expand-less" : "expand-more"} 
+                  size={16} 
+                  color="#FF9800" 
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Penalty Details */}
+            {showPenaltyDetails && penaltyDetails.length > 0 && (
+              <View style={styles.penaltyDetailsContainer}>
+                {penaltyDetails.map((penalty, idx) => (
+                  <View key={idx} style={styles.penaltyDetailItem}>
+                    <Icon name="error-outline" size={12} color="#F44336" />
+                    <Text style={styles.penaltyDetailText}>
+                      -{penalty.points} pts: {penalty.reason || 'Ranking penalty'} 
+                      {penalty.time && ` at ${penalty.time}`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
             <View style={styles.scoresContainer}>
               <View style={styles.scoreItem}>
                 <Icon name="add-circle" size={16} color="#4CAF50" />
                 <Text style={styles.scoreText}>{totalScore.toFixed(1)}</Text>
               </View>
-              <View style={styles.scoreItem}>
-                <Icon name="remove-circle" size={16} color="#F44336" />
-                <Text style={styles.penaltyText}>{penaltyPoints.toFixed(1)}</Text>
-              </View>
+              
+              {penaltyPoints > 0 && (
+                <View style={styles.scoreItem}>
+                  <Icon name="remove-circle" size={16} color="#F44336" />
+                  <Text style={styles.penaltyText}>-{penaltyPoints.toFixed(1)}</Text>
+                </View>
+              )}
+              
               <View style={styles.finalScoreContainer}>
                 <Text style={styles.finalScoreText}>{finalScore.toFixed(1)}</Text>
                 <Text style={styles.finalScoreLabel}>Final</Text>
@@ -93,7 +125,7 @@ export default function ResultsScreen({ route, navigation }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
   useEffect(() => {
     const fetchResults = async () => {
       try {
@@ -197,19 +229,91 @@ export default function ResultsScreen({ route, navigation }) {
     >
       <View style={styles.contentContainer}>
         {/* Header Section */}
-        <View style={styles.header}>
-          <View style={styles.headerIconContainer}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
-              style={styles.headerIconGradient}
-            >
-              <Icon name="emoji-events" size={32} color="#fff" />
-            </LinearGradient>
-          </View>
-          <Text style={styles.title}>Session Results</Text>
-          <Text style={styles.subtitle}>Final rankings and scores</Text>
-        </View>
+<View style={styles.header}>
+  <View style={styles.headerLeft}>
+    {/* <View style={styles.headerIconContainer}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
+        style={styles.headerIconGradient}
+      >
+        <Icon name="emoji-events" size={32} color="#fff" />
+      </LinearGradient>
+    </View> */}
+    <View>
+      <Text style={styles.title}>Session Results</Text>
+      <Text style={styles.subtitle}>Final rankings and scores</Text>
+    </View>
+  </View>
+  <TouchableOpacity 
+    onPress={() => setShowPenaltyInfo(true)}
+    style={styles.infoButton}
+  >
+    <Icon name="info" size={24} color="rgba(255,255,255,0.8)" />
+  </TouchableOpacity>
+</View>
 
+{showPenaltyInfo && (
+  <Modal
+    visible={showPenaltyInfo}
+    transparent={true}
+    animationType="slide"
+    onRequestClose={() => setShowPenaltyInfo(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <LinearGradient
+        colors={['#667eea', '#764ba2']}
+        style={styles.modalContent}
+      >
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Penalty System</Text>
+          <TouchableOpacity 
+            onPress={() => setShowPenaltyInfo(false)}
+            style={styles.closeButton}
+          >
+            <Icon name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.modalBody}>
+          <View style={styles.penaltyRule}>
+            <Icon name="check-circle" size={20} color="#4CAF50" />
+            <Text style={styles.penaltyRuleText}>
+              Perfect match with consensus: No penalty
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="warning" size={20} color="#FF9800" />
+            <Text style={styles.penaltyRuleText}>
+              1 rank difference: -0.5 points per question
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="error" size={20} color="#F44336" />
+            <Text style={styles.penaltyRuleText}>
+              2 ranks difference: -1.0 points per question
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="block" size={20} color="#D32F2F" />
+            <Text style={styles.penaltyRuleText}>
+              3+ ranks difference: -2.0 points per question
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="person-off" size={20} color="#9E9E9E" />
+            <Text style={styles.penaltyRuleText}>
+              Ranking non-consensus students: -1.0 points
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
+    </View>
+  </Modal>
+)}
         {/* Stats Section */}
         <View style={styles.statsContainer}>
           <LinearGradient
@@ -239,7 +343,7 @@ export default function ResultsScreen({ route, navigation }) {
                 <View style={styles.statIconContainer}>
                   <Icon name="check-circle" size={24} color="#4CAF50" />
                 </View>
-                <Text style={styles.statNumber}>Complete</Text>
+                <Text style={styles.statNumber}>Completed</Text>
                 <Text style={styles.statLabel}>Status</Text>
               </View>
             </View>
@@ -448,7 +552,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#fff',
     marginBottom: 4,
@@ -644,7 +748,77 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
+  penaltyIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,152,0,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 6,
+    alignSelf: 'flex-start',
+  },
+  penaltyIndicatorText: {
+    color: '#FF9800',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  modalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0,0,0,0.7)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 20,
+},
+modalContent: {
+  borderRadius: 20,
+  padding: 20,
+  width: '90%',
+  maxHeight: '80%',
+},
+modalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 20,
+},
+modalTitle: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#fff',
+},
+closeButton: {
+  padding: 4,
+},
+modalBody: {
+  gap: 16,
+},
+penaltyRule: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'rgba(255,255,255,0.1)',
+  padding: 12,
+  borderRadius: 12,
+},
+penaltyRuleText: {
+  color: '#fff',
+  fontSize: 14,
+  marginLeft: 12,
+  flex: 1,
+},
+headerLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+},
+infoButton: {
+  padding: 8,
+},
 });
+
+
+
 
 
 // import React, { useState, useEffect } from 'react';
