@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image,Modal,ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, Modal, ActivityIndicator, TouchableOpacity } from 'react-native';
 import api from '../services/api';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -13,18 +13,12 @@ const ResultItem = ({ item, index }) => {
   const finalScore = typeof item.final_score === 'string' ? 
     parseFloat(item.final_score) : totalScore - penaltyPoints;
   const biasedQuestions = item.biased_questions || 0;
+  
   // Use the photo_url from the item, fallback to avatar API
   const profileImage = item.photo_url || 
     `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random&color=fff`;
+  
   const [showPenaltyDetails, setShowPenaltyDetails] = useState(false);
-  const getRankIcon = (position) => {
-    switch (position) {
-      case 0: return 'emoji-events';
-      case 1: return 'emoji-events';
-      case 2: return 'emoji-events';
-      default: return 'person';
-    }
-  };
 
   const getRankColors = (position) => {
     switch (position) {
@@ -35,7 +29,17 @@ const ResultItem = ({ item, index }) => {
     }
   };
 
- return (
+  // Generate penalty details based on biased questions count
+ const penaltyDetails = biasedQuestions > 0 ? [
+    { 
+      points: penaltyPoints, 
+      reason: `${biasedQuestions} biased ranking(s)`, 
+      description: 'Deviated significantly from consensus ratings'
+    }
+  ] : [];
+
+ 
+  return (
     <View style={[styles.resultItem, { opacity: 0.9 + (index * 0.01) }]}>
       <LinearGradient
         colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
@@ -62,57 +66,58 @@ const ResultItem = ({ item, index }) => {
           <View style={styles.detailsContainer}>
             <Text style={styles.nameText}>{item.name}</Text>
             
-            {/* Penalty Indicator */}
-            {penaltyPoints > 0 && (
-              <TouchableOpacity 
-                onPress={() => setShowPenaltyDetails(!showPenaltyDetails)}
-                style={styles.penaltyIndicator}
-              >
-                <Icon name="warning" size={16} color="#FF9800" />
-                <Text style={styles.penaltyIndicatorText}>
-                  -{penaltyPoints.toFixed(1)} points ({penaltyDetails.length} penalties)
-                </Text>
-                <Icon 
-                  name={showPenaltyDetails ? "expand-less" : "expand-more"} 
-                  size={16} 
-                  color="#FF9800" 
-                />
-              </TouchableOpacity>
-            )}
-            
-            {/* Penalty Details */}
-            {showPenaltyDetails && penaltyDetails.length > 0 && (
-              <View style={styles.penaltyDetailsContainer}>
-                {penaltyDetails.map((penalty, idx) => (
-                  <View key={idx} style={styles.penaltyDetailItem}>
-                    <Icon name="error-outline" size={12} color="#F44336" />
-                    <Text style={styles.penaltyDetailText}>
-                      -{penalty.points} pts: {penalty.reason || 'Ranking penalty'} 
-                      {penalty.time && ` at ${penalty.time}`}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            
+            {/* Scores Container */}
             <View style={styles.scoresContainer}>
+              {/* Total Score */}
               <View style={styles.scoreItem}>
                 <Icon name="add-circle" size={16} color="#4CAF50" />
                 <Text style={styles.scoreText}>{totalScore.toFixed(1)}</Text>
               </View>
               
+              {/* Penalty Points */}
               {penaltyPoints > 0 && (
                 <View style={styles.scoreItem}>
                   <Icon name="remove-circle" size={16} color="#F44336" />
                   <Text style={styles.penaltyText}>-{penaltyPoints.toFixed(1)}</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowPenaltyDetails(!showPenaltyDetails)}
+                    style={styles.penaltyInfoButton}
+                  >
+                    <Icon name="info-outline" size={14} color="#FF9800" />
+                  </TouchableOpacity>
                 </View>
               )}
               
+              {/* Final Score */}
               <View style={styles.finalScoreContainer}>
                 <Text style={styles.finalScoreText}>{finalScore.toFixed(1)}</Text>
                 <Text style={styles.finalScoreLabel}>Final</Text>
               </View>
             </View>
+
+            {/* Penalty Details */}
+            {showPenaltyDetails && penaltyPoints > 0 && (
+              <View style={styles.penaltyDetailsContainer}>
+                <View style={styles.penaltyDetailItem}>
+                  <Icon name="warning" size={14} color="#FF9800" />
+                  <Text style={styles.penaltyDetailText}>
+                    {biasedQuestions} biased ranking{biasedQuestions !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <View style={styles.penaltyDetailItem}>
+                  <Icon name="error-outline" size={12} color="#F44336" />
+                  <Text style={styles.penaltyDetailSmallText}>
+                    Ratings differed significantly from group consensus
+                  </Text>
+                </View>
+                <View style={styles.penaltyDetailItem}>
+                  <Icon name="info-outline" size={12} color="#2196F3" />
+                  <Text style={styles.penaltyDetailSmallText}>
+                    -1 point per significant deviation
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -125,12 +130,15 @@ export default function ResultsScreen({ route, navigation }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
+  const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
+
   useEffect(() => {
     const fetchResults = async () => {
       try {
         setLoading(true);
         const response = await api.student.getResults(sessionId);
+        
+        console.log('Results API response:', response.data);
         
         if (response.data?.results) {
           // Process results to ensure correct data types
@@ -144,7 +152,8 @@ const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
                 parseFloat(item.penalty_points) : item.penalty_points || 0,
               final_score: typeof item.final_score === 'string' ? 
                 parseFloat(item.final_score) : 
-                (item.total_score || 0) - (item.penalty_points || 0)
+                (item.total_score || 0) - (item.penalty_points || 0),
+              biased_questions: item.biased_questions || 0
             }))
             // Sort by final_score descending as backup
             .sort((a, b) => b.final_score - a.final_score);
@@ -222,98 +231,28 @@ const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
     );
   }
 
-  return (
+    return (
     <LinearGradient
       colors={['#667eea', '#764ba2', '#667eea']}
       style={styles.container}
     >
       <View style={styles.contentContainer}>
         {/* Header Section */}
-<View style={styles.header}>
-  <View style={styles.headerLeft}>
-    {/* <View style={styles.headerIconContainer}>
-      <LinearGradient
-        colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
-        style={styles.headerIconGradient}
-      >
-        <Icon name="emoji-events" size={32} color="#fff" />
-      </LinearGradient>
-    </View> */}
-    <View>
-      <Text style={styles.title}>Session Results</Text>
-      <Text style={styles.subtitle}>Final rankings and scores</Text>
-    </View>
-  </View>
-  <TouchableOpacity 
-    onPress={() => setShowPenaltyInfo(true)}
-    style={styles.infoButton}
-  >
-    <Icon name="info" size={24} color="rgba(255,255,255,0.8)" />
-  </TouchableOpacity>
-</View>
-
-{showPenaltyInfo && (
-  <Modal
-    visible={showPenaltyInfo}
-    transparent={true}
-    animationType="slide"
-    onRequestClose={() => setShowPenaltyInfo(false)}
-  >
-    <View style={styles.modalOverlay}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.modalContent}
-      >
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Penalty System</Text>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View>
+              <Text style={styles.title}>Session Results</Text>
+              <Text style={styles.subtitle}>Final rankings and scores</Text>
+            </View>
+          </View>
           <TouchableOpacity 
-            onPress={() => setShowPenaltyInfo(false)}
-            style={styles.closeButton}
+            onPress={() => setShowPenaltyInfo(true)}
+            style={styles.infoButton}
           >
-            <Icon name="close" size={24} color="#fff" />
+            <Icon name="info" size={24} color="rgba(255,255,255,0.8)" />
           </TouchableOpacity>
         </View>
-        
-        <View style={styles.modalBody}>
-          <View style={styles.penaltyRule}>
-            <Icon name="check-circle" size={20} color="#4CAF50" />
-            <Text style={styles.penaltyRuleText}>
-              Perfect match with consensus: No penalty
-            </Text>
-          </View>
-          
-          <View style={styles.penaltyRule}>
-            <Icon name="warning" size={20} color="#FF9800" />
-            <Text style={styles.penaltyRuleText}>
-              1 rank difference: -0.5 points per question
-            </Text>
-          </View>
-          
-          <View style={styles.penaltyRule}>
-            <Icon name="error" size={20} color="#F44336" />
-            <Text style={styles.penaltyRuleText}>
-              2 ranks difference: -1.0 points per question
-            </Text>
-          </View>
-          
-          <View style={styles.penaltyRule}>
-            <Icon name="block" size={20} color="#D32F2F" />
-            <Text style={styles.penaltyRuleText}>
-              3+ ranks difference: -2.0 points per question
-            </Text>
-          </View>
-          
-          <View style={styles.penaltyRule}>
-            <Icon name="person-off" size={20} color="#9E9E9E" />
-            <Text style={styles.penaltyRuleText}>
-              Ranking non-consensus students: -1.0 points
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
-    </View>
-  </Modal>
-)}
+
         {/* Stats Section */}
         <View style={styles.statsContainer}>
           <LinearGradient
@@ -384,8 +323,9 @@ const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
               </View>
             )}
           </View>
-          
         </View>
+
+        {/* Bottom feedback section */}
         <View style={styles.bottomContainer}>
           <TouchableOpacity 
             style={styles.feedbackButton}
@@ -410,7 +350,60 @@ const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
           </Text>
         </View>
       </View>
-      
+
+      {/* Penalty Info Modal */}
+{showPenaltyInfo && (
+  <Modal
+    visible={showPenaltyInfo}
+    transparent={true}
+    animationType="slide"
+    onRequestClose={() => setShowPenaltyInfo(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <LinearGradient
+        colors={['#667eea', '#764ba2']}
+        style={styles.modalContent}
+      >
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Penalty System</Text>
+          <TouchableOpacity 
+            onPress={() => setShowPenaltyInfo(false)}
+            style={styles.closeButton}
+          >
+            <Icon name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.modalBody}>
+          <Text style={styles.modalDescription}>
+            Penalties are applied when your ratings differ significantly from the group consensus:
+          </Text>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="warning" size={20} color="#FF9800" />
+            <Text style={styles.penaltyRuleText}>
+              Deviation ≥ 2 points from average: -1 point per occurrence
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="info" size={20} color="#2196F3" />
+            <Text style={styles.penaltyRuleText}>
+              Average is calculated excluding self-ratings
+            </Text>
+          </View>
+          
+          <View style={styles.penaltyRule}>
+            <Icon name="group" size={20} color="#4CAF50" />
+            <Text style={styles.penaltyRuleText}>
+              Designed to encourage fair and consistent evaluations
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
+    </View>
+  </Modal>
+)}
     </LinearGradient>
   );
 }
@@ -622,14 +615,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
   },
-  rankGradient: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
+ 
   rankPosition: {
     fontSize: 12,
     fontWeight: '600',
@@ -748,7 +734,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
-  penaltyIndicator: {
+penaltyIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,152,0,0.2)',
@@ -760,9 +746,49 @@ const styles = StyleSheet.create({
   },
   penaltyIndicatorText: {
     color: '#FF9800',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     marginLeft: 4,
+    marginRight: 4,
+  },
+   penaltyDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  penaltyDetailText: {
+    color: '#FF9800',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+    flex: 1,
+  },
+  penaltyDetailSmallText: {
+    color: 'rgba(255,152,0,0.8)',
+    fontSize: 11,
+    marginLeft: 6,
+    flex: 1,
+    fontStyle: 'italic',
+  },
+  rankBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  profileContainer: {
+    marginRight: 12,
+  },
+  profileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   modalOverlay: {
   flex: 1,
@@ -815,6 +841,18 @@ headerLeft: {
 infoButton: {
   padding: 8,
 },
+  penaltyInfoButton: {
+    marginLeft: 4,
+    padding: 4,
+  },
+  penaltyDetailsContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: 'rgba(255,152,0,0.1)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,152,0,0.3)',
+  },
 });
 
 

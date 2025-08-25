@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gd/database"
+	"math"
 	"sort"
 
 	// "sort"
@@ -626,19 +627,123 @@ func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 }
-func calculatePenalty(sessionID string, studentID string) (float64, error) {
-	var totalPenalty float64
-	err := database.GetDB().QueryRow(`
-        SELECT COALESCE(SUM(penalty_points), 0) 
-        FROM survey_penalties 
-        WHERE session_id = ? AND student_id = ?`,
-		sessionID, studentID).Scan(&totalPenalty)
 
-	if err != nil {
-		return 0, fmt.Errorf("error calculating penalties: %v", err)
-	}
-	return totalPenalty, nil
+
+func calculatePenalties(sessionID string) error {
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %v", err)
+    }
+    defer tx.Rollback()
+
+    // Get all questions for this session
+    questions := make(map[string]bool)
+    rows, err := tx.Query(`
+        SELECT DISTINCT question_id 
+        FROM survey_results 
+        WHERE session_id = ? AND is_completed = 1`,
+        sessionID)
+    if err != nil {
+        return fmt.Errorf("error getting questions: %v", err)
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        var questionID string
+        if err := rows.Scan(&questionID); err != nil {
+            continue
+        }
+        questions[questionID] = true
+    }
+
+    // For each question, calculate penalties
+    for questionID := range questions {
+        // Get all rankings for this question
+        rankings := make(map[string]map[string]float64) // student_id -> responder_id -> score
+        
+        rows, err := tx.Query(`
+            SELECT student_id, responder_id, score 
+            FROM survey_results 
+            WHERE session_id = ? AND question_id = ? AND is_completed = 1`,
+            sessionID, questionID)
+        if err != nil {
+            return fmt.Errorf("error getting rankings: %v", err)
+        }
+        
+        for rows.Next() {
+            var studentID, responderID string
+            var score float64
+            if err := rows.Scan(&studentID, &responderID, &score); err != nil {
+                continue
+            }
+            
+            if rankings[studentID] == nil {
+                rankings[studentID] = make(map[string]float64)
+            }
+            rankings[studentID][responderID] = score
+        }
+        rows.Close()
+
+        // Calculate average scores for each student (excluding self-ratings)
+        averages := make(map[string]float64)
+        counts := make(map[string]int)
+        
+        for studentID, responderScores := range rankings {
+            total := 0.0
+            count := 0
+            
+            for responderID, score := range responderScores {
+                if responderID != studentID { // Exclude self-ratings
+                    total += score
+                    count++
+                }
+            }
+            
+            if count > 0 {
+                averages[studentID] = total / float64(count)
+            } else {
+                averages[studentID] = 0
+            }
+            counts[studentID] = count
+        }
+
+        // Apply penalties for deviations ≥ 2 points
+        for studentID, responderScores := range rankings {
+            for responderID, givenScore := range responderScores {
+                if responderID == studentID {
+                    continue // Skip self-ratings for penalty calculation
+                }
+                
+                averageScore, exists := averages[responderID]
+                if !exists || counts[responderID] == 0 {
+                    continue
+                }
+                
+                // Calculate deviation from average
+                deviation := math.Abs(givenScore - averageScore)
+                
+                if deviation >= 2.0 {
+                    // Apply 1-point penalty
+                    _, err := tx.Exec(`
+                        UPDATE survey_results 
+                        SET penalty_points = penalty_points + 1.0,
+                            is_biased = 1
+                        WHERE session_id = ? 
+                          AND question_id = ? 
+                          AND student_id = ? 
+                          AND responder_id = ?`,
+                        sessionID, questionID, studentID, responderID)
+                    if err != nil {
+                        return fmt.Errorf("error applying penalty: %v", err)
+                    }
+                }
+            }
+        }
+    }
+
+    return tx.Commit()
 }
+
 
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
@@ -664,6 +769,12 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusForbidden)
         json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view these results"})
         return
+    }
+
+     err = calculatePenalties(sessionID)
+    if err != nil {
+        log.Printf("Warning: Could not calculate penalties: %v", err)
+        // Continue anyway, penalties might have been calculated already
     }
 
     // Get all participants in this session (including the current student) with photo_url
@@ -839,6 +950,27 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         "results":    response,
         "session_id": sessionID,
     })
+}
+
+
+func CalculateSessionPenalties(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+
+    err := calculatePenalties(sessionID)
+    if err != nil {
+        log.Printf("Error calculating penalties: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to calculate penalties"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "penalties_calculated"})
 }
 
 func BookVenue(w http.ResponseWriter, r *http.Request) {

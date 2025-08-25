@@ -279,12 +279,12 @@ export default function GdSessionScreen({ navigation, route }) {
       <View style={styles.contentContainer}>
         {/* Header Section - Removed session ID */}
         <View style={styles.header}>
-          <LinearGradient
+          {/* <LinearGradient
             colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
             style={styles.headerIconContainer}
           >
             <Icon name="groups" size={32} color="#fff" />
-          </LinearGradient>
+          </LinearGradient> */}
           <Text style={styles.headerTitle}>Group Discussion</Text>
         </View>
 

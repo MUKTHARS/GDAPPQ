@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image,ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import api from '../services/api';
 import auth from '../services/auth'; 
 import LinearGradient from 'react-native-linear-gradient';
@@ -555,177 +555,179 @@ const proceedToNextQuestion = async (isPartial = false) => {
       colors={['#667eea', '#764ba2', '#667eea']}
       style={styles.container}
     >
-      <View style={styles.contentContainer}>
-        {/* Header Section */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Peer Evaluation</Text>
-          <Text style={styles.headerSubtitle}>Rate your teammates' performance</Text>
-        </View>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.contentContainer}>
+          {/* Header Section */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Peer Evaluation</Text>
+            <Text style={styles.headerSubtitle}>Rate your teammates' performance</Text>
+          </View>
 
-        {/* Compact Timer & Question Section */}
-        <View style={styles.topSection}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-            style={styles.topSectionGradient}
-          >
-            {/* Timer Row */}
-            <View style={styles.timerRow}>
-              <View style={styles.timerContainer}>
-                <Icon name="timer" size={20} color="#fff" />
-                <Text style={styles.timerText}>{timeRemaining}s</Text>
-              </View>
-              {isTimedOut && (
-                <View style={styles.timeoutBadge}>
-                  <Icon name="warning" size={16} color="#FF5252" />
-                  <Text style={styles.timeoutText}>Time's Up!</Text>
+          {/* Compact Timer & Question Section */}
+          <View style={styles.topSection}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+              style={styles.topSectionGradient}
+            >
+              {/* Timer Row */}
+              <View style={styles.timerRow}>
+                <View style={styles.timerContainer}>
+                  <Icon name="timer" size={20} color="#fff" />
+                  <Text style={styles.timerText}>{timeRemaining}s</Text>
                 </View>
-              )}
-              {penalties[currentQuestion] && (
-                <View style={styles.penaltyBadge}>
-                  <Icon name="report" size={16} color="#FF9800" />
-                  <Text style={styles.penaltyText}>Penalty</Text>
-                </View>
-              )}
-            </View>
-            
-            {/* Question Row */}
-            <View style={styles.questionRow}>
-              <Text style={styles.questionNumber}>Q{currentQuestion + 1}</Text>
-              <Text style={styles.question}>
-                {shuffledQuestions[currentQuestion]?.text || 'Question loading...'}
-              </Text>
-            </View>
-
-            {/* Current Rankings Row */}
-            <View style={styles.rankingsRow}>
-              <Text style={styles.rankingsLabel}>Current Rankings:</Text>
-              <View style={styles.rankingsList}>
-                {[1, 2, 3].map(rank => {
-                  const selectedMember = members.find(m => m.id === currentRankings[rank]);
-                  return (
-                    <View key={rank} style={styles.rankingItem}>
-                      <Text style={styles.rankEmoji}>
-                        {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}
-                      </Text>
-                      <Text style={styles.rankingName}>
-                        {selectedMember ? selectedMember.name : 'Not selected'}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
-
-
-        {/* Main Participants List */}
-        <View style={styles.participantsSection}>
-          <Text style={styles.participantsTitle}>
-            Participants ({members.length})
-          </Text>
-          <FlatList
-            data={members}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <MemberCard 
-                member={item}
-                onSelect={handleSelect}
-                selections={selections}
-                currentRankings={currentRankings}
-              />
-            )}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.participantsList}
-          />
-        </View>
-
-        {/* Bottom Navigation */}
-        <View style={styles.navigationContainer}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-            style={styles.navigationGradient}
-          >
-            <View style={styles.navigation}>
-              {currentQuestion > 0 && (
-                <TouchableOpacity
-                  style={styles.navButtonContainer}
-                  onPress={() => setCurrentQuestion(currentQuestion - 1)}
-                  disabled={isSubmitting}
-                >
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
-                    style={styles.navButton}
-                  >
-                    <Icon name="arrow-back" size={20} color="#fff" />
-                    <Text style={styles.navButtonText}>Previous</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-              
-              <View style={styles.centerAction}>
-                {confirmedQuestions.includes(currentQuestion) ? (
-                  <View style={styles.confirmedContainer}>
-                    <LinearGradient
-                      colors={['#4CAF50', '#43A047']}
-                      style={styles.confirmedBadge}
-                    >
-                      <Icon name="check-circle" size={20} color="#fff" />
-                      <Text style={styles.confirmedText}>Confirmed</Text>
-                    </LinearGradient>
-                    {currentQuestion < shuffledQuestions.length - 1 && (
-                      <TouchableOpacity
-                        style={styles.nextButtonContainer}
-                        onPress={() => setCurrentQuestion(currentQuestion + 1)}
-                        disabled={isSubmitting}
-                      >
-                        <LinearGradient
-                          colors={['#2196F3', '#1976D2']}
-                          style={styles.nextButton}
-                        >
-                          <Text style={styles.nextButtonText}>Next Question</Text>
-                          <Icon name="arrow-forward" size={20} color="#fff" />
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
+                {isTimedOut && (
+                  <View style={styles.timeoutBadge}>
+                    <Icon name="warning" size={16} color="#FF5252" />
+                    <Text style={styles.timeoutText}>Time's Up!</Text>
                   </View>
-                ) : (
+                )}
+                {penalties[currentQuestion] && (
+                  <View style={styles.penaltyBadge}>
+                    <Icon name="report" size={16} color="#FF9800" />
+                    <Text style={styles.penaltyText}>Penalty</Text>
+                  </View>
+                )}
+              </View>
+              
+              {/* Question Row */}
+              <View style={styles.questionRow}>
+                <Text style={styles.questionNumber}>Q{currentQuestion + 1}</Text>
+                <Text style={styles.question}>
+                  {shuffledQuestions[currentQuestion]?.text || 'Question loading...'}
+                </Text>
+              </View>
+
+              {/* Current Rankings Row */}
+              <View style={styles.rankingsRow}>
+                <Text style={styles.rankingsLabel}>Current Rankings:</Text>
+                <View style={styles.rankingsList}>
+                  {[1, 2, 3].map(rank => {
+                    const selectedMember = members.find(m => m.id === currentRankings[rank]);
+                    return (
+                      <View key={rank} style={styles.rankingItem}>
+                        <Text style={styles.rankEmoji}>
+                          {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}
+                        </Text>
+                        <Text style={styles.rankingName}>
+                          {selectedMember ? selectedMember.name : 'Not selected'}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* Main Participants List */}
+          <View style={styles.participantsSection}>
+            <Text style={styles.participantsTitle}>
+              Participants ({members.length})
+            </Text>
+            <View style={styles.participantsList}>
+              {members.map((member) => (
+                <MemberCard 
+                  key={member.id}
+                  member={member}
+                  onSelect={handleSelect}
+                  selections={selections}
+                  currentRankings={currentRankings}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Bottom Navigation */}
+          <View style={styles.navigationContainer}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+              style={styles.navigationGradient}
+            >
+              <View style={styles.navigation}>
+                {currentQuestion > 0 && (
                   <TouchableOpacity
-                    style={styles.confirmButtonContainer}
-                    onPress={confirmCurrentQuestion}
-                    disabled={Object.keys(currentRankings).length < 1 || isSubmitting}
-                    activeOpacity={0.8}
+                    style={styles.navButtonContainer}
+                    onPress={() => setCurrentQuestion(currentQuestion - 1)}
+                    disabled={isSubmitting}
                   >
                     <LinearGradient
-                      colors={(Object.keys(currentRankings).length < 1 || isSubmitting)
-                        ? ['rgba(158,158,158,0.8)', 'rgba(117,117,117,0.8)']
-                        : currentQuestion < shuffledQuestions.length - 1 
-                          ? ['#4CAF50', '#43A047'] 
-                          : ['#FF9800', '#F57C00']}
-                      style={styles.confirmButton}
+                      colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
+                      style={styles.navButton}
                     >
-                      {isSubmitting ? (
-                        <ActivityIndicator color="white" size="small" />
-                      ) : (
-                        <>
-                          <Text style={styles.confirmButtonText}>
-                            {currentQuestion < shuffledQuestions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
-                          </Text>
-                          <Icon 
-                            name={currentQuestion < shuffledQuestions.length - 1 ? "check" : "send"} 
-                            size={20} 
-                            color="#fff" 
-                          />
-                        </>
-                      )}
+                      <Icon name="arrow-back" size={20} color="#fff" />
+                      <Text style={styles.navButtonText}>Previous</Text>
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
+                
+                <View style={styles.centerAction}>
+                  {confirmedQuestions.includes(currentQuestion) ? (
+                    <View style={styles.confirmedContainer}>
+                      <LinearGradient
+                        colors={['#4CAF50', '#43A047']}
+                        style={styles.confirmedBadge}
+                      >
+                        <Icon name="check-circle" size={20} color="#fff" />
+                        <Text style={styles.confirmedText}>Confirmed</Text>
+                      </LinearGradient>
+                      {currentQuestion < shuffledQuestions.length - 1 && (
+                        <TouchableOpacity
+                          style={styles.nextButtonContainer}
+                          onPress={() => setCurrentQuestion(currentQuestion + 1)}
+                          disabled={isSubmitting}
+                        >
+                          <LinearGradient
+                            colors={['#2196F3', '#1976D2']}
+                            style={styles.nextButton}
+                          >
+                            <Text style={styles.nextButtonText}>Next Question</Text>
+                            <Icon name="arrow-forward" size={20} color="#fff" />
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.confirmButtonContainer}
+                      onPress={confirmCurrentQuestion}
+                      disabled={Object.keys(currentRankings).length < 1 || isSubmitting}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={(Object.keys(currentRankings).length < 1 || isSubmitting)
+                          ? ['rgba(158,158,158,0.8)', 'rgba(117,117,117,0.8)']
+                          : currentQuestion < shuffledQuestions.length - 1 
+                            ? ['#4CAF50', '#43A047'] 
+                            : ['#FF9800', '#F57C00']}
+                        style={styles.confirmButton}
+                      >
+                        {isSubmitting ? (
+                          <ActivityIndicator color="white" size="small" />
+                        ) : (
+                          <>
+                            <Text style={styles.confirmButtonText}>
+                              {currentQuestion < shuffledQuestions.length - 1 ? 'Confirm & Next' : 'Submit Survey'}
+                            </Text>
+                            <Icon 
+                              name={currentQuestion < shuffledQuestions.length - 1 ? "check" : "send"} 
+                              size={20} 
+                              color="#fff" 
+                            />
+                          </>
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-            </View>
-          </LinearGradient>
+            </LinearGradient>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -733,6 +735,12 @@ const proceedToNextQuestion = async (isPartial = false) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   contentContainer: {
     flex: 1,
