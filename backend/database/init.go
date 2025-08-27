@@ -39,9 +39,11 @@ func InitDB(db *sql.DB) error {
             department VARCHAR(50) NOT NULL,
             year INT NOT NULL,
             photo_url VARCHAR(255),
+            current_booking VARCHAR(36) NULL,
             current_gd_level INT DEFAULT 1,
             is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY  (current_booking) REFERENCES gd_sessions(id) ON DELETE SET NULL
         )`,
 
         // Venue tables
@@ -176,6 +178,9 @@ func InitDB(db *sql.DB) error {
     is_current_session TINYINT(1) DEFAULT 0,
     is_completed BOOLEAN DEFAULT FALSE,
     expected_ranks JSON DEFAULT NULL,
+    average_score DECIMAL(5,2) DEFAULT 0.0,
+deviation DECIMAL(5,2) DEFAULT 0.0,
+penalty_calculated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 /**    Dont remove this ----- >
  CREATE INDEX IF NOT EXISTS idx_survey_results_session_completed ON survey_results (session_id, is_completed) 

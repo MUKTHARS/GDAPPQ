@@ -20,7 +20,7 @@ export default function SessionBooking() {
   const [isBooked, setIsBooked] = useState(false);
   const [bookedVenues, setBookedVenues] = useState([]);
   const navigation = useNavigation();
-
+const [hasActiveBooking, setHasActiveBooking] = useState(false);
   // Function to get different gradient colors based on venue ID
  const getVenueGradientColors = (venueId) => {
   // Array of unique gradient color combinations with reduced darkness
@@ -130,16 +130,34 @@ export default function SessionBooking() {
     setIsModalVisible(true);
   };
 
-  const checkIfBooked = async (venueId) => {
+const checkIfBooked = async (venueId) => {
+  try {
+    const authData = await auth.getAuthData();
+    const response = await api.student.checkBooking(venueId);
+    setIsBooked(response.data.is_booked);
+    
+    // Check if user has any active booking (with error handling)
     try {
-      const authData = await auth.getAuthData();
-      const response = await api.student.checkBooking(venueId);
-      setIsBooked(response.data.is_booked);
+      // Check if the method exists before calling it
+      if (api.student.getUserBookings && typeof api.student.getUserBookings === 'function') {
+        const userBookings = await api.student.getUserBookings();
+        setHasActiveBooking(userBookings.data && userBookings.data.length > 0);
+      } else {
+        console.warn('getUserBookings method not available in API');
+        // Fallback: check if we're already booked for this venue
+        setHasActiveBooking(response.data.is_booked);
+      }
     } catch (error) {
-      console.error('Check booking error:', error);
-      setIsBooked(false);
+      console.error('Error checking active bookings:', error);
+      // Fallback to the current venue booking status
+      setHasActiveBooking(response.data.is_booked);
     }
-  };
+  } catch (error) {
+    console.error('Check booking error:', error);
+    setIsBooked(false);
+    setHasActiveBooking(false);
+  }
+};
 
   const handleBookVenue = async () => {
     try {
@@ -505,22 +523,26 @@ export default function SessionBooking() {
               </View>
             ) : (
               <TouchableOpacity
-                style={styles.modalCardActionButton}
-                onPress={handleBookVenue}
-                disabled={loading || selectedVenue.remaining <= 0}
-              >
-                <LinearGradient
-                  colors={selectedVenue.remaining <= 0 ? 
-                    ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] : 
-                    ['#4CAF50', '#43A047']}
-                  style={styles.modalCardActionButtonGradient}
-                >
-                  <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={20} color="#fff" />
-                  <Text style={styles.modalCardActionButtonText}>
-                    {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Now'}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+  style={styles.modalCardActionButton}
+  onPress={handleBookVenue}
+  disabled={loading || selectedVenue.remaining <= 0 || hasActiveBooking}
+>
+  <LinearGradient
+    colors={selectedVenue.remaining <= 0 || hasActiveBooking ? 
+      ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] : 
+      ['#4CAF50', '#43A047']}
+    style={styles.modalCardActionButtonGradient}
+  >
+    <Icon name={
+      selectedVenue.remaining <= 0 ? "block" : 
+      hasActiveBooking ? "event-busy" : "event-available"
+    } size={20} color="#fff" />
+    <Text style={styles.modalCardActionButtonText}>
+      {selectedVenue.remaining <= 0 ? 'Fully Booked' : 
+       hasActiveBooking ? 'Already Booked Elsewhere' : 'Book Now'}
+    </Text>
+  </LinearGradient>
+</TouchableOpacity>
             )}
           </View>
         </LinearGradient>

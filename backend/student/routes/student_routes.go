@@ -57,7 +57,8 @@ func SetupStudentRoutes() *http.ServeMux {
     http.HandlerFunc(controllers.SubmitFeedback)))
     router.Handle("/student/session/rules", middleware.StudentOnly(
         http.HandlerFunc(s.GetSessionRules)))
-
+router.Handle("/student/bookings/my", middleware.StudentOnly(
+    http.HandlerFunc(controllers.GetUserBookings)))
 
 
     router.Handle("/student/feedback/get", middleware.StudentOnly(

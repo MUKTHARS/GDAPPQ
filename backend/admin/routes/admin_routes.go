@@ -115,6 +115,8 @@ router.Handle("/admin/qr/manage", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetVenueQRCodes)))
 router.Handle("/admin/qr/deactivate", middleware.AdminOnly(
     http.HandlerFunc(controllers.DeactivateQR)))
+    router.Handle("/admin/students/booking", middleware.AdminOnly(
+    http.HandlerFunc(controllers.GetStudentBookingDetails)))
 router.Handle("/admin/results/top", middleware.AdminOnly(
 	http.HandlerFunc(controllers.GetTopParticipants)))
 router.Handle("/admin/feedbacks", middleware.AdminOnly(

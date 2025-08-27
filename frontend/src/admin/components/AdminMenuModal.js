@@ -13,11 +13,11 @@ const AdminMenuModal = ({ visible, onClose, navigation }) => {
      { name: 'TopicManager', title: 'TopicManager', icon: 'check-circle' },
     { name: 'SessionConfig', title: 'Session Config', icon: 'settings' },
     { name: 'TopParticipants', title: 'Top Performers', icon: 'rule' },
-    { name: 'SessionCalendar', title: 'Session Calendar', icon: 'calendar-today' },
+    // { name: 'SessionCalendar', title: 'Session Calendar', icon: 'calendar-today' },
     { name: 'StudentProgress', title: 'Student Progress', icon: 'school' },
     { name: 'QuestionBank', title: 'Question Bank', icon: 'library-books' },
     { name: 'Analytics', title: 'Analytics', icon: 'analytics' },
-    { name: 'Bulk Session', title: 'Bulk Session', icon: 'post-add' },
+    // { name: 'Bulk Session', title: 'Bulk Session', icon: 'post-add' },
     { name: 'BookedStudents', title: 'Booked Students', icon: 'check-circle' },
     { name: 'RankingPointsConfig', title: 'Ranking Points Config', icon: 'trophy' },
   ];

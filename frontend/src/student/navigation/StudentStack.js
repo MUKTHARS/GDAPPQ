@@ -24,13 +24,13 @@ const StudentStack = ({ onAdminSwitch }) => {
           return (
             <View>
               <HamburgerHeader title={getHeaderTitle(route)} navigation={navigation} />
-              {/* {route.name === 'SessionBooking' && (
+              {route.name === 'SessionBooking' && (
                 <Button 
                   title="Admin" 
                   onPress={onAdminSwitch}
                   style={{ position: 'absolute', right: 10, top: 10 }}
                 />
-              )} */}
+              )}
             </View>
           );
         },

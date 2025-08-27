@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
+	// "strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -1019,12 +1019,13 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if student already has ANY active booking (not just pending)
 	var activeBookingCount int
 	err = tx.QueryRow(`
         SELECT COUNT(*) 
         FROM session_participants sp
         JOIN gd_sessions s ON sp.session_id = s.id
-        WHERE sp.student_id = ? AND s.status = 'pending'`,
+        WHERE sp.student_id = ? AND s.status IN ('pending', 'active', 'lobby')`,
 		studentID).Scan(&activeBookingCount)
 
 	if err != nil {
@@ -1047,7 +1048,7 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
         SELECT v.capacity, 
                (SELECT COUNT(*) FROM session_participants sp 
                 JOIN gd_sessions s ON sp.session_id = s.id 
-                WHERE s.venue_id = v.id) as booked
+                WHERE s.venue_id = v.id AND s.status IN ('pending', 'active', 'lobby')) as booked
         FROM venues v 
         WHERE v.id = ? AND v.is_active = TRUE`, req.VenueID).Scan(&capacity, &booked)
 
@@ -1073,7 +1074,7 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 	var sessionID string
 	err = tx.QueryRow(`
         SELECT id FROM gd_sessions 
-        WHERE venue_id = ? AND status = 'pending' 
+        WHERE venue_id = ? AND status IN ('pending', 'lobby')
         ORDER BY start_time ASC LIMIT 1`, req.VenueID).Scan(&sessionID)
 
 	if err == sql.ErrNoRows {
@@ -1082,9 +1083,8 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.Exec(`
             INSERT INTO gd_sessions 
             (id, venue_id, status, start_time, end_time, level) 
-            VALUES (?, ?, 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR), 
-                   (SELECT level FROM venues WHERE id = ?))`,
-			sessionID, req.VenueID, req.VenueID)
+            VALUES (?, ?, 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR), ?)`,
+			sessionID, req.VenueID, venueLevel)
 		if err != nil {
 			log.Printf("Failed to create session: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1097,6 +1097,26 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if student is already in this specific session
+	var isAlreadyInSession bool
+	err = tx.QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants 
+            WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
+        )`, sessionID, req.StudentID).Scan(&isAlreadyInSession)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+		return
+	}
+
+	if isAlreadyInSession {
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]string{"error": "You have already booked this venue"})
+		return
+	}
+
 	// Add student to session
 	_, err = tx.Exec(`
         INSERT INTO session_participants 
@@ -1105,15 +1125,22 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		sessionID, req.StudentID)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Duplicate entry") {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]string{"error": "You have already booked this venue"})
-			return
-		}
 		log.Printf("Failed to add participant: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Booking failed"})
 		return
+	}
+
+	// Update student's current booking
+	_, err = tx.Exec(`
+        UPDATE student_users 
+        SET current_booking = ? 
+        WHERE id = ?`,
+		sessionID, studentID)
+	
+	if err != nil {
+		log.Printf("Failed to update student booking: %v", err)
+		// Don't fail the whole booking if this fails
 	}
 
 	// Commit transaction
@@ -1201,7 +1228,7 @@ func CheckBooking(w http.ResponseWriter, r *http.Request) {
         SELECT EXISTS(
             SELECT 1 FROM session_participants sp
             JOIN gd_sessions s ON sp.session_id = s.id
-            WHERE sp.student_id = ? AND s.venue_id = ? AND s.status = 'pending'
+            WHERE sp.student_id = ? AND s.venue_id = ? AND s.status IN ('pending', 'active', 'lobby')
         )`, studentID, venueID).Scan(&isBooked)
 
 	if err != nil {
@@ -1226,10 +1253,18 @@ func CancelBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := database.GetDB().Exec(`
+	tx, err := database.GetDB().Begin()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+		return
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`
         DELETE sp FROM session_participants sp
         JOIN gd_sessions s ON sp.session_id = s.id
-        WHERE sp.student_id = ? AND s.venue_id = ? AND s.status = 'pending'`,
+        WHERE sp.student_id = ? AND s.venue_id = ? AND s.status IN ('pending', 'lobby')`,
 		studentID, req.VenueID)
 
 	if err != nil {
@@ -1245,9 +1280,83 @@ func CancelBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Clear student's current booking
+	_, err = tx.Exec(`
+        UPDATE student_users 
+        SET current_booking = NULL 
+        WHERE id = ? AND current_booking IN (
+            SELECT id FROM gd_sessions WHERE venue_id = ?
+        )`,
+		studentID, req.VenueID)
+	
+	if err != nil {
+		log.Printf("Failed to clear student booking: %v", err)
+		// Don't fail the cancellation if this fails
+	}
+
+	if err := tx.Commit(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
 }
+
+func GetUserBookings(w http.ResponseWriter, r *http.Request) {
+	studentID := r.Context().Value("studentID").(string)
+
+	rows, err := database.GetDB().Query(`
+        SELECT 
+            s.id as session_id,
+            v.name as venue_name,
+            s.status as session_status,
+            s.start_time,
+            s.end_time
+        FROM session_participants sp
+        JOIN gd_sessions s ON sp.session_id = s.id
+        JOIN venues v ON s.venue_id = v.id
+        WHERE sp.student_id = ? AND s.status IN ('pending', 'active', 'lobby')
+        ORDER BY s.start_time DESC`,
+		studentID)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+	defer rows.Close()
+
+	var bookings []map[string]interface{}
+	for rows.Next() {
+		var booking struct {
+			SessionID    string
+			VenueName    string
+			SessionStatus string
+			StartTime    string
+			EndTime      string
+		}
+		if err := rows.Scan(&booking.SessionID, &booking.VenueName, &booking.SessionStatus, &booking.StartTime, &booking.EndTime); err != nil {
+			continue
+		}
+		bookings = append(bookings, map[string]interface{}{
+			"session_id": booking.SessionID,
+			"venue_name": booking.VenueName,
+			"status": booking.SessionStatus,
+			"start_time": booking.StartTime,
+			"end_time": booking.EndTime,
+		})
+	}
+
+	if bookings == nil {
+		bookings = []map[string]interface{}{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bookings)
+}
+
 func GetSessionParticipants(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

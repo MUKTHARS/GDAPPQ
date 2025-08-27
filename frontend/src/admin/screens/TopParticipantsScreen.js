@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, SectionList } from 'react-native';
 import api from '../services/api';
 import { colors } from '../../student/assets/globalStyles';
 
-
 export default function TopParticipantsScreen() {
   const [loading, setLoading] = useState(true);
-  const [topParticipants, setTopParticipants] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [error, setError] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState('all');
-  const levels = ['all', 1, 2, 3]; // Available level options
+  const levels = ['all', 1, 2, 3];
 
   useEffect(() => {
     const fetchTopParticipants = async () => {
@@ -24,12 +23,12 @@ export default function TopParticipantsScreen() {
           throw new Error(response.data.error);
         }
 
-        setTopParticipants(response.data?.top_participants || []);
+        setSessions(response.data?.sessions || []);
         setError(null);
       } catch (err) {
         console.error('Failed to load top participants:', err);
         setError(err.message || 'Failed to load data');
-        setTopParticipants([]);
+        setSessions([]);
       } finally {
         setLoading(false);
       }
@@ -38,28 +37,42 @@ export default function TopParticipantsScreen() {
     fetchTopParticipants();
   }, [selectedLevel]);
 
-  const renderItem = ({ item, index }) => (
-    <View style={[
-      styles.participantCard,
-      index === 0 && styles.firstPlace,
-      index === 1 && styles.secondPlace,
-      index === 2 && styles.thirdPlace,
-    ]}>
-      <Text style={styles.rank}>#{index + 1}</Text>
-      <View style={styles.participantInfo}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.details}>
-          Level: {item.level} | Sessions: {item.session_count}
-        </Text>
-        <Text style={styles.score}>Total Score: {item.total_score.toFixed(1)}</Text>
-        <Text style={styles.score}>Avg Score: {item.avg_score.toFixed(1)}</Text>
-      </View>
+  const renderSessionItem = ({ item }) => (
+    <View style={styles.sessionCard}>
+      <Text style={styles.sessionTitle}>
+        Session {item.session_id.substring(0, 8)} - Level {item.session_level}
+      </Text>
+      <Text style={styles.sessionDate}>
+        {new Date(item.session_date).toLocaleDateString()}
+      </Text>
+      
+      {item.top_participants && item.top_participants.length > 0 ? (
+        item.top_participants.map((participant, index) => (
+          <View key={participant.id} style={[
+            styles.participantCard,
+            index === 0 && styles.firstPlace,
+            index === 1 && styles.secondPlace,
+            index === 2 && styles.thirdPlace,
+          ]}>
+            <Text style={styles.rank}>#{index + 1}</Text>
+            <View style={styles.participantInfo}>
+              <Text style={styles.name}>{participant.name}</Text>
+              <Text style={styles.details}>
+                Student Level: {participant.student_level} | Score: {participant.total_score.toFixed(1)}
+              </Text>
+              <Text style={styles.avgScore}>Avg: {participant.avg_score.toFixed(1)}</Text>
+            </View>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.noParticipants}>No participants found</Text>
+      )}
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Top Performers</Text>
+      <Text style={styles.title}>Session Top Performers</Text>
       
       {/* Level Selector */}
       <View style={styles.levelSelector}>
@@ -82,29 +95,24 @@ export default function TopParticipantsScreen() {
         ))}
       </View>
 
-      {/* Current Filter Display */}
-      <Text style={styles.filterText}>
-        Showing: {selectedLevel === 'all' ? 'All Levels' : `Level ${selectedLevel}`}
-      </Text>
-
       {loading ? (
         <ActivityIndicator size="large" style={styles.loader} />
       ) : error ? (
         <Text style={styles.errorText}>{error}</Text>
-      ) : topParticipants.length === 0 ? (
+      ) : sessions.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
-            No participants found {selectedLevel !== 'all' ? `for Level ${selectedLevel}` : ''}
+            No sessions found {selectedLevel !== 'all' ? `for Level ${selectedLevel}` : ''}
           </Text>
           <Text style={styles.emptySubtext}>
-            Participants will appear after completing GD sessions
+            Sessions will appear after students complete GD sessions
           </Text>
         </View>
       ) : (
         <FlatList
-          data={topParticipants}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
+          data={sessions}
+          renderItem={renderSessionItem}
+          keyExtractor={item => item.session_id}
           contentContainerStyle={styles.listContent}
         />
       )}
@@ -153,6 +161,28 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
   },
+    sessionCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sessionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: colors.primary,
+  },
+  sessionDate: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+  },
   participantCard: {
     backgroundColor: 'white',
     borderRadius: 8,
@@ -199,6 +229,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
+  },
+   avgScore: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+  },
+  noParticipants: {
+    textAlign: 'center',
+    color: '#999',
+    fontStyle: 'italic',
+    padding: 16,
   },
   score: {
     fontSize: 14,

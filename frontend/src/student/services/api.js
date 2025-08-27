@@ -1,10 +1,10 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import auth from './auth';
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.255.177:8080' 
+    ? 'http://10.0.2.2:8080' 
     : 'http://localhost:8080',
 });
 
@@ -166,7 +166,44 @@ api.student = {
     console.error('Participants API error:', error);
     return { data: [] };
   }),
-
+ getUserBookings: () => {
+  return api.get('/student/bookings/my', {
+    validateStatus: function (status) {
+      // Accept all status codes including 404
+      return true;
+    },
+    transformResponse: [
+      function (data) {
+        try {
+          // Handle empty responses
+          if (!data) {
+            return [];
+          }
+          
+          // Handle non-JSON responses
+          if (typeof data === 'string') {
+            try {
+              return JSON.parse(data);
+            } catch (e) {
+              return [];
+            }
+          }
+          
+          // Handle proper JSON responses
+          const parsed = typeof data === 'object' ? data : JSON.parse(data);
+          return parsed.data || parsed || [];
+        } catch (e) {
+          console.error('Bookings response parsing error:', e);
+          return [];
+        }
+      }
+    ]
+  }).catch(error => {
+    console.error('Bookings API error:', error);
+    // Return empty array on error
+    return { data: [] };
+  });
+},
 markSurveyCompleted: (sessionId) => api.post('/student/survey/mark-completed', { 
     session_id: sessionId 
 }).catch(err => {
