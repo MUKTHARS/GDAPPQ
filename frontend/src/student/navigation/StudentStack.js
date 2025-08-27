@@ -11,6 +11,8 @@ import QrScannerScreen from '../screens/QrScannerScreen';
 import ResultsScreen from '../screens/ResultsScreen';
 import SurveyScreen from '../screens/SurveyScreen';
 import WaitingScreen from '../screens/WaitingScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+
 const Stack = createStackNavigator();
 
 const StudentStack = ({ onAdminSwitch }) => {
@@ -45,6 +47,8 @@ const StudentStack = ({ onAdminSwitch }) => {
       <Stack.Screen name="Lobby" component={LobbyScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Waiting" component={WaitingScreen} options={{ headerShown: false }}/>
     <Stack.Screen name="Feedback" component={FeedbackScreen} />
+    <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }}
+/>
     
     </Stack.Navigator>
   );

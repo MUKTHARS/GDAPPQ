@@ -38,6 +38,7 @@ func InitDB(db *sql.DB) error {
             full_name VARCHAR(100) NOT NULL,
             department VARCHAR(50) NOT NULL,
             year INT NOT NULL,
+            roll_number VARCHAR(50) NULL,
             photo_url VARCHAR(255),
             current_booking VARCHAR(36) NULL,
             current_gd_level INT DEFAULT 1,

@@ -89,6 +89,29 @@ api.interceptors.response.use(response => {
 
 api.student = {
   login: (email, password) => api.post('/student/login', { email, password }),
+  
+    getProfile: () => api.get('/student/profile', {
+    validateStatus: function (status) {
+      return status < 500;
+    },
+    transformResponse: [
+      function (data) {
+        try {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          return parsed.profile || {};
+        } catch (e) {
+          console.error('Profile response parsing error:', e);
+          return {};
+        }
+      }
+    ]
+  }).catch(error => {
+    console.error('Profile API error:', error);
+    return { data: {} };
+  }),
+  
+  
+  
   getSessions: (level) => api.get(`/student/sessions?level=${level}`),
    getSession: (sessionId) => api.get(`/student/session?session_id=${sessionId}`),
   joinSession: (data) => {

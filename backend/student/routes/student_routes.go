@@ -12,7 +12,9 @@ func SetupStudentRoutes() *http.ServeMux {
     
     // Auth
     router.Handle("/student/login", http.HandlerFunc(controllers.StudentLogin))
-    
+    // Profile
+    router.Handle("/student/profile", middleware.StudentOnly(
+        http.HandlerFunc(controllers.GetStudentProfile)))
     // Session Management
     router.Handle("/student/sessions", middleware.StudentOnly(
         http.HandlerFunc(controllers.GetAvailableSessions)))

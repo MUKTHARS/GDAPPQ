@@ -166,13 +166,7 @@ export default function LobbyScreen({ navigation, route }) {
                 
                 <View style={styles.header}>
                     <View style={styles.headerIconContainer}>
-                        {/* <LinearGradient
-                            colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
-                            style={styles.headerIconGradient}
-                        >
-                            
-                            <Icon name="groups" size={32} color="#fff" />
-                        </LinearGradient> */}
+                       
                     </View>
                     <Text style={styles.title}>Session Lobby</Text>
                     <Text style={styles.subtitle}>Waiting for participants to join...</Text>

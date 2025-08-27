@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"gd/student/utils"
 	"log"
-
-	// "log"
 	"net/http"
 	"strings"
 )
-// student/middleware/auth.go
+
 func StudentOnly(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         log.Println("StudentOnly middleware - incoming request:", r.URL.Path)
