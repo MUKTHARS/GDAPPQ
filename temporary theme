@@ -3207,7 +3207,6 @@ const styles = StyleSheet.create({
 ////////
 
 
-
 import React, { useState, useEffect } from 'react';
 import { View, FlatList, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import api from '../services/api';
@@ -3218,7 +3217,8 @@ import FloatingActionButton from '../components/FloatingActionButton';
 import HamburgerHeader from '../components/HamburgerHeader';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
-
+import StoryCircles from '../components/StoryCircles';
+import { ImageBackground } from 'react-native';
 export default function SessionBooking() {
   const [venues, setVenues] = useState([]);
   const [level, setLevel] = useState(1);
@@ -3230,6 +3230,32 @@ export default function SessionBooking() {
   const [isBooked, setIsBooked] = useState(false);
   const [bookedVenues, setBookedVenues] = useState([]);
   const navigation = useNavigation();
+
+
+  const getVenueBackgroundImage = (venueId) => {
+  const backgroundImages = [
+    { uri: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200' }, // Dark hall with chairs
+    { uri: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200' }, // Moody conference room
+    { uri: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=1200' }, // Auditorium dark tones
+    { uri: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200' }, // Modern lobby dim lights
+    { uri: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200' }, // Office space low light
+  ];
+  
+  let id;
+  if (typeof venueId === 'string') {
+    let hash = 0;
+    for (let i = 0; i < venueId.length; i++) {
+      hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+      hash = hash & hash;
+    }
+    id = Math.abs(hash);
+  } else {
+    id = venueId || 0;
+  }
+  
+  const imageIndex = id % backgroundImages.length;
+  return backgroundImages[imageIndex];
+};
 
   // Function to get different colors based on venue ID for subtle variety
   const getVenueAccentColor = (venueId) => {
@@ -3531,12 +3557,17 @@ export default function SessionBooking() {
       disabled={loading}
       activeOpacity={0.7}
     >
-      <LinearGradient
-        colors={getVenueGradientColors(item.id)}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 1}}
-        style={styles.venueCardGradient}
-      >
+      <ImageBackground
+  source={getVenueBackgroundImage(item.id)}
+  style={styles.venueCardGradient}
+  imageStyle={styles.venueCardBackgroundImage}
+>
+  <LinearGradient
+    colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)']}
+    start={{x: 0, y: 0}}
+    end={{x: 0, y: 1}}
+    style={styles.venueCardOverlay}
+  >
         {renderPatternOverlay(item.id)}
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
@@ -3609,6 +3640,7 @@ export default function SessionBooking() {
           </View>
         </View>
       </LinearGradient>
+      </ImageBackground>
     </TouchableOpacity>
   );
 
@@ -3619,7 +3651,7 @@ export default function SessionBooking() {
           <Text style={styles.title}>Session Booking</Text>
           <Text style={styles.subtitle}>Find and book your discussion sessions</Text>
         </View>
-
+<StoryCircles/>
         <View style={styles.levelSelector}>
           {[1, 2, 3].map((lvl) => (
             <TouchableOpacity
@@ -4248,6 +4280,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
+  venueCardBackgroundImage: {
+  borderRadius: 16,
+},
+venueCardOverlay: {
+  flex: 1,
+  borderRadius: 16,
+},
 });
 
 
