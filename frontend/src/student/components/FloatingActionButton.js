@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, Animated, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import LinearGradient from 'react-native-linear-gradient';
 
 const FloatingActionButton = ({ onPress, iconName = 'qr-code-scanner' }) => {
   const rippleAnim1 = useRef(new Animated.Value(0)).current;
@@ -64,37 +63,23 @@ const FloatingActionButton = ({ onPress, iconName = 'qr-code-scanner' }) => {
     <>
       {/* Water ripple effects */}
       <Animated.View style={[styles.ripple, createRippleStyle(rippleAnim1)]}>
-        <LinearGradient
-          colors={['rgba(64, 196, 255, 0.3)', 'rgba(64, 196, 255, 0.1)']}
-          style={styles.rippleGradient}
-        />
+        <View style={[styles.rippleGradient, { backgroundColor: 'rgba(79, 70, 229, 0.3)' }]} />
       </Animated.View>
       
       <Animated.View style={[styles.ripple, createRippleStyle(rippleAnim2)]}>
-        <LinearGradient
-          colors={['rgba(64, 196, 255, 0.25)', 'rgba(64, 196, 255, 0.05)']}
-          style={styles.rippleGradient}
-        />
+        <View style={[styles.rippleGradient, { backgroundColor: 'rgba(79, 70, 229, 0.25)' }]} />
       </Animated.View>
       
       <Animated.View style={[styles.ripple, createRippleStyle(rippleAnim3)]}>
-        <LinearGradient
-          colors={['rgba(64, 196, 255, 0.2)', 'rgba(64, 196, 255, 0.02)']}
-          style={styles.rippleGradient}
-        />
+        <View style={[styles.rippleGradient, { backgroundColor: 'rgba(79, 70, 229, 0.2)' }]} />
       </Animated.View>
 
       {/* Main FAB Button */}
       <View style={styles.fabContainer}>
         <TouchableOpacity style={styles.fab} onPress={onPress} activeOpacity={0.8}>
-          <LinearGradient
-            colors={['#667eea', '#764ba2', '#667eea']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.fabGradient}
-          >
-            <Icon name={iconName} size={32} color="#fff" />
-          </LinearGradient>
+          <View style={styles.fabGradient}>
+            <Icon name={iconName} size={32} color="#F8FAFC" />
+          </View>
         </TouchableOpacity>
       </View>
     </>
@@ -128,6 +113,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 35,
+    backgroundColor: '#4F46E5',
   },
   ripple: {
     position: 'absolute',
@@ -144,7 +130,7 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 35,
     borderWidth: 2,
-    borderColor: 'rgba(64, 196, 255, 0.4)',
+    borderColor: 'rgba(79, 70, 229, 0.4)',
   },
 });
 

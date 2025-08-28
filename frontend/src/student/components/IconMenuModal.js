@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Modal, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import LinearGradient from 'react-native-linear-gradient';
 import { CommonActions } from '@react-navigation/native';
 import auth from '../services/auth';
 
@@ -44,10 +43,7 @@ const IconMenuModal = ({ visible, onClose, navigation }) => {
         activeOpacity={1}
         onPress={onClose}
       >
-        <LinearGradient
-          colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.85)']}
-          style={styles.menuContainer}
-        >
+        <View style={styles.menuContainer}>
           {menuItems.map((item) => (
             <TouchableOpacity
               key={item.name}
@@ -55,37 +51,24 @@ const IconMenuModal = ({ visible, onClose, navigation }) => {
               onPress={() => handleNavigation(item.name)}
               activeOpacity={0.8}
             >
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.menuItemGradient}
-              >
-                <Icon name={item.icon} size={24} color="#fff" />
-              </LinearGradient>
+              <View style={styles.menuItemGradient}>
+                <Icon name={item.icon} size={24} color="#F8FAFC" />
+              </View>
             </TouchableOpacity>
           ))}
           
-          <LinearGradient
-            colors={['rgba(224, 224, 224, 0.6)', 'rgba(224, 224, 224, 0.3)']}
-            style={styles.divider}
-          />
+          <View style={styles.divider} />
           
           <TouchableOpacity 
             style={styles.menuItem}
             onPress={handleLogout}
             activeOpacity={0.8}
           >
-            <LinearGradient
-              colors={['#ff6b6b', '#ee5a52']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.menuItemGradient}
-            >
-              <Icon name="exit-to-app" size={24} color="#fff" />
-            </LinearGradient>
+            <View style={[styles.menuItemGradient, styles.logoutButton]}>
+              <Icon name="exit-to-app" size={24} color="#F8FAFC" />
+            </View>
           </TouchableOpacity>
-        </LinearGradient>
+        </View>
       </TouchableOpacity>
     </Modal>
   );
@@ -94,7 +77,7 @@ const IconMenuModal = ({ visible, onClose, navigation }) => {
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(102, 126, 234, 0.4)',
+    backgroundColor: 'rgba(10, 15, 27, 0.7)',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
     paddingTop: 60,
@@ -110,7 +93,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(79, 70, 229, 0.3)',
+    backgroundColor: '#1E293B',
   },
   menuItem: {
     marginVertical: 6,
@@ -128,17 +112,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
+    backgroundColor: '#4F46E5',
+  },
+  logoutButton: {
+    backgroundColor: '#DC2626',
   },
   divider: {
     height: 1,
     width: '80%',
     marginVertical: 12,
     borderRadius: 0.5,
+    backgroundColor: 'rgba(79, 70, 229, 0.3)',
   },
 });
 
-export default IconMenuModal; 
-
-
-
-
+export default IconMenuModal;

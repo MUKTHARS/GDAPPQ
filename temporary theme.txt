@@ -3232,15 +3232,15 @@ export default function SessionBooking() {
   const navigation = useNavigation();
 
 
-  const getVenueBackgroundImage = (venueId) => {
+ const getVenueBackgroundImage = (venueId) => {
   const backgroundImages = [
-    { uri: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200' }, // Dark hall with chairs
-    { uri: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200' }, // Moody conference room
-    { uri: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=1200' }, // Auditorium dark tones
-    { uri: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200' }, // Modern lobby dim lights
-    { uri: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200' }, // Office space low light
+    { uri: 'https://images.unsplash.com/photo-1518843018685-6abd8bc0cdd0?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+    { uri: 'https://images.unsplash.com/photo-1582372692010-80f9fb012e90?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8ZGFya2VyJTIwdmVudWVzfGVufDB8fDB8fHww' },
+    { uri: 'https://plus.unsplash.com/premium_photo-1667428818575-20060a72b45c?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OXx8ZGFya2VyJTIwcm9vbXN8ZW58MHx8MHx8fDA%3D' },
+    { uri: 'https://images.unsplash.com/photo-1651180594791-8fe66c360542?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTB8fGRhcmtlciUyMHJvb21zfGVufDB8fDB8fHww' },
+    { uri: 'https://images.unsplash.com/photo-1639415033018-a08769eda4b4?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTJ8fGRhcmtlciUyMHJvb21zfGVufDB8fDB8fHww' },
   ];
-  
+
   let id;
   if (typeof venueId === 'string') {
     let hash = 0;
@@ -3252,7 +3252,7 @@ export default function SessionBooking() {
   } else {
     id = venueId || 0;
   }
-  
+
   const imageIndex = id % backgroundImages.length;
   return backgroundImages[imageIndex];
 };
@@ -5958,4 +5958,3 @@ const styles = StyleSheet.create({
         marginLeft: 6,
     },
 });
-
