@@ -21,161 +21,68 @@ export default function SessionBooking() {
   const [bookedVenues, setBookedVenues] = useState([]);
   const navigation = useNavigation();
 
-  // Function to get different colors based on venue ID for subtle variety
-  const getVenueAccentColor = (venueId) => {
-    const accentColors = [
-      '#4F46E5', // Indigo
-      '#7C3AED', // Purple
-      '#2563EB', // Blue
-      '#059669', // Emerald
-      '#DC2626', // Red
-      '#EA580C', // Orange
-      '#0891B2', // Cyan
-      '#9333EA', // Violet
-      '#16A34A', // Green
-      '#C2410C', // Orange-red
-    ];
-    
-    let id;
-    if (typeof venueId === 'string') {
-      let hash = 0;
-      for (let i = 0; i < venueId.length; i++) {
-        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
-        hash = hash & hash;
-      }
-      id = Math.abs(hash);
-    } else {
-      id = venueId || 0;
+  // Function to get different gradient colors based on venue ID
+ const getVenueGradientColors = (venueId) => {
+  // Array of unique gradient color combinations with reduced darkness
+  const gradientColors = [
+    ['#2a2a2a', '#555555'],       // Lighter charcoal to medium gray
+    ['#3d005f', '#6d3ab0'],       // Lighter deep purple to vibrant purple
+    ['#1a2940', '#243b5a'],       // Lighter navy blue to dark blue
+    ['#2f3874', '#5aa0d9'],       // Lighter deep indigo to light blue
+    ['#3d5069', '#ff6b6b'],       // Lighter dark blue to coral red
+    ['#4d0a9b', '#ff4d94'],       // Lighter royal purple to hot pink
+    ['#1c067d', '#6dd5ff'],       // Lighter deep blue to bright cyan
+    ['#333842', '#4a5059'],       // Lighter dark slate to medium slate
+    ['#3d1a36', '#e03e57'],       // Lighter burgundy to crimson
+    ['#1f3458', '#2a5088'],       // Lighter dark navy to medium blue
+    ['#55067a', '#6d3a9e'],       // Lighter deep violet to purple
+    ['#24323c', '#4a9ac7'],       // Lighter almost black to steel blue
+    ['#2a3f6b', '#6a7fa5'],       // Lighter dark blue to muted blue
+    ['#4a00a8', '#b3008f'],       // Lighter electric purple to magenta
+    ['#241075', '#4d3ca3'],       // Lighter deep indigo to medium purple
+    ['#3c3e52', '#a4aec4'],       // Lighter dark blue-gray to light gray-blue
+    ['#2c2965', '#4d629e'],       // Lighter deep blue to periwinkle
+    ['#3a3242', '#4a4452'],       // Lighter dark purple-gray to medium gray
+    ['#2d3d60', '#2e7d32'],       // Lighter navy blue to forest green
+    ['#4e0787', '#8a13bf'],       // Lighter deep purple to vibrant purple
+    ['#333842', '#00c9d6'],       // Lighter dark slate to teal
+    ['#242642', '#1a4580'],       // Lighter deep navy to dark blue
+    ['#3d0048', '#a52d9f'],       // Lighter deep purple to magenta
+    ['#1f3458', '#1a4580'],       // Lighter navy blue variations
+    ['#2e3034', '#65737e'],       // Lighter almost black to dark gray-blue
+    ['#3d445a', '#3d3a8d'],       // Lighter dark blue to deep purple
+    ['#2c2d31', '#4e5259'],       // Lighter charcoal to dark gray
+    ['#3c3c74', '#5d5da5'],       // Lighter deep purple-blue variations
+    ['#2e313b', '#3d445a'],       // Lighter dark blue-gray variations
+    ['#3d1a36', '#a01a46'],       // Lighter deep burgundy to dark red
+    ['#2f3874', '#3d5a9b'],       // Lighter navy blue to medium blue
+    ['#3d005f', '#6600a0'],       // Lighter deep purple variations
+    ['#242542', '#2a5088'],       // Lighter dark indigo to blue
+    ['#333842', '#4a5059'],       // Lighter dark slate variations
+    ['#3d5069', '#2f3874'],       // Lighter dark blue to navy
+    ['#4a00a8', '#5a00ff'],       // Lighter electric purple to bright purple
+    ['#241075', '#3d2a8d'],       // Lighter deep indigo variations
+    ['#3c3e52', '#555770'],       // Lighter blue-gray variations
+    ['#2c2965', '#2f3874'],       // Lighter deep blue variations
+    ['#3a3242', '#4d3c64'],       // Lighter purple-gray variations
+  ];
+  
+  // Convert venueId to a consistent number
+  let id;
+  if (typeof venueId === 'string') {
+    let hash = 0;
+    for (let i = 0; i < venueId.length; i++) {
+      hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
+      hash = hash & hash;
     }
-    
-    const colorIndex = id % accentColors.length;
-    return accentColors[colorIndex] || '#4F46E5';
-  };
-
-  // Function to get gradient colors for venue cards
-  const getVenueGradientColors = (venueId) => {
-    const baseColor = getVenueAccentColor(venueId);
-    // Create a darker version for gradient
-    const darkColor = baseColor + '15'; // 15% opacity
-    const lighterColor = baseColor + '25'; // 25% opacity
-    return [darkColor, lighterColor];
-  };
-
-  // Function to get line pattern type based on venue ID
-  const getPatternType = (venueId) => {
-    let id;
-    if (typeof venueId === 'string') {
-      let hash = 0;
-      for (let i = 0; i < venueId.length; i++) {
-        hash = ((hash << 5) - hash) + venueId.charCodeAt(i);
-        hash = hash & hash;
-      }
-      id = Math.abs(hash);
-    } else {
-      id = venueId || 0;
-    }
-    
-    const patterns = ['diagonal', 'grid', 'vertical', 'dots'];
-    return patterns[id % patterns.length];
-  };
-
-  // Function to render pattern overlay
-  const renderPatternOverlay = (venueId) => {
-    const patternType = getPatternType(venueId);
-    const accentColor = getVenueAccentColor(venueId);
-    
-    switch (patternType) {
-      case 'diagonal':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(8)].map((_, i) => (
-              <View 
-                key={i}
-                style={[
-                  styles.diagonalLine,
-                  { 
-                    backgroundColor: accentColor + '08',
-                    left: i * 40 - 20,
-                  }
-                ]} 
-              />
-            ))}
-          </View>
-        );
-      case 'grid':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(6)].map((_, i) => (
-              <View key={`h-${i}`}>
-                <View 
-                  style={[
-                    styles.horizontalLine,
-                    { 
-                      backgroundColor: accentColor + '06',
-                      top: i * 30,
-                    }
-                  ]} 
-                />
-              </View>
-            ))}
-            {[...Array(4)].map((_, i) => (
-              <View key={`v-${i}`}>
-                <View 
-                  style={[
-                    styles.verticalLine,
-                    { 
-                      backgroundColor: accentColor + '06',
-                      left: i * 80,
-                    }
-                  ]} 
-                />
-              </View>
-            ))}
-          </View>
-        );
-      case 'vertical':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(6)].map((_, i) => (
-              <View 
-                key={i}
-                style={[
-                  styles.verticalLine,
-                  { 
-                    backgroundColor: accentColor + '08',
-                    left: i * 50,
-                  }
-                ]} 
-              />
-            ))}
-          </View>
-        );
-      case 'dots':
-        return (
-          <View style={styles.patternOverlay}>
-            {[...Array(40)].map((_, i) => {
-              const row = Math.floor(i / 8);
-              const col = i % 8;
-              return (
-                <View 
-                  key={i}
-                  style={[
-                    styles.dot,
-                    { 
-                      backgroundColor: accentColor + '08',
-                      left: col * 40,
-                      top: row * 30,
-                    }
-                  ]} 
-                />
-              );
-            })}
-          </View>
-        );
-      default:
-        return null;
-    }
-  };
+    id = Math.abs(hash);
+  } else {
+    id = venueId || 0;
+  }
+  
+  const colorIndex = id % gradientColors.length;
+  return gradientColors[colorIndex] || ['#2a2a2a', '#555555']; // Fallback to lighter charcoal
+};
 
   const fetchVenues = async (lvl) => {
     try {
@@ -309,36 +216,33 @@ export default function SessionBooking() {
 
   const getAvailabilityColor = (remaining, capacity) => {
     const percentage = (remaining / capacity) * 100;
-    if (percentage > 50) return '#10B981';
-    if (percentage > 20) return '#F59E0B';
-    return '#EF4444';
+    if (percentage > 50) return '#4CAF50';
+    if (percentage > 20) return '#FF9800';
+    return '#F44336';
   };
 
   const renderVenueItem = ({ item }) => (
     <TouchableOpacity 
-      style={[styles.venueCard, { borderLeftColor: getVenueAccentColor(item.id) }]}
+      style={styles.venueCard}
       onPress={() => openVenueDetails(item)}
       disabled={loading}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
       <LinearGradient
         colors={getVenueGradientColors(item.id)}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 1}}
-        style={styles.venueCardGradient}
+        style={styles.gradientBackground}
       >
-        {renderPatternOverlay(item.id)}
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
             <View style={styles.venueNameContainer}>
-              <View style={[styles.venueIconContainer, { backgroundColor: getVenueAccentColor(item.id) + '40' }]}>
-                <Icon name="place" size={18} color={getVenueAccentColor(item.id)} />
-              </View>
+              <Icon name="place" size={20} color="#fff" style={styles.locationIcon} />
               <Text style={styles.venueName}>{item.venue_name}</Text>
             </View>
             {bookedVenues.includes(item.id) && (
               <View style={styles.bookedBadge}>
-                <Icon name="check-circle" size={14} color="#10B981" />
+                <Icon name="check-circle" size={16} color="#4CAF50" />
                 <Text style={styles.bookedBadgeText}>Booked</Text>
               </View>
             )}
@@ -347,13 +251,13 @@ export default function SessionBooking() {
           <View style={styles.cardBody}>
             <View style={styles.infoRow}>
               <View style={styles.infoItem}>
-                <Icon name="schedule" size={16} color="#CBD5E1" />
+                <Icon name="schedule" size={16} color="rgba(255,255,255,0.7)" />
                 <Text style={styles.infoLabel}>Timing</Text>
                 <Text style={styles.infoValue}>{item.session_timing || 'Not specified'}</Text>
               </View>
               
               <View style={styles.infoItem}>
-                <Icon name="group" size={16} color="#CBD5E1" />
+                <Icon name="group" size={16} color="rgba(255,255,255,0.7)" />
                 <Text style={styles.infoLabel}>Capacity</Text>
                 <Text style={styles.infoValue}>{item.capacity}</Text>
               </View>
@@ -362,9 +266,7 @@ export default function SessionBooking() {
             <View style={styles.availabilitySection}>
               <View style={styles.availabilityHeader}>
                 <Text style={styles.availabilityLabel}>Available Spots</Text>
-                <Text style={[styles.availabilityNumber, { color: getAvailabilityColor(item.remaining, item.capacity) }]}>
-                  {item.remaining}
-                </Text>
+                <Text style={styles.availabilityNumber}>{item.remaining}</Text>
               </View>
               <View style={styles.progressBarContainer}>
                 <View style={styles.progressBar}>
@@ -389,13 +291,13 @@ export default function SessionBooking() {
             <View style={styles.statusIndicator}>
               <View style={[
                 styles.statusDot, 
-                { backgroundColor: item.remaining > 0 ? '#10B981' : '#EF4444' }
+                { backgroundColor: item.remaining > 0 ? '#4CAF50' : '#F44336' }
               ]} />
               <Text style={styles.statusText}>
                 {item.remaining > 0 ? 'Available' : 'Full'}
               </Text>
             </View>
-            <Icon name="keyboard-arrow-right" size={20} color="#CBD5E1" />
+            <Icon name="keyboard-arrow-right" size={24} color="rgba(255,255,255,0.5)" />
           </View>
         </View>
       </LinearGradient>
@@ -403,63 +305,87 @@ export default function SessionBooking() {
   );
 
   return (
-    <View style={styles.container}>
+    <LinearGradient
+      colors={['#667eea', '#764ba2', '#667eea']}
+      style={styles.container}
+    >
+      
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Session Booking</Text>
-          <Text style={styles.subtitle}>Find and book your discussion sessions</Text>
+          <View style={styles.headerIconContainer}>
+          </View>
+          <Text style={styles.title}>Find Your Perfect Session</Text>
+          <Text style={styles.subtitle}>Level {level} Venues</Text>
         </View>
 
         <View style={styles.levelSelector}>
           {[1, 2, 3].map((lvl) => (
             <TouchableOpacity
               key={lvl}
-              style={[
-                styles.levelButton,
-                level === lvl && styles.levelButtonActive
-              ]}
+              style={styles.levelButton}
               onPress={() => handleLevelChange(lvl)}
               disabled={loading}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.levelButtonText,
-                level === lvl && styles.levelButtonTextActive
-              ]}>
-                Level {lvl}
-              </Text>
+              <LinearGradient
+                colors={level === lvl ? 
+                  ['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)'] : 
+                  ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+                style={styles.levelButtonGradient}
+              >
+                <Text style={[
+                  styles.levelButtonText,
+                  level === lvl && styles.levelButtonTextActive
+                ]}>
+                  Level {lvl}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
           ))}
         </View>
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <View style={styles.loadingCard}>
-              <ActivityIndicator size="large" color="#4F46E5" />
+            <LinearGradient
+              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+              style={styles.loadingCard}
+            >
+              <ActivityIndicator size="large" color="#fff" />
               <Text style={styles.loadingText}>Loading venues...</Text>
-            </View>
+            </LinearGradient>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <View style={styles.errorCard}>
-              <Icon name="error-outline" size={48} color="#6B7280" />
+            <LinearGradient
+              colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+              style={styles.errorCard}
+            >
+              <Icon name="error-outline" size={48} color="rgba(255,255,255,0.8)" />
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => fetchVenues(level)}
               >
-                <Icon name="refresh" size={18} color="#4F46E5" />
-                <Text style={styles.retryButtonText}>Try Again</Text>
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)']}
+                  style={styles.retryButtonGradient}
+                >
+                  <Icon name="refresh" size={20} color="#fff" />
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </LinearGradient>
               </TouchableOpacity>
-            </View>
+            </LinearGradient>
           </View>
         ) : venues.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyCard}>
-              <Icon name="event-busy" size={64} color="#4B5563" />
-              <Text style={styles.emptyTitle}>No Sessions Available</Text>
-              <Text style={styles.emptySubtitle}>Check back later for Level {level} sessions</Text>
-            </View>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.1)']}
+              style={styles.emptyCard}
+            >
+              <Icon name="event-busy" size={64} color="rgba(255,255,255,0.6)" />
+              <Text style={styles.emptyTitle}>No Venues Available</Text>
+              <Text style={styles.emptySubtitle}>Check back later for Level {level} venues</Text>
+            </LinearGradient>
           </View>
         ) : (
           <FlatList
@@ -477,136 +403,138 @@ export default function SessionBooking() {
         />
       </View>
 
-      {/* Modal with dark theme */}
-      <Modal
-        visible={isModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            {selectedVenue && (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalHeaderContent}>
-                    <View style={[styles.modalIconContainer, { backgroundColor: getVenueAccentColor(selectedVenue.id) + '20' }]}>
-                      <Icon name="place" size={24} color={getVenueAccentColor(selectedVenue.id)} />
-                    </View>
-                    <View style={styles.modalTitleContainer}>
-                      <Text style={styles.modalTitle}>{selectedVenue.venue_name}</Text>
-                      <Text style={styles.modalSubtitle}>Session Details</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.modalCloseButton}
-                    onPress={() => {
-                      setIsModalVisible(false);
-                      setCancelText('');
-                    }}
-                  >
-                    <Icon name="close" size={24} color="#9CA3AF" />
-                  </TouchableOpacity>
-                </View>
+      {/* Modal with card popup style */}
+      
+<Modal
+  visible={isModalVisible}
+  animationType="fade"
+  transparent={true}
+  onRequestClose={() => setIsModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalCardContainer}>
+      {selectedVenue && (
+        <LinearGradient
+          colors={getVenueGradientColors(selectedVenue.id)}
+          style={styles.modalCardGradient}
+        >
+          <View style={styles.modalCardHeader}>
+            <View>
+              <Text style={styles.modalCardTitle}>{selectedVenue.venue_name}</Text>
+              <Text style={styles.modalCardSubtitle}>Session Details</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => {
+                setIsModalVisible(false);
+                setCancelText('');
+              }}
+            >
+              <Icon name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
 
-                <View style={styles.modalContent}>
-                  <View style={styles.modalInfoGrid}>
-                    <View style={styles.modalInfoItem}>
-                      <Icon name="schedule" size={20} color="#6B7280" />
-                      <Text style={styles.modalInfoLabel}>Timing</Text>
-                      <Text style={styles.modalInfoValue}>{selectedVenue.session_timing}</Text>
-                    </View>
-                    
-                    <View style={styles.modalInfoItem}>
-                      <Icon name="table-restaurant" size={20} color="#6B7280" />
-                      <Text style={styles.modalInfoLabel}>Table</Text>
-                      <Text style={styles.modalInfoValue}>{selectedVenue.table_details}</Text>
-                    </View>
-                    
-                    <View style={styles.modalInfoItem}>
-                      <Icon name="group" size={20} color="#6B7280" />
-                      <Text style={styles.modalInfoLabel}>Capacity</Text>
-                      <Text style={styles.modalInfoValue}>{selectedVenue.capacity}</Text>
-                    </View>
-                    
-                    <View style={styles.modalInfoItem}>
-                      <Icon name="event-available" size={20} color="#6B7280" />
-                      <Text style={styles.modalInfoLabel}>Available</Text>
-                      <Text style={[styles.modalInfoValue, { color: getAvailabilityColor(selectedVenue.remaining, selectedVenue.capacity) }]}>
-                        {selectedVenue.remaining}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  {isBooked ? (
-                    <View style={styles.modalBookedSection}>
-                      <View style={styles.modalBookedStatus}>
-                        <Icon name="check-circle" size={20} color="#10B981" />
-                        <Text style={styles.modalBookedStatusText}>You have booked this session</Text>
-                      </View>
-                      
-                      <TextInput
-                        style={styles.modalCancelInput}
-                        placeholder="Type 'cancel' to confirm cancellation"
-                        placeholderTextColor="#6B7280"
-                        value={cancelText}
-                        onChangeText={setCancelText}
-                      />
-                      
-                      <TouchableOpacity
-                        style={[
-                          styles.modalActionButton,
-                          styles.modalCancelButton,
-                          cancelText.toLowerCase() !== 'cancel' && styles.modalActionButtonDisabled
-                        ]}
-                        onPress={() => {
-                          if (cancelText.toLowerCase() === 'cancel') {
-                            Alert.alert(
-                              'Confirm Cancellation',
-                              'Are you sure you want to cancel this booking?',
-                              [
-                                { text: 'No', style: 'cancel' },
-                                { text: 'Yes', onPress: handleCancelBooking }
-                              ]
-                            );
-                          }
-                        }}
-                        disabled={loading || cancelText.toLowerCase() !== 'cancel'}
-                      >
-                        <Icon name="cancel" size={18} color="#fff" />
-                        <Text style={styles.modalActionButtonText}>Cancel Booking</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[
-                        styles.modalActionButton,
-                        styles.modalBookButton,
-                        selectedVenue.remaining <= 0 && styles.modalActionButtonDisabled
-                      ]}
-                      onPress={handleBookVenue}
-                      disabled={loading || selectedVenue.remaining <= 0}
-                    >
-                      <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={18} color="#fff" />
-                      <Text style={styles.modalActionButtonText}>
-                        {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Session'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+          <View style={styles.modalCardContent}>
+            <View style={styles.modalCardInfoGrid}>
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="schedule" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Timing</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.session_timing}</Text>
+              </View>
+              
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="table-restaurant" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Table</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.table_details}</Text>
+              </View>
+              
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="group" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Capacity</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.capacity}</Text>
+              </View>
+              
+              <View style={styles.modalCardInfoItem}>
+                <Icon name="event-available" size={20} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.modalCardInfoLabel}>Available</Text>
+                <Text style={styles.modalCardInfoValue}>{selectedVenue.remaining}</Text>
+              </View>
+            </View>
+            
+            {isBooked ? (
+              <View style={styles.modalCardBookedSection}>
+                <View style={styles.modalCardBookedStatus}>
+                  <Icon name="check-circle" size={24} color="#4CAF50" />
+                  <Text style={styles.modalCardBookedStatusText}>You have booked this venue</Text>
                 </View>
-              </>
+                
+                <TextInput
+                  style={styles.modalCardCancelInput}
+                  placeholder="Type 'cancel' to confirm cancellation"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  value={cancelText}
+                  onChangeText={setCancelText}
+                />
+                
+                <TouchableOpacity
+                  style={styles.modalCardActionButton}
+                  onPress={() => {
+                    if (cancelText.toLowerCase() === 'cancel') {
+                      Alert.alert(
+                        'Confirm Cancellation',
+                        'Are you sure you want to cancel this booking?',
+                        [
+                          { text: 'No', style: 'cancel' },
+                          { text: 'Yes', onPress: handleCancelBooking }
+                        ]
+                      );
+                    }
+                  }}
+                  disabled={loading || cancelText.toLowerCase() !== 'cancel'}
+                >
+                  <LinearGradient
+                    colors={cancelText.toLowerCase() === 'cancel' ? 
+                      ['#F44336', '#E53935'] : 
+                      ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                    style={styles.modalCardActionButtonGradient}
+                  >
+                    <Icon name="cancel" size={20} color="#fff" />
+                    <Text style={styles.modalCardActionButtonText}>Cancel Booking</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.modalCardActionButton}
+                onPress={handleBookVenue}
+                disabled={loading || selectedVenue.remaining <= 0}
+              >
+                <LinearGradient
+                  colors={selectedVenue.remaining <= 0 ? 
+                    ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] : 
+                    ['#4CAF50', '#43A047']}
+                  style={styles.modalCardActionButtonGradient}
+                >
+                  <Icon name={selectedVenue.remaining <= 0 ? "block" : "event-available"} size={20} color="#fff" />
+                  <Text style={styles.modalCardActionButtonText}>
+                    {selectedVenue.remaining <= 0 ? 'Fully Booked' : 'Book Now'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
             )}
           </View>
-        </View>
-      </Modal>
+        </LinearGradient>
+      )}
     </View>
+  </View>
+</Modal>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0f1bff',
   },
   content: {
     flex: 1,
@@ -614,86 +542,68 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   header: {
+    alignItems: 'center',
     marginBottom: 32,
   },
+  headerIconContainer: {
+    borderRadius: 30,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  headerIconGradient: {
+    padding: 16,
+  },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#F8FAFC',
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
     marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: '#94A3B8',
-    fontWeight: '400',
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   levelSelector: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 4,
+    justifyContent: 'space-between',
     marginBottom: 24,
+    paddingHorizontal: 8,
   },
   levelButton: {
     flex: 1,
+    marginHorizontal: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  levelButtonGradient: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
     alignItems: 'center',
   },
-  levelButtonActive: {
-    backgroundColor: '#4F46E5',
-  },
   levelButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.6)',
   },
   levelButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#fff',
   },
   venueCard: {
-    borderRadius: 16,
     marginBottom: 16,
-    borderLeftWidth: 4,
+    borderRadius: 20,
     overflow: 'hidden',
   },
-  venueCardGradient: {
-    flex: 1,
-    position: 'relative',
-  },
-  patternOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    overflow: 'hidden',
-  },
-  diagonalLine: {
-    position: 'absolute',
-    width: 4,
-    height: '200%',
-    transform: [{ rotate: '45deg' }],
-  },
-  horizontalLine: {
-    position: 'absolute',
-    width: '100%',
-    height: 4,
-  },
-  verticalLine: {
-    position: 'absolute',
-    width: 4,
-    height: '100%',
-  },
-  dot: {
-    position: 'absolute',
-    width: 2,
-    height: 2,
-    borderRadius: 1,
+  gradientBackground: {
+    padding: 20,
   },
   cardContent: {
-    padding: 20,
+    flex: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -706,33 +616,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  venueIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
+  locationIcon: {
+    marginRight: 8,
   },
   venueName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#F8FAFC',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
     flex: 1,
   },
   bookedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#064E3B',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#4CAF50',
   },
   bookedBadgeText: {
-    color: '#10B981',
-    fontSize: 11,
+    color: '#4CAF50',
+    fontSize: 12,
     fontWeight: '600',
     marginLeft: 4,
   },
@@ -749,37 +654,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   infoLabel: {
-    fontSize: 11,
-    color: '#94A3B8',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
     marginTop: 4,
     marginBottom: 2,
-    textTransform: 'uppercase',
-    fontWeight: '500',
   },
   infoValue: {
-    fontSize: 15,
-    color: '#F8FAFC',
+    fontSize: 16,
+    color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
   },
   availabilitySection: {
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
   },
   availabilityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   availabilityLabel: {
-    fontSize: 13,
-    color: '#CBD5E1',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
     fontWeight: '500',
   },
   availabilityNumber: {
     fontSize: 18,
+    color: '#fff',
     fontWeight: '700',
   },
   progressBarContainer: {
@@ -789,7 +693,7 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     height: 6,
-    backgroundColor: 'rgba(51, 65, 85, 0.8)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -799,9 +703,9 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    color: '#E2E8F0',
+    color: '#fff',
     fontWeight: '600',
-    marginLeft: 12,
+    marginLeft: 8,
     minWidth: 35,
     textAlign: 'right',
   },
@@ -815,24 +719,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
   statusText: {
-    fontSize: 13,
-    color: '#CBD5E1',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
     fontWeight: '500',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
   loadingCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
+    borderRadius: 20,
     paddingVertical: 40,
     paddingHorizontal: 32,
     alignItems: 'center',
@@ -841,40 +745,42 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#94A3B8',
+    color: 'rgba(255,255,255,0.8)',
     fontWeight: '500',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
   errorCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 40,
     alignItems: 'center',
     width: '100%',
   },
   errorText: {
-    color: '#94A3B8',
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
     fontSize: 16,
     marginVertical: 16,
     lineHeight: 24,
   },
   retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#334155',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
     marginTop: 8,
   },
+  retryButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
   retryButtonText: {
-    color: '#4F46E5',
-    fontSize: 14,
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
   },
@@ -882,158 +788,141 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
   emptyCard: {
-    alignItems: 'center',
+    borderRadius: 20,
     padding: 40,
+    alignItems: 'center',
+    width: '100%',
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: 'rgba(255,255,255,0.9)',
     marginTop: 16,
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
   },
   listContainer: {
     paddingBottom: 100,
   },
-  // Modal styles
+  // Modal styles for card popup
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  modalCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 20,
-    width: '100%',
+  modalCardContainer: {
+    width: '90%',
     maxWidth: 400,
+    borderRadius: 24,
     overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
   },
-  modalHeader: {
+  modalCardGradient: {
+    padding: 0,
+  },
+  modalCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  modalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  modalIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  modalTitleContainer: {
-    flex: 1,
-  },
-  modalTitle: {
-    fontSize: 20,
+  modalCardTitle: {
+    fontSize: 22,
     fontWeight: '700',
-    color: '#F8FAFC',
-    marginBottom: 2,
+    color: '#fff',
+    marginBottom: 4,
   },
-  modalSubtitle: {
+  modalCardSubtitle: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: 'rgba(255,255,255,0.7)',
   },
   modalCloseButton: {
     padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#334155',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  modalContent: {
+  modalCardContent: {
     padding: 20,
   },
-  modalInfoGrid: {
+  modalCardInfoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 24,
-  },
-  modalInfoItem: {
-    width: '50%',
-    alignItems: 'center',
     marginBottom: 20,
   },
-  modalInfoLabel: {
-    fontSize: 11,
-    color: '#64748B',
+  modalCardInfoItem: {
+    width: '50%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalCardInfoLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
     marginTop: 8,
     marginBottom: 4,
-    textTransform: 'uppercase',
-    fontWeight: '500',
   },
-  modalInfoValue: {
+  modalCardInfoValue: {
     fontSize: 16,
-    color: '#F8FAFC',
+    color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
   },
-  modalBookedSection: {
-    marginTop: 4,
+  modalCardBookedSection: {
+    marginTop: 10,
   },
-  modalBookedStatus: {
+  modalCardBookedStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#064E3B',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
     paddingVertical: 12,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#10B981',
   },
-  modalBookedStatusText: {
-    fontSize: 15,
-    color: '#10B981',
+  modalCardBookedStatusText: {
+    fontSize: 16,
+    color: '#fff',
     fontWeight: '600',
     marginLeft: 8,
   },
-  modalCancelInput: {
+  modalCardCancelInput: {
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     fontSize: 16,
-    color: '#F8FAFC',
-    backgroundColor: '#0a0f1bff',
+    color: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  modalActionButton: {
+  modalCardActionButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalCardActionButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 12,
   },
-  modalBookButton: {
-    backgroundColor: '#4F46E5',
-  },
-  modalCancelButton: {
-    backgroundColor: '#DC2626',
-  },
-  modalActionButtonDisabled: {
-    backgroundColor: '#374151',
-    opacity: 0.6,
-  },
-  modalActionButtonText: {
-    color: '#FFFFFF',
+  modalCardActionButtonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,

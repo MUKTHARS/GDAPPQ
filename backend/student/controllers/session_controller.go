@@ -383,200 +383,267 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func getSessionParticipantCount(sessionID string) (int, error) {
+    var participantCount int
+    err := database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT student_id)
+        FROM session_participants 
+        WHERE session_id = ? AND is_dummy = FALSE`,
+        sessionID).Scan(&participantCount)
+    
+    if err != nil {
+        return 0, err
+    }
+    return participantCount, nil
+}
+
 func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
-	studentID := r.Context().Value("studentID").(string)
-	log.Printf("SubmitSurvey started for student %s", studentID)
+    studentID := r.Context().Value("studentID").(string)
+    log.Printf("SubmitSurvey started for student %s", studentID)
 
-	var req struct {
-		SessionID string                 `json:"session_id"`
-		Responses map[int]map[int]string `json:"responses"` // question_number -> rank -> studentID
-		IsPartial bool                   `json:"is_partial"`
-		IsFinal   bool                   `json:"is_final"`
-	}
+    var req struct {
+        SessionID string                 `json:"session_id"`
+        Responses map[int]map[int]string `json:"responses"` // question_number -> rank -> studentID
+        IsPartial bool                   `json:"is_partial"`
+        IsFinal   bool                   `json:"is_final"`
+    }
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Survey decode error: %v", err)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
-		return
-	}
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        log.Printf("Survey decode error: %v", err)
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+        return
+    }
 
-	tx, err := database.GetDB().Begin()
-	if err != nil {
-		log.Printf("Failed to begin transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
-	defer tx.Rollback()
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        log.Printf("Failed to begin transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer tx.Rollback()
 
-	// Get session level first
-	var sessionLevel int
-	err = tx.QueryRow("SELECT level FROM gd_sessions WHERE id = ?", req.SessionID).Scan(&sessionLevel)
-	if err != nil {
-		log.Printf("Error getting session level: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
+    // Get session level first
+    var sessionLevel int
+    err = tx.QueryRow("SELECT level FROM gd_sessions WHERE id = ?", req.SessionID).Scan(&sessionLevel)
+    if err != nil {
+        log.Printf("Error getting session level: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
 
-	// Get all active questions for this level with their IDs and weights, ordered by display_order
-	rows, err := tx.Query(`
+    // Get all active questions for this level with their IDs and weights, ordered by display_order
+    rows, err := tx.Query(`
         SELECT id, weight 
         FROM survey_questions 
         WHERE level = ? AND is_active = TRUE 
         ORDER BY display_order`,
-		sessionLevel)
-	if err != nil {
-		log.Printf("Error getting questions: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
-	defer rows.Close()
+        sessionLevel)
+    if err != nil {
+        log.Printf("Error getting questions: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer rows.Close()
 
-	// Create a mapping of question number to question ID and weight
-	questionMappings := make(map[int]struct {
-		ID     string
-		Weight float64
-	})
+    // Create a mapping of question number to question ID and weight
+    questionMappings := make(map[int]struct {
+        ID     string
+        Weight float64
+    })
 
-	index := 1
-	for rows.Next() {
-		var questionID string
-		var weight float64
-		if err := rows.Scan(&questionID, &weight); err != nil {
-			continue
-		}
-		questionMappings[index] = struct {
-			ID     string
-			Weight float64
-		}{
-			ID:     questionID,
-			Weight: weight,
-		}
-		log.Printf("Question %d: ID=%s, Weight=%.2f", index, questionID, weight)
-		index++
-	}
+    index := 1
+    for rows.Next() {
+        var questionID string
+        var weight float64
+        if err := rows.Scan(&questionID, &weight); err != nil {
+            continue
+        }
+        questionMappings[index] = struct {
+            ID     string
+            Weight float64
+        }{
+            ID:     questionID,
+            Weight: weight,
+        }
+        log.Printf("Question %d: ID=%s, Weight=%.2f", index, questionID, weight)
+        index++
+    }
 
-	totalQuestions := len(questionMappings)
-	log.Printf("Total questions for level %d: %d", sessionLevel, totalQuestions)
+    totalQuestions := len(questionMappings)
+    log.Printf("Total questions for level %d: %d", sessionLevel, totalQuestions)
 
-	// Process each question response
-	for questionNumber, rankings := range req.Responses {
-		// Get question mapping
-		questionMapping, exists := questionMappings[questionNumber]
-		if !exists {
-			log.Printf("Question mapping not found for question number %d, skipping", questionNumber)
-			continue
-		}
+    // Track incomplete rankings for penalty calculation
+    incompleteRankings := make(map[string]int) // question_id -> missing_ranks_count
 
-		log.Printf("Processing question %d with ID %s and weight %.2f", questionNumber, questionMapping.ID, questionMapping.Weight)
+    // Process each question response
+    for questionNumber, rankings := range req.Responses {
+        // Get question mapping
+        questionMapping, exists := questionMappings[questionNumber]
+        if !exists {
+            log.Printf("Question mapping not found for question number %d, skipping", questionNumber)
+            continue
+        }
 
-		// Clear previous responses for this question and responder if any
-		_, err = tx.Exec(`
+        log.Printf("Processing question %d with ID %s and weight %.2f", questionNumber, questionMapping.ID, questionMapping.Weight)
+
+        // Clear previous responses for this question and responder if any
+        _, err = tx.Exec(`
             DELETE FROM survey_results 
             WHERE session_id = ? AND responder_id = ? AND question_id = ?`,
-			req.SessionID, studentID, questionMapping.ID)
-		if err != nil {
-			log.Printf("Error clearing previous responses: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-			return
-		}
+            req.SessionID, studentID, questionMapping.ID)
+        if err != nil {
+            log.Printf("Error clearing previous responses: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+            return
+        }
 
-		// Save new rankings with proper question_id foreign key
-		for rank, rankedStudentID := range rankings {
-			// Get base points from configurable ranking points
-			basePoints, err := getRankingPoints(sessionLevel, rank)
-			if err != nil {
-				log.Printf("Error getting ranking points: %v", err)
-				// Fallback to default calculation if config not found
-				basePoints = 5 - float64(rank) // 1st=4, 2nd=3, 3rd=2
-			}
+        // Check if rankings are complete (should have 3 ranks for 3 participants)
+       expectedRanks := 3 // Default fallback
+participantCount, err := getSessionParticipantCount(req.SessionID)
+if err != nil {
+    log.Printf("Error getting participant count: %v, using default 3", err)
+} else {
+    expectedRanks = participantCount - 1 // Exclude self-rating
+    if expectedRanks < 1 {
+        expectedRanks = 1 // Ensure at least 1 rank is expected
+    }
+    log.Printf("Session %s has %d participants, expecting %d ranks per question", 
+        req.SessionID, participantCount, expectedRanks)
+}
 
-			// Calculate final score as points × weight
-			finalScore := basePoints * questionMapping.Weight
+actualRanks := len(rankings)
+if actualRanks < expectedRanks {
+    missingRanks := expectedRanks - actualRanks
+    incompleteRankings[questionMapping.ID] = missingRanks
+    log.Printf("Student %s has incomplete rankings for question %s: %d/%d ranks", 
+        studentID, questionMapping.ID, actualRanks, expectedRanks)
+}
 
-			log.Printf("Saving: responder %s ranked student %s as rank %d with score %.2f for question %s",
-				studentID, rankedStudentID, rank, finalScore, questionMapping.ID)
+        // Save new rankings with proper question_id foreign key
+        for rank, rankedStudentID := range rankings {
+            // Get base points from configurable ranking points
+            basePoints, err := getRankingPoints(sessionLevel, rank)
+            if err != nil {
+                log.Printf("Error getting ranking points: %v", err)
+                // Fallback to default calculation if config not found
+                basePoints = 5 - float64(rank) // 1st=4, 2nd=3, 3rd=2
+            }
 
-			_, err = tx.Exec(`
+            // Calculate final score as points × weight
+            finalScore := basePoints * questionMapping.Weight
+
+            log.Printf("Saving: responder %s ranked student %s as rank %d with score %.2f for question %s",
+                studentID, rankedStudentID, rank, finalScore, questionMapping.ID)
+
+            _, err = tx.Exec(`
                 INSERT INTO survey_results 
                 (id, session_id, student_id, responder_id, question_id, ranks, score, weighted_score, is_current_session, is_completed)
                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-				req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore)
-			if err != nil {
-				tx.Rollback()
-				log.Printf("Error saving survey response: %v", err)
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
-				return
-			}
-		}
-	}
+                req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore)
+            if err != nil {
+                tx.Rollback()
+                log.Printf("Error saving survey response: %v", err)
+                w.WriteHeader(http.StatusInternalServerError)
+                json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
+                return
+            }
+        }
+    }
 
-	// Check if ALL questions have been answered by counting responses
-	var answeredQuestionsCount int
-	err = tx.QueryRow(`
+    // Apply penalties for incomplete rankings (1 point per missing rank)
+    totalPenalty := 0.0
+    for questionID, missingRanks := range incompleteRankings {
+        penaltyPoints := float64(missingRanks) // 1 point per missing rank
+        totalPenalty += penaltyPoints
+        
+        log.Printf("Applying penalty of %.1f points for %d missing ranks in question %s", 
+            penaltyPoints, missingRanks, questionID)
+        
+        // Apply penalty to the student's record for this question
+        _, err = tx.Exec(`
+            UPDATE survey_results 
+            SET penalty_points = penalty_points + ?,
+                is_biased = TRUE,
+                penalty_calculated = TRUE
+            WHERE session_id = ? AND responder_id = ? AND question_id = ?`,
+            penaltyPoints, req.SessionID, studentID, questionID)
+        
+        if err != nil {
+            log.Printf("Error applying incomplete ranking penalty: %v", err)
+            // Continue with other penalties instead of failing
+        }
+    }
+
+    if totalPenalty > 0 {
+        log.Printf("Total penalty of %.1f points applied to student %s for incomplete rankings", 
+            totalPenalty, studentID)
+    }
+
+    // Check if ALL questions have been answered by counting responses
+    var answeredQuestionsCount int
+    err = tx.QueryRow(`
         SELECT COUNT(DISTINCT question_id) 
         FROM survey_results 
         WHERE session_id = ? AND responder_id = ?`,
-		req.SessionID, studentID).Scan(&answeredQuestionsCount)
+        req.SessionID, studentID).Scan(&answeredQuestionsCount)
 
-	if err != nil {
-		log.Printf("Error counting answered questions: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
+    if err != nil {
+        log.Printf("Error counting answered questions: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
 
-	log.Printf("Student %s has answered %d out of %d questions", studentID, answeredQuestionsCount, totalQuestions)
+    log.Printf("Student %s has answered %d out of %d questions", studentID, answeredQuestionsCount, totalQuestions)
 
-	// Only mark as completed if ALL questions are answered
-	if answeredQuestionsCount >= totalQuestions {
-		log.Printf("All questions completed for student %s in session %s", studentID, req.SessionID)
+    // Only mark as completed if ALL questions are answered
+    if answeredQuestionsCount >= totalQuestions {
+        log.Printf("All questions completed for student %s in session %s", studentID, req.SessionID)
 
-		// Mark survey as completed in survey_completion table
-		_, err = tx.Exec(`
+        // Mark survey as completed in survey_completion table
+        _, err = tx.Exec(`
             INSERT INTO survey_completion (session_id, student_id, completed_at)
             VALUES (?, ?, NOW())
             ON DUPLICATE KEY UPDATE completed_at = NOW()`,
-			req.SessionID, studentID)
+            req.SessionID, studentID)
 
-		if err != nil {
-			log.Printf("Error marking survey completion: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
-			return
-		}
+        if err != nil {
+            log.Printf("Error marking survey completion: %v", err)
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+            return
+        }
 
-		// Update all survey_results records for this student to mark as completed
-		_, err = tx.Exec(`
+        // Update all survey_results records for this student to mark as completed
+        _, err = tx.Exec(`
             UPDATE survey_results 
             SET is_completed = 1 
             WHERE session_id = ? AND responder_id = ?`,
-			req.SessionID, studentID)
-		if err != nil {
-			log.Printf("Error updating survey_results completion status: %v", err)
-			// Don't fail the whole request for this
-		}
+            req.SessionID, studentID)
+        if err != nil {
+            log.Printf("Error updating survey_results completion status: %v", err)
+            // Don't fail the whole request for this
+        }
 
-		log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
-	} else {
-		log.Printf("Survey not yet completed for student %s (%d/%d questions)",
-			studentID, answeredQuestionsCount, totalQuestions)
-	}
+        log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
+    } else {
+        log.Printf("Survey not yet completed for student %s (%d/%d questions)",
+            studentID, answeredQuestionsCount, totalQuestions)
+    }
 
-	if err := tx.Commit(); err != nil {
-		log.Printf("Error committing transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey"})
-		return
-	}
+    if err := tx.Commit(); err != nil {
+        log.Printf("Error committing transaction: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey"})
+        return
+    }
 
-
-	 if answeredQuestionsCount >= totalQuestions {
+    if answeredQuestionsCount >= totalQuestions {
         log.Printf("All questions completed, calculating averages for session %s", req.SessionID)
         
         // Get all question IDs for this session
@@ -605,24 +672,266 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
                 }
             }
             
-            // Now calculate penalties
+            // Now calculate penalties for biased ratings
             if err := calculatePenalties(req.SessionID); err != nil {
                 log.Printf("Error calculating penalties: %v", err)
             }
         }
     }
 
-
-	log.Printf("Successfully processed survey submission for student %s in session %s",
-		studentID, req.SessionID)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":             "success",
-		"completed":          answeredQuestionsCount >= totalQuestions,
-		"questions_answered": answeredQuestionsCount,
-		"total_questions":    totalQuestions,
-	})
+    log.Printf("Successfully processed survey submission for student %s in session %s",
+        studentID, req.SessionID)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "status":             "success",
+        "completed":          answeredQuestionsCount >= totalQuestions,
+        "questions_answered": answeredQuestionsCount,
+        "total_questions":    totalQuestions,
+        "incomplete_penalty": totalPenalty,
+        "incomplete_questions": len(incompleteRankings),
+    })
 }
+
+// func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
+// 	studentID := r.Context().Value("studentID").(string)
+// 	log.Printf("SubmitSurvey started for student %s", studentID)
+
+// 	var req struct {
+// 		SessionID string                 `json:"session_id"`
+// 		Responses map[int]map[int]string `json:"responses"` // question_number -> rank -> studentID
+// 		IsPartial bool                   `json:"is_partial"`
+// 		IsFinal   bool                   `json:"is_final"`
+// 	}
+
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		log.Printf("Survey decode error: %v", err)
+// 		w.WriteHeader(http.StatusBadRequest)
+// 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+// 		return
+// 	}
+
+// 	tx, err := database.GetDB().Begin()
+// 	if err != nil {
+// 		log.Printf("Failed to begin transaction: %v", err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+// 		return
+// 	}
+// 	defer tx.Rollback()
+
+// 	// Get session level first
+// 	var sessionLevel int
+// 	err = tx.QueryRow("SELECT level FROM gd_sessions WHERE id = ?", req.SessionID).Scan(&sessionLevel)
+// 	if err != nil {
+// 		log.Printf("Error getting session level: %v", err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+// 		return
+// 	}
+
+// 	// Get all active questions for this level with their IDs and weights, ordered by display_order
+// 	rows, err := tx.Query(`
+//         SELECT id, weight 
+//         FROM survey_questions 
+//         WHERE level = ? AND is_active = TRUE 
+//         ORDER BY display_order`,
+// 		sessionLevel)
+// 	if err != nil {
+// 		log.Printf("Error getting questions: %v", err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+// 		return
+// 	}
+// 	defer rows.Close()
+
+// 	// Create a mapping of question number to question ID and weight
+// 	questionMappings := make(map[int]struct {
+// 		ID     string
+// 		Weight float64
+// 	})
+
+// 	index := 1
+// 	for rows.Next() {
+// 		var questionID string
+// 		var weight float64
+// 		if err := rows.Scan(&questionID, &weight); err != nil {
+// 			continue
+// 		}
+// 		questionMappings[index] = struct {
+// 			ID     string
+// 			Weight float64
+// 		}{
+// 			ID:     questionID,
+// 			Weight: weight,
+// 		}
+// 		log.Printf("Question %d: ID=%s, Weight=%.2f", index, questionID, weight)
+// 		index++
+// 	}
+
+// 	totalQuestions := len(questionMappings)
+// 	log.Printf("Total questions for level %d: %d", sessionLevel, totalQuestions)
+
+// 	// Process each question response
+// 	for questionNumber, rankings := range req.Responses {
+// 		// Get question mapping
+// 		questionMapping, exists := questionMappings[questionNumber]
+// 		if !exists {
+// 			log.Printf("Question mapping not found for question number %d, skipping", questionNumber)
+// 			continue
+// 		}
+
+// 		log.Printf("Processing question %d with ID %s and weight %.2f", questionNumber, questionMapping.ID, questionMapping.Weight)
+
+// 		// Clear previous responses for this question and responder if any
+// 		_, err = tx.Exec(`
+//             DELETE FROM survey_results 
+//             WHERE session_id = ? AND responder_id = ? AND question_id = ?`,
+// 			req.SessionID, studentID, questionMapping.ID)
+// 		if err != nil {
+// 			log.Printf("Error clearing previous responses: %v", err)
+// 			w.WriteHeader(http.StatusInternalServerError)
+// 			json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+// 			return
+// 		}
+
+// 		// Save new rankings with proper question_id foreign key
+// 		for rank, rankedStudentID := range rankings {
+// 			// Get base points from configurable ranking points
+// 			basePoints, err := getRankingPoints(sessionLevel, rank)
+// 			if err != nil {
+// 				log.Printf("Error getting ranking points: %v", err)
+// 				// Fallback to default calculation if config not found
+// 				basePoints = 5 - float64(rank) // 1st=4, 2nd=3, 3rd=2
+// 			}
+
+// 			// Calculate final score as points × weight
+// 			finalScore := basePoints * questionMapping.Weight
+
+// 			log.Printf("Saving: responder %s ranked student %s as rank %d with score %.2f for question %s",
+// 				studentID, rankedStudentID, rank, finalScore, questionMapping.ID)
+
+// 			_, err = tx.Exec(`
+//                 INSERT INTO survey_results 
+//                 (id, session_id, student_id, responder_id, question_id, ranks, score, weighted_score, is_current_session, is_completed)
+//                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+// 				req.SessionID, rankedStudentID, studentID, questionMapping.ID, rank, finalScore, finalScore)
+// 			if err != nil {
+// 				tx.Rollback()
+// 				log.Printf("Error saving survey response: %v", err)
+// 				w.WriteHeader(http.StatusInternalServerError)
+// 				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey response"})
+// 				return
+// 			}
+// 		}
+// 	}
+
+// 	// Check if ALL questions have been answered by counting responses
+// 	var answeredQuestionsCount int
+// 	err = tx.QueryRow(`
+//         SELECT COUNT(DISTINCT question_id) 
+//         FROM survey_results 
+//         WHERE session_id = ? AND responder_id = ?`,
+// 		req.SessionID, studentID).Scan(&answeredQuestionsCount)
+
+// 	if err != nil {
+// 		log.Printf("Error counting answered questions: %v", err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+// 		return
+// 	}
+
+// 	log.Printf("Student %s has answered %d out of %d questions", studentID, answeredQuestionsCount, totalQuestions)
+
+// 	// Only mark as completed if ALL questions are answered
+// 	if answeredQuestionsCount >= totalQuestions {
+// 		log.Printf("All questions completed for student %s in session %s", studentID, req.SessionID)
+
+// 		// Mark survey as completed in survey_completion table
+// 		_, err = tx.Exec(`
+//             INSERT INTO survey_completion (session_id, student_id, completed_at)
+//             VALUES (?, ?, NOW())
+//             ON DUPLICATE KEY UPDATE completed_at = NOW()`,
+// 			req.SessionID, studentID)
+
+// 		if err != nil {
+// 			log.Printf("Error marking survey completion: %v", err)
+// 			w.WriteHeader(http.StatusInternalServerError)
+// 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to mark survey completion"})
+// 			return
+// 		}
+
+// 		// Update all survey_results records for this student to mark as completed
+// 		_, err = tx.Exec(`
+//             UPDATE survey_results 
+//             SET is_completed = 1 
+//             WHERE session_id = ? AND responder_id = ?`,
+// 			req.SessionID, studentID)
+// 		if err != nil {
+// 			log.Printf("Error updating survey_results completion status: %v", err)
+// 			// Don't fail the whole request for this
+// 		}
+
+// 		log.Printf("Survey marked as completed for student %s in session %s", studentID, req.SessionID)
+// 	} else {
+// 		log.Printf("Survey not yet completed for student %s (%d/%d questions)",
+// 			studentID, answeredQuestionsCount, totalQuestions)
+// 	}
+
+// 	if err := tx.Commit(); err != nil {
+// 		log.Printf("Error committing transaction: %v", err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save survey"})
+// 		return
+// 	}
+
+
+// 	 if answeredQuestionsCount >= totalQuestions {
+//         log.Printf("All questions completed, calculating averages for session %s", req.SessionID)
+        
+//         // Get all question IDs for this session
+//         var questionIDs []string
+//         rows, err := database.GetDB().Query(`
+//             SELECT DISTINCT question_id 
+//             FROM survey_results 
+//             WHERE session_id = ? AND is_completed = 1`,
+//             req.SessionID)
+//         if err != nil {
+//             log.Printf("Error getting question IDs: %v", err)
+//         } else {
+//             defer rows.Close()
+//             for rows.Next() {
+//                 var questionID string
+//                 if err := rows.Scan(&questionID); err != nil {
+//                     continue
+//                 }
+//                 questionIDs = append(questionIDs, questionID)
+//             }
+            
+//             // Calculate averages for each question
+//             for _, questionID := range questionIDs {
+//                 if err := calculateQuestionAverages(req.SessionID, questionID); err != nil {
+//                     log.Printf("Error calculating averages for question %s: %v", questionID, err)
+//                 }
+//             }
+            
+//             // Now calculate penalties
+//             if err := calculatePenalties(req.SessionID); err != nil {
+//                 log.Printf("Error calculating penalties: %v", err)
+//             }
+//         }
+//     }
+
+
+// 	log.Printf("Successfully processed survey submission for student %s in session %s",
+// 		studentID, req.SessionID)
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(map[string]interface{}{
+// 		"status":             "success",
+// 		"completed":          answeredQuestionsCount >= totalQuestions,
+// 		"questions_answered": answeredQuestionsCount,
+// 		"total_questions":    totalQuestions,
+// 	})
+// }
 
 func UpdateSessionStatus(w http.ResponseWriter, r *http.Request) {
 	var req struct {
