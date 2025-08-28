@@ -575,6 +575,44 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+
+	 if answeredQuestionsCount >= totalQuestions {
+        log.Printf("All questions completed, calculating averages for session %s", req.SessionID)
+        
+        // Get all question IDs for this session
+        var questionIDs []string
+        rows, err := database.GetDB().Query(`
+            SELECT DISTINCT question_id 
+            FROM survey_results 
+            WHERE session_id = ? AND is_completed = 1`,
+            req.SessionID)
+        if err != nil {
+            log.Printf("Error getting question IDs: %v", err)
+        } else {
+            defer rows.Close()
+            for rows.Next() {
+                var questionID string
+                if err := rows.Scan(&questionID); err != nil {
+                    continue
+                }
+                questionIDs = append(questionIDs, questionID)
+            }
+            
+            // Calculate averages for each question
+            for _, questionID := range questionIDs {
+                if err := calculateQuestionAverages(req.SessionID, questionID); err != nil {
+                    log.Printf("Error calculating averages for question %s: %v", questionID, err)
+                }
+            }
+            
+            // Now calculate penalties
+            if err := calculatePenalties(req.SessionID); err != nil {
+                log.Printf("Error calculating penalties: %v", err)
+            }
+        }
+    }
+
+
 	log.Printf("Successfully processed survey submission for student %s in session %s",
 		studentID, req.SessionID)
 	w.Header().Set("Content-Type", "application/json")
@@ -636,114 +674,160 @@ func calculatePenalties(sessionID string) error {
     }
     defer tx.Rollback()
 
-    // Get all questions for this session
-    questions := make(map[string]bool)
-    rows, err := tx.Query(`
-        SELECT DISTINCT question_id 
+    // Debug: Check if we have any records
+    var recordCount int
+    err = tx.QueryRow(`SELECT COUNT(*) FROM survey_results WHERE session_id = ?`, sessionID).Scan(&recordCount)
+    log.Printf("Found %d records for session %s", recordCount, sessionID)
+
+    // Check if penalties already calculated
+    var penaltiesCalculated bool
+    err = tx.QueryRow(`
+        SELECT COUNT(*) > 0 
         FROM survey_results 
-        WHERE session_id = ? AND is_completed = 1`,
+        WHERE session_id = ? AND penalty_calculated = TRUE
+        LIMIT 1`, sessionID).Scan(&penaltiesCalculated)
+    
+    if err != nil {
+        log.Printf("Error checking penalties: %v", err)
+        return fmt.Errorf("error checking penalties: %v", err)
+    }
+    
+    if penaltiesCalculated {
+        log.Printf("Penalties already calculated for session %s", sessionID)
+        return tx.Commit()
+    }
+
+    // Get all ratings with averages
+    rows, err := tx.Query(`
+        SELECT id, student_id, responder_id, score, average_score, question_id
+        FROM survey_results 
+        WHERE session_id = ? AND is_completed = 1 
+        AND responder_id != student_id
+        AND average_score > 0`,
         sessionID)
     if err != nil {
-        return fmt.Errorf("error getting questions: %v", err)
+        log.Printf("Error getting ratings: %v", err)
+        return fmt.Errorf("error getting ratings: %v", err)
+    }
+    defer rows.Close()
+
+    var processedCount, penaltyCount int
+    for rows.Next() {
+        var id, studentID, responderID, questionID string
+        var score, averageScore float64
+        
+        if err := rows.Scan(&id, &studentID, &responderID, &score, &averageScore, &questionID); err != nil {
+            log.Printf("Error scanning row: %v", err)
+            continue
+        }
+        
+        processedCount++
+        
+        // Calculate deviation from average
+        deviation := math.Abs(score - averageScore)
+        log.Printf("Rating: %s -> %s: score=%.2f, avg=%.2f, deviation=%.2f", 
+            responderID, studentID, score, averageScore, deviation)
+        
+        if deviation >= 2.0 {
+            penaltyCount++
+            log.Printf("APPLYING PENALTY: %s rated %s with deviation %.2f", responderID, studentID, deviation)
+            
+            // Apply 1-point penalty
+            _, err := tx.Exec(`
+                UPDATE survey_results 
+                SET penalty_points = penalty_points + 1.0,
+                    deviation = ?,
+                    is_biased = TRUE,
+                    penalty_calculated = TRUE
+                WHERE id = ?`,
+                deviation, id)
+            if err != nil {
+                log.Printf("Error applying penalty: %v", err)
+                return fmt.Errorf("error applying penalty: %v", err)
+            }
+        } else {
+            // Mark as penalty calculated but no penalty
+            _, err := tx.Exec(`
+                UPDATE survey_results 
+                SET penalty_calculated = TRUE,
+                    deviation = ?
+                WHERE id = ?`,
+                deviation, id)
+            if err != nil {
+                log.Printf("Error updating penalty status: %v", err)
+                return fmt.Errorf("error updating penalty status: %v", err)
+            }
+        }
+    }
+
+    log.Printf("Penalty calculation complete: Processed %d ratings, applied %d penalties", processedCount, penaltyCount)
+    return tx.Commit()
+}
+
+
+func calculateQuestionAverages(sessionID, questionID string) error {
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %v", err)
+    }
+    defer tx.Rollback()
+
+    // Get all scores for this question, excluding self-ratings
+    type Rating struct {
+        StudentID   string
+        ResponderID string
+        Score       float64
+    }
+    
+    var ratings []Rating
+    rows, err := tx.Query(`
+        SELECT student_id, responder_id, score 
+        FROM survey_results 
+        WHERE session_id = ? AND question_id = ? AND responder_id != student_id
+        AND is_completed = 1`,
+        sessionID, questionID)
+    if err != nil {
+        return fmt.Errorf("error getting ratings: %v", err)
     }
     defer rows.Close()
 
     for rows.Next() {
-        var questionID string
-        if err := rows.Scan(&questionID); err != nil {
+        var r Rating
+        if err := rows.Scan(&r.StudentID, &r.ResponderID, &r.Score); err != nil {
             continue
         }
-        questions[questionID] = true
+        ratings = append(ratings, r)
     }
 
-    // For each question, calculate penalties
-    for questionID := range questions {
-        // Get all rankings for this question
-        rankings := make(map[string]map[string]float64) // student_id -> responder_id -> score
-        
-        rows, err := tx.Query(`
-            SELECT student_id, responder_id, score 
-            FROM survey_results 
-            WHERE session_id = ? AND question_id = ? AND is_completed = 1`,
-            sessionID, questionID)
-        if err != nil {
-            return fmt.Errorf("error getting rankings: %v", err)
-        }
-        
-        for rows.Next() {
-            var studentID, responderID string
-            var score float64
-            if err := rows.Scan(&studentID, &responderID, &score); err != nil {
-                continue
-            }
-            
-            if rankings[studentID] == nil {
-                rankings[studentID] = make(map[string]float64)
-            }
-            rankings[studentID][responderID] = score
-        }
-        rows.Close()
+    // Calculate average for each student
+    studentTotals := make(map[string]float64)
+    studentCounts := make(map[string]int)
+    
+    for _, rating := range ratings {
+        studentTotals[rating.StudentID] += rating.Score
+        studentCounts[rating.StudentID]++
+    }
 
-        // Calculate average scores for each student (excluding self-ratings)
-        averages := make(map[string]float64)
-        counts := make(map[string]int)
-        
-        for studentID, responderScores := range rankings {
-            total := 0.0
-            count := 0
+    // Update average scores in database
+    for studentID, total := range studentTotals {
+        count := studentCounts[studentID]
+        if count > 0 {
+            average := total / float64(count)
             
-            for responderID, score := range responderScores {
-                if responderID != studentID { // Exclude self-ratings
-                    total += score
-                    count++
-                }
-            }
-            
-            if count > 0 {
-                averages[studentID] = total / float64(count)
-            } else {
-                averages[studentID] = 0
-            }
-            counts[studentID] = count
-        }
-
-        // Apply penalties for deviations ≥ 2 points
-        for studentID, responderScores := range rankings {
-            for responderID, givenScore := range responderScores {
-                if responderID == studentID {
-                    continue // Skip self-ratings for penalty calculation
-                }
-                
-                averageScore, exists := averages[responderID]
-                if !exists || counts[responderID] == 0 {
-                    continue
-                }
-                
-                // Calculate deviation from average
-                deviation := math.Abs(givenScore - averageScore)
-                
-                if deviation >= 2.0 {
-                    // Apply 1-point penalty
-                    _, err := tx.Exec(`
-                        UPDATE survey_results 
-                        SET penalty_points = penalty_points + 1.0,
-                            is_biased = 1
-                        WHERE session_id = ? 
-                          AND question_id = ? 
-                          AND student_id = ? 
-                          AND responder_id = ?`,
-                        sessionID, questionID, studentID, responderID)
-                    if err != nil {
-                        return fmt.Errorf("error applying penalty: %v", err)
-                    }
-                }
+            _, err := tx.Exec(`
+                UPDATE survey_results 
+                SET average_score = ?
+                WHERE session_id = ? AND question_id = ? AND student_id = ?
+                AND is_completed = 1`,
+                average, sessionID, questionID, studentID)
+            if err != nil {
+                return fmt.Errorf("error updating average: %v", err)
             }
         }
     }
 
     return tx.Commit()
 }
-
 
 func GetResults(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")
@@ -771,10 +855,35 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-     err = calculatePenalties(sessionID)
+ var totalParticipants, completedCount int
+    err = database.GetDB().QueryRow(`
+        SELECT COUNT(DISTINCT sp.student_id),
+               COUNT(DISTINCT sc.student_id)
+        FROM session_participants sp
+        LEFT JOIN survey_completion sc ON sp.session_id = sc.session_id AND sp.student_id = sc.student_id
+        WHERE sp.session_id = ? AND sp.is_dummy = FALSE`,
+        sessionID).Scan(&totalParticipants, &completedCount)
+    
     if err != nil {
-        log.Printf("Warning: Could not calculate penalties: %v", err)
-        // Continue anyway, penalties might have been calculated already
+        log.Printf("Error checking survey completion: %v", err)
+    }
+
+    // Only calculate penalties if all surveys are completed and penalties not calculated yet
+    if completedCount >= totalParticipants && totalParticipants > 0 {
+        var penaltiesCalculated bool
+        err = database.GetDB().QueryRow(`
+            SELECT EXISTS(
+                SELECT 1 FROM survey_results 
+                WHERE session_id = ? AND penalty_calculated = TRUE
+                LIMIT 1
+            )`, sessionID).Scan(&penaltiesCalculated)
+        
+        if err == nil && !penaltiesCalculated {
+            log.Printf("Calculating penalties for completed session %s", sessionID)
+            if err := calculatePenalties(sessionID); err != nil {
+                log.Printf("Warning: Could not calculate penalties: %v", err)
+            }
+        }
     }
 
     // Get all participants in this session (including the current student) with photo_url
