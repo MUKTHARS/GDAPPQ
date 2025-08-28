@@ -46,6 +46,10 @@ func StudentOnly(next http.Handler) http.Handler {
         }
 
         log.Printf("Token valid for student %s, level %d", claims.UserID, claims.Level)
+        
+        // Add debug log
+        log.Printf("Setting context values - studentID: %s, studentLevel: %d", claims.UserID, claims.Level)
+        
         ctx := context.WithValue(r.Context(), "studentID", claims.UserID)
         ctx = context.WithValue(ctx, "studentLevel", claims.Level)
         next.ServeHTTP(w, r.WithContext(ctx))

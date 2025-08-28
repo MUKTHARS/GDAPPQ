@@ -1,3 +1,4 @@
+// C:\xampp\htdocs\GDAPPC\backend\student\controllers\profile_controller.go
 package controllers
 
 import (
@@ -12,10 +13,10 @@ type StudentProfile struct {
 	ID              string         `json:"id"`
 	Email           string         `json:"email"`
 	FullName        string         `json:"full_name"`
-	RollNumber      sql.NullString `json:"roll_number"` // Change from string to sql.NullString
+	RollNumber      sql.NullString `json:"roll_number"`
 	Department      string         `json:"department"`
-	Year            sql.NullInt64  `json:"year"`
-	PhotoURL        string         `json:"photo_url"`
+	Year            int            `json:"year"`
+	PhotoURL        sql.NullString `json:"photo_url"`
 	CurrentGDLevel  int            `json:"current_gd_level"`
 	IsActive        bool           `json:"is_active"`
 	CreatedAt       string         `json:"created_at"`
@@ -23,10 +24,17 @@ type StudentProfile struct {
 
 func GetStudentProfile(w http.ResponseWriter, r *http.Request) {
 	// Get student ID from context (set by middleware)
-	studentID := r.Context().Value("studentID").(string)
-	if studentID == "" {
+	studentIDInterface := r.Context().Value("studentID")
+	if studentIDInterface == nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Student ID not found"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Student ID not found in context"})
+		return
+	}
+
+	studentID, ok := studentIDInterface.(string)
+	if !ok || studentID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid student ID"})
 		return
 	}
 
@@ -44,7 +52,7 @@ func GetStudentProfile(w http.ResponseWriter, r *http.Request) {
 		&profile.ID,
 		&profile.Email,
 		&profile.FullName,
-		&profile.RollNumber, // Now accepts sql.NullString
+		&profile.RollNumber,
 		&profile.Department,
 		&profile.Year,
 		&profile.PhotoURL,
@@ -65,32 +73,30 @@ func GetStudentProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare response with proper handling of nullable fields
-	response := map[string]interface{}{
-		"id":               profile.ID,
-		"email":            profile.Email,
-		"full_name":        profile.FullName,
-		"roll_number":      nil, // Default to null
-		"department":       profile.Department,
-		"year":             nil, // Default to null
-		"photo_url":        profile.PhotoURL,
-		"current_gd_level": profile.CurrentGDLevel,
-		"is_active":        profile.IsActive,
-		"created_at":       profile.CreatedAt,
-	}
-
-	// If roll_number is valid, use the string value
+	// Convert nullable fields to regular strings with empty string as default
+	rollNumber := ""
 	if profile.RollNumber.Valid {
-		response["roll_number"] = profile.RollNumber.String
+		rollNumber = profile.RollNumber.String
 	}
 
-	// If year is valid, use the integer value
-	if profile.Year.Valid {
-		response["year"] = profile.Year.Int64
+	photoURL := ""
+	if profile.PhotoURL.Valid {
+		photoURL = profile.PhotoURL.String
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"profile": response,
+		"profile": map[string]interface{}{
+			"id":               profile.ID,
+			"email":            profile.Email,
+			"full_name":        profile.FullName,
+			"roll_number":      rollNumber,
+			"department":       profile.Department,
+			"year":             profile.Year,
+			"photo_url":        photoURL,
+			"current_gd_level": profile.CurrentGDLevel,
+			"is_active":        profile.IsActive,
+			"created_at":       profile.CreatedAt,
+		},
 	})
 }

@@ -24,33 +24,50 @@ export default function ProfileScreen({ navigation }) {
   }, []);
 
   const fetchUserProfile = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const userID = await AsyncStorage.getItem('userID');
+  try {
+    const response = await api.student.getProfile();
+    
+    if (response.data && Object.keys(response.data).length > 0) {
+      setUserData(response.data);
       
-      if (!token || !userID) {
-        throw new Error('User not authenticated');
-      }
-
-      // Since we don't have a dedicated profile endpoint, we'll use the data from login
-      // You might need to create a backend endpoint for fetching user profile
-      const userInfo = {
-        id: userID,
+      // Store user data in AsyncStorage for quick access
+      await AsyncStorage.setItem('userID', response.data.id);
+      await AsyncStorage.setItem('userEmail', response.data.email);
+      await AsyncStorage.setItem('userName', response.data.full_name);
+      await AsyncStorage.setItem('userRollNumber', response.data.roll_number);
+      await AsyncStorage.setItem('userDepartment', response.data.department);
+      await AsyncStorage.setItem('userLevel', response.data.current_gd_level.toString());
+      await AsyncStorage.setItem('userPhoto', response.data.photo_url || '');
+    } else {
+      // Fallback to stored data if API fails
+      const fallbackData = {
+        id: await AsyncStorage.getItem('userID'),
         email: await AsyncStorage.getItem('userEmail'),
         full_name: await AsyncStorage.getItem('userName'),
+        roll_number: await AsyncStorage.getItem('userRollNumber'),
         department: await AsyncStorage.getItem('userDepartment'),
-        current_gd_level: await AsyncStorage.getItem('userLevel'),
+        current_gd_level: parseInt(await AsyncStorage.getItem('userLevel') || '1'),
         photo_url: await AsyncStorage.getItem('userPhoto')
       };
-
-      setUserData(userInfo);
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      Alert.alert('Error', 'Failed to load profile data');
-    } finally {
-      setLoading(false);
+      setUserData(fallbackData);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    // Use stored data as fallback
+    const fallbackData = {
+      id: await AsyncStorage.getItem('userID'),
+      email: await AsyncStorage.getItem('userEmail'),
+      full_name: await AsyncStorage.getItem('userName'),
+      roll_number: await AsyncStorage.getItem('userRollNumber'),
+      department: await AsyncStorage.getItem('userDepartment'),
+      current_gd_level: parseInt(await AsyncStorage.getItem('userLevel') || '1'),
+      photo_url: await AsyncStorage.getItem('userPhoto')
+    };
+    setUserData(fallbackData);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const getLevelBadge = (level) => {
     const badges = {
