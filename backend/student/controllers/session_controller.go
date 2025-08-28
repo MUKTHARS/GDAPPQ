@@ -8,19 +8,10 @@ import (
 	"gd/database"
 	"math"
 	"sort"
-
-	// "sort"
-
-	// "io"
-
-	// "sort"
-
-	// "gd/student/models"
 	"log"
 	"net/http"
 	"net/url"
 	"strconv"
-	// "strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -476,6 +467,21 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
     totalQuestions := len(questionMappings)
     log.Printf("Total questions for level %d: %d", sessionLevel, totalQuestions)
 
+    // Get participant count to determine expected ranks
+    participantCount, err := getSessionParticipantCount(req.SessionID)
+    if err != nil {
+        log.Printf("Error getting participant count: %v, using default 3", err)
+        participantCount = 4 // Default for your example (john, jane, jobe, karl)
+    }
+    
+    // Expected ranks: should rank ALL other participants (excluding self)
+    expectedRanks := participantCount - 1
+    if expectedRanks < 1 {
+        expectedRanks = 1
+    }
+    log.Printf("Session %s has %d participants, expecting %d ranks per question", 
+        req.SessionID, participantCount, expectedRanks)
+
     // Track incomplete rankings for penalty calculation
     incompleteRankings := make(map[string]int) // question_id -> missing_ranks_count
 
@@ -502,27 +508,38 @@ func SubmitSurvey(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        // Check if rankings are complete (should have 3 ranks for 3 participants)
-       expectedRanks := 3 // Default fallback
-participantCount, err := getSessionParticipantCount(req.SessionID)
-if err != nil {
-    log.Printf("Error getting participant count: %v, using default 3", err)
-} else {
-    expectedRanks = participantCount - 1 // Exclude self-rating
-    if expectedRanks < 1 {
-        expectedRanks = 1 // Ensure at least 1 rank is expected
-    }
-    log.Printf("Session %s has %d participants, expecting %d ranks per question", 
-        req.SessionID, participantCount, expectedRanks)
-}
+        // Check if rankings are complete (should rank ALL other participants)
+        actualRanks := len(rankings)
+        if actualRanks < expectedRanks {
+            missingRanks := expectedRanks - actualRanks
+            incompleteRankings[questionMapping.ID] = missingRanks
+            log.Printf("Student %s has incomplete rankings for question %s: %d/%d ranks", 
+                studentID, questionMapping.ID, actualRanks, expectedRanks)
+        }
 
-actualRanks := len(rankings)
-if actualRanks < expectedRanks {
-    missingRanks := expectedRanks - actualRanks
-    incompleteRankings[questionMapping.ID] = missingRanks
-    log.Printf("Student %s has incomplete rankings for question %s: %d/%d ranks", 
-        studentID, questionMapping.ID, actualRanks, expectedRanks)
-}
+        // Check for valid rank assignments (ranks should be 1, 2, 3, etc. without gaps)
+        assignedRanks := make(map[int]bool)
+        for rank := range rankings {
+            assignedRanks[rank] = true
+        }
+
+        // Check if all ranks from 1 to expectedRanks are assigned
+        hasAllRanks := true
+        for i := 1; i <= expectedRanks; i++ {
+            if !assignedRanks[i] {
+                hasAllRanks = false
+                break
+            }
+        }
+
+        if !hasAllRanks {
+            // Additional penalty for not assigning proper rank numbers (e.g., missing rank 1)
+            if incompleteRankings[questionMapping.ID] == 0 {
+                incompleteRankings[questionMapping.ID] = 1
+            }
+            log.Printf("Student %s didn't assign proper rank numbers for question %s", 
+                studentID, questionMapping.ID)
+        }
 
         // Save new rankings with proper question_id foreign key
         for rank, rankedStudentID := range rankings {
@@ -564,7 +581,7 @@ if actualRanks < expectedRanks {
         log.Printf("Applying penalty of %.1f points for %d missing ranks in question %s", 
             penaltyPoints, missingRanks, questionID)
         
-        // Apply penalty to the student's record for this question
+        // Apply penalty to the responder (student who didn't complete rankings)
         _, err = tx.Exec(`
             UPDATE survey_results 
             SET penalty_points = penalty_points + ?,
@@ -983,11 +1000,6 @@ func calculatePenalties(sessionID string) error {
     }
     defer tx.Rollback()
 
-    // Debug: Check if we have any records
-    var recordCount int
-    err = tx.QueryRow(`SELECT COUNT(*) FROM survey_results WHERE session_id = ?`, sessionID).Scan(&recordCount)
-    log.Printf("Found %d records for session %s", recordCount, sessionID)
-
     // Check if penalties already calculated
     var penaltiesCalculated bool
     err = tx.QueryRow(`
@@ -997,7 +1009,6 @@ func calculatePenalties(sessionID string) error {
         LIMIT 1`, sessionID).Scan(&penaltiesCalculated)
     
     if err != nil {
-        log.Printf("Error checking penalties: %v", err)
         return fmt.Errorf("error checking penalties: %v", err)
     }
     
@@ -1006,16 +1017,43 @@ func calculatePenalties(sessionID string) error {
         return tx.Commit()
     }
 
-    // Get all ratings with averages
+    // First, calculate MEDIAN scores instead of averages to reduce outlier impact
+    // Get all question IDs for this session
+    var questionIDs []string
     rows, err := tx.Query(`
-        SELECT id, student_id, responder_id, score, average_score, question_id
+        SELECT DISTINCT question_id 
+        FROM survey_results 
+        WHERE session_id = ? AND is_completed = 1`,
+        sessionID)
+    if err != nil {
+        return fmt.Errorf("error getting question IDs: %v", err)
+    }
+    defer rows.Close()
+    
+    for rows.Next() {
+        var questionID string
+        if err := rows.Scan(&questionID); err != nil {
+            continue
+        }
+        questionIDs = append(questionIDs, questionID)
+    }
+
+    // Calculate median score for each student per question
+    for _, questionID := range questionIDs {
+        if err := calculateQuestionMedians(tx, sessionID, questionID); err != nil {
+            log.Printf("Error calculating medians for question %s: %v", questionID, err)
+        }
+    }
+
+    // Now calculate penalties based on deviation from median
+    rows, err = tx.Query(`
+        SELECT id, student_id, responder_id, score, median_score, question_id
         FROM survey_results 
         WHERE session_id = ? AND is_completed = 1 
         AND responder_id != student_id
-        AND average_score > 0`,
+        AND median_score > 0`,
         sessionID)
     if err != nil {
-        log.Printf("Error getting ratings: %v", err)
         return fmt.Errorf("error getting ratings: %v", err)
     }
     defer rows.Close()
@@ -1023,39 +1061,42 @@ func calculatePenalties(sessionID string) error {
     var processedCount, penaltyCount int
     for rows.Next() {
         var id, studentID, responderID, questionID string
-        var score, averageScore float64
+        var score, medianScore float64
         
-        if err := rows.Scan(&id, &studentID, &responderID, &score, &averageScore, &questionID); err != nil {
+        if err := rows.Scan(&id, &studentID, &responderID, &score, &medianScore, &questionID); err != nil {
             log.Printf("Error scanning row: %v", err)
             continue
         }
         
         processedCount++
         
-        // Calculate deviation from average
-        deviation := math.Abs(score - averageScore)
-        log.Printf("Rating: %s -> %s: score=%.2f, avg=%.2f, deviation=%.2f", 
-            responderID, studentID, score, averageScore, deviation)
+        // Calculate deviation from median (more robust to outliers)
+        deviation := math.Abs(score - medianScore)
+        log.Printf("Rating: %s -> %s: score=%.2f, median=%.2f, deviation=%.2f", 
+            responderID, studentID, score, medianScore, deviation)
         
+        // Apply penalty only for significant deviations (>= 2.0 points)
         if deviation >= 2.0 {
             penaltyCount++
-            log.Printf("APPLYING PENALTY: %s rated %s with deviation %.2f", responderID, studentID, deviation)
+            log.Printf("APPLYING PENALTY: %s rated %s with deviation %.2f from median", 
+                responderID, studentID, deviation)
             
-            // Apply 1-point penalty
+            // Apply penalty proportional to deviation
+            penaltyPoints := math.Min(deviation, 3.0) // Cap penalty at 3 points
+            
             _, err := tx.Exec(`
                 UPDATE survey_results 
-                SET penalty_points = penalty_points + 1.0,
+                SET penalty_points = penalty_points + ?,
                     deviation = ?,
                     is_biased = TRUE,
                     penalty_calculated = TRUE
                 WHERE id = ?`,
-                deviation, id)
+                penaltyPoints, deviation, id)
             if err != nil {
-                log.Printf("Error applying penalty: %v", err)
                 return fmt.Errorf("error applying penalty: %v", err)
             }
         } else {
-            // Mark as penalty calculated but no penalty
+            // Mark as penalty calculated but no penalty - ensure deviation is set
             _, err := tx.Exec(`
                 UPDATE survey_results 
                 SET penalty_calculated = TRUE,
@@ -1063,15 +1104,84 @@ func calculatePenalties(sessionID string) error {
                 WHERE id = ?`,
                 deviation, id)
             if err != nil {
-                log.Printf("Error updating penalty status: %v", err)
                 return fmt.Errorf("error updating penalty status: %v", err)
             }
         }
     }
 
-    log.Printf("Penalty calculation complete: Processed %d ratings, applied %d penalties", processedCount, penaltyCount)
+    // FIX: Ensure ALL records have deviation calculated, even if median_score is 0
+    _, err = tx.Exec(`
+        UPDATE survey_results 
+        SET deviation = 0, penalty_calculated = TRUE
+        WHERE session_id = ? AND deviation IS NULL`,
+        sessionID)
+    if err != nil {
+        log.Printf("Warning: Could not set default deviation values: %v", err)
+    }
+
+    log.Printf("Penalty calculation complete: Processed %d ratings, applied %d penalties", 
+        processedCount, penaltyCount)
     return tx.Commit()
 }
+
+func calculateQuestionMedians(tx *sql.Tx, sessionID, questionID string) error {
+    // Get all scores for this question, excluding self-ratings
+    rows, err := tx.Query(`
+        SELECT student_id, score 
+        FROM survey_results 
+        WHERE session_id = ? AND question_id = ? AND responder_id != student_id
+        AND is_completed = 1 AND score > 0
+        ORDER BY student_id, score`,
+        sessionID, questionID)
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
+
+    // Group scores by student
+    studentScores := make(map[string][]float64)
+    for rows.Next() {
+        var studentID string
+        var score float64
+        if err := rows.Scan(&studentID, &score); err != nil {
+            continue
+        }
+        studentScores[studentID] = append(studentScores[studentID], score)
+    }
+
+    // Calculate median for each student and update database
+    for studentID, scores := range studentScores {
+        if len(scores) == 0 {
+            continue
+        }
+
+        // Sort scores to find median
+        sort.Float64s(scores)
+        var median float64
+        
+        if len(scores)%2 == 0 {
+            // Even number of scores: average of two middle values
+            median = (scores[len(scores)/2-1] + scores[len(scores)/2]) / 2
+        } else {
+            // Odd number of scores: middle value
+            median = scores[len(scores)/2]
+        }
+
+        // Update median score in database
+        _, err := tx.Exec(`
+            UPDATE survey_results 
+            SET median_score = ?
+            WHERE session_id = ? AND question_id = ? AND student_id = ?
+            AND is_completed = 1`,
+            median, sessionID, questionID, studentID)
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
 
 
 func calculateQuestionAverages(sessionID, questionID string) error {
@@ -1164,7 +1274,7 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
         return
     }
 
- var totalParticipants, completedCount int
+    var totalParticipants, completedCount int
     err = database.GetDB().QueryRow(`
         SELECT COUNT(DISTINCT sp.student_id),
                COUNT(DISTINCT sc.student_id)
@@ -1238,31 +1348,45 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 
     // Create a map to store scores for each student
     studentScores := make(map[string]*struct {
-        TotalScore      float64
-        FirstPlaces     int
-        Penalty         float64
-        BiasedQuestions int
+        TotalScore          float64
+        FirstPlaces         int
+        BiasPenalty         float64
+        IncompletePenalty   float64
+        TotalPenalty        float64
+        BiasedQuestions     int
+        IncompleteQuestions int
     })
     
     // Initialize all participants with zero scores
     for id := range participants {
         studentScores[id] = &struct {
-            TotalScore      float64
-            FirstPlaces     int
-            Penalty         float64
-            BiasedQuestions int
+            TotalScore          float64
+            FirstPlaces         int
+            BiasPenalty         float64
+            IncompletePenalty   float64
+            TotalPenalty        float64
+            BiasedQuestions     int
+            IncompleteQuestions int
         }{}
     }
 
-    // Get scores and penalties for each student
+    // FIXED: Get scores and penalties - ensure we're penalizing the RESPONDER, not the STUDENT
     rows, err = database.GetDB().Query(`
-        SELECT student_id, 
-               SUM(score) as total_score,
-               SUM(penalty_points) as total_penalty,
-               COUNT(CASE WHEN is_biased THEN 1 END) as biased_questions
+        SELECT 
+            -- Get the RESPONDER_ID (the one who gave the rating) for penalties
+            responder_id, 
+            SUM(score) as total_score,
+            -- Bias penalties (deviation >= 2.0) - penalize the RESPONDER
+            SUM(CASE WHEN deviation >= 2.0 THEN penalty_points ELSE 0 END) as bias_penalty,
+            -- Incomplete ranking penalties (for missing ranks) - penalize the RESPONDER
+            SUM(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN penalty_points ELSE 0 END) as incomplete_penalty,
+            -- Count bias-related penalties for the RESPONDER
+            COUNT(CASE WHEN deviation >= 2.0 AND is_biased THEN 1 END) as biased_questions,
+            -- Count incomplete ranking penalties for the RESPONDER
+            COUNT(CASE WHEN deviation < 2.0 AND penalty_points > 0 THEN 1 END) as incomplete_questions
         FROM survey_results 
         WHERE session_id = ? AND is_current_session = 1
-        GROUP BY student_id`, sessionID)
+        GROUP BY responder_id`, sessionID)
     
     if err != nil {
         log.Printf("Error getting survey responses: %v", err)
@@ -1273,23 +1397,26 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     defer rows.Close()
     
     for rows.Next() {
-        var studentID string
-        var totalScore, totalPenalty float64
-        var biasedQuestions int
+        var responderID string
+        var totalScore, biasPenalty, incompletePenalty float64
+        var biasedQuestions, incompleteQuestions int
         
-        if err := rows.Scan(&studentID, &totalScore, &totalPenalty, &biasedQuestions); err != nil {
+        if err := rows.Scan(&responderID, &totalScore, &biasPenalty, &incompletePenalty, &biasedQuestions, &incompleteQuestions); err != nil {
             log.Printf("Error scanning survey results: %v", err)
             continue
         }
         
-        if studentData, exists := studentScores[studentID]; exists {
+        if studentData, exists := studentScores[responderID]; exists {
             studentData.TotalScore = totalScore
-            studentData.Penalty = totalPenalty
+            studentData.BiasPenalty = biasPenalty
+            studentData.IncompletePenalty = incompletePenalty
+            studentData.TotalPenalty = biasPenalty + incompletePenalty
             studentData.BiasedQuestions = biasedQuestions
+            studentData.IncompleteQuestions = incompleteQuestions
         }
     }
 
-    // Get first place counts separately
+    // Get first place counts separately - this should be for the STUDENT (who received the ranking)
     rows, err = database.GetDB().Query(`
         SELECT student_id, COUNT(*) as first_places
         FROM survey_results 
@@ -1314,29 +1441,35 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
 
     // Prepare results for sorting
     type StudentResult struct {
-        ID              string
-        Name            string
-        PhotoURL        string
-        TotalScore      float64
-        Penalty         float64
-        FinalScore      float64
-        FirstPlaces     int
-        BiasedQuestions int
+        ID                  string
+        Name                string
+        PhotoURL            string
+        TotalScore          float64
+        BiasPenalty         float64
+        IncompletePenalty   float64
+        TotalPenalty        float64
+        FinalScore          float64
+        FirstPlaces         int
+        BiasedQuestions     int
+        IncompleteQuestions int
     }
     
     var sortedResults []StudentResult
     for id, data := range studentScores {
-        finalScore := data.TotalScore - data.Penalty
+        finalScore := data.TotalScore - data.TotalPenalty
         participant := participants[id]
         sortedResults = append(sortedResults, StudentResult{
-            ID:              id,
-            Name:            participant.Name,
-            PhotoURL:        participant.PhotoURL,
-            TotalScore:      data.TotalScore,
-            Penalty:         data.Penalty,
-            FinalScore:      finalScore,
-            FirstPlaces:     data.FirstPlaces,
-            BiasedQuestions: data.BiasedQuestions,
+            ID:                  id,
+            Name:                participant.Name,
+            PhotoURL:            participant.PhotoURL,
+            TotalScore:          data.TotalScore,
+            BiasPenalty:         data.BiasPenalty,
+            IncompletePenalty:   data.IncompletePenalty,
+            TotalPenalty:        data.TotalPenalty,
+            FinalScore:          finalScore,
+            FirstPlaces:         data.FirstPlaces,
+            BiasedQuestions:     data.BiasedQuestions,
+            IncompleteQuestions: data.IncompleteQuestions,
         })
     }
 
@@ -1352,14 +1485,17 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     var response []map[string]interface{}
     for _, r := range sortedResults {
         response = append(response, map[string]interface{}{
-            "student_id":       r.ID,
-            "name":             r.Name,
-            "photo_url":        r.PhotoURL,
-            "total_score":      fmt.Sprintf("%.2f", r.TotalScore),
-            "penalty_points":   fmt.Sprintf("%.2f", r.Penalty),
-            "final_score":      fmt.Sprintf("%.2f", r.FinalScore),
-            "first_places":     r.FirstPlaces,
-            "biased_questions": r.BiasedQuestions,
+            "student_id":           r.ID,
+            "name":                 r.Name,
+            "photo_url":            r.PhotoURL,
+            "total_score":          fmt.Sprintf("%.2f", r.TotalScore),
+            "bias_penalty":         fmt.Sprintf("%.2f", r.BiasPenalty),
+            "incomplete_penalty":   fmt.Sprintf("%.2f", r.IncompletePenalty),
+            "penalty_points":       fmt.Sprintf("%.2f", r.TotalPenalty),
+            "final_score":          fmt.Sprintf("%.2f", r.FinalScore),
+            "first_places":         r.FirstPlaces,
+            "biased_questions":     r.BiasedQuestions,
+            "incomplete_questions": r.IncompleteQuestions,
         })
     }
 
