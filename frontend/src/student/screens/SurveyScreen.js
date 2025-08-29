@@ -283,7 +283,6 @@ useEffect(() => {
   fetchQuestions();
 }, [sessionId, userSeed]);
 
-  // Timer management
   useEffect(() => {
     let timerInterval;
     let timeoutCheckInterval;

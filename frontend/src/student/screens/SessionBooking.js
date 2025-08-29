@@ -25,11 +25,11 @@ export default function SessionBooking() {
 
  const getVenueBackgroundImage = (venueId) => {
   const backgroundImages = [
-    { uri: 'https://images.unsplash.com/photo-1518843018685-6abd8bc0cdd0?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
-    { uri: 'https://images.unsplash.com/photo-1582372692010-80f9fb012e90?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8ZGFya2VyJTIwdmVudWVzfGVufDB8fDB8fHww' },
-    { uri: 'https://plus.unsplash.com/premium_photo-1667428818575-20060a72b45c?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OXx8ZGFya2VyJTIwcm9vbXN8ZW58MHx8MHx8fDA%3D' },
-    { uri: 'https://images.unsplash.com/photo-1651180594791-8fe66c360542?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTB8fGRhcmtlciUyMHJvb21zfGVufDB8fDB8fHww' },
-    { uri: 'https://images.unsplash.com/photo-1639415033018-a08769eda4b4?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTJ8fGRhcmtlciUyMHJvb21zfGVufDB8fDB8fHww' },
+    { uri: 'https://plus.unsplash.com/premium_photo-1687919417608-09b4f68aafca?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8ZGFyayUyMHZlbnVlcyUyMHdpdGglMjBuZW9uJTIwY29sb3Vyc3xlbnwwfHwwfHx8MA%3D%3D' },
+    { uri: 'https://plus.unsplash.com/premium_photo-1687894509815-fcf10b8b4e6a?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTd8fGRhcmslMjB2ZW51ZXMlMjB3aXRoJTIwbmVvbiUyMGNvbG91cnN8ZW58MHx8MHx8fDA%3D' },
+    { uri: 'https://images.unsplash.com/photo-1699907236334-ee4cf86eba5c?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+    { uri: 'https://images.unsplash.com/photo-1748280887521-6967d0f27450?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+    { uri: 'https://images.unsplash.com/photo-1693756948617-4f7bdd57bf54?q=80&w=1076&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
   ];
 
   let id;

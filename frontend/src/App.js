@@ -4,7 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { ActivityIndicator, View, Modal, Button } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AdminStack from './admin/navigation/AdminStack';
-import StudentStack from './student/navigation/StudentStack';
+import StudentStack from './student/navigation/StudentStack'; // This is now the protected version
 import AdminLoginScreen from './admin/screens/LoginScreen';
 
 export default function App() {

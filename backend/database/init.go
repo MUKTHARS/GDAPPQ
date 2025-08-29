@@ -213,6 +213,79 @@ INDEX idx_survey_results_session_completed (session_id, is_completed),
 
     )`,
 
+`CREATE TABLE IF NOT EXISTS survey_completion_permanent (
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, student_id),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE
+)`,
+
+`CREATE TABLE IF NOT EXISTS survey_results_permanent (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,  
+    responder_id VARCHAR(36) NOT NULL, 
+    question_id VARCHAR(36) NOT NULL,
+    ranks INT NOT NULL,  
+    score DECIMAL(5,2) NOT NULL,         
+    weighted_score DECIMAL(5,2) NOT NULL,
+    penalty_points DECIMAL(3,1) DEFAULT 0.0,
+    is_biased BOOLEAN DEFAULT FALSE,
+    is_current_session TINYINT(1) DEFAULT 0,
+    is_completed BOOLEAN DEFAULT FALSE,
+    expected_ranks JSON DEFAULT NULL,
+    average_score DECIMAL(5,2) DEFAULT 0.0,
+    deviation DECIMAL(5,2) DEFAULT 0.0,
+    penalty_calculated BOOLEAN DEFAULT FALSE,
+   
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_response_permanent (session_id, responder_id, question_id, ranks)
+)`,
+
+
+`CREATE TRIGGER IF NOT EXISTS after_survey_completion_insert
+AFTER INSERT ON survey_completion
+FOR EACH ROW
+INSERT IGNORE INTO survey_completion_permanent 
+(session_id, student_id, completed_at)
+VALUES (NEW.session_id, NEW.student_id, NEW.completed_at)`,
+
+`CREATE TRIGGER IF NOT EXISTS after_survey_results_insert
+AFTER INSERT ON survey_results
+FOR EACH ROW
+INSERT IGNORE INTO survey_results_permanent 
+(id, session_id, student_id, responder_id, question_id, ranks, score, 
+ weighted_score, penalty_points, is_biased, is_current_session, 
+ is_completed, expected_ranks, average_score, deviation, 
+ penalty_calculated, created_at)
+VALUES (NEW.id, NEW.session_id, NEW.student_id, NEW.responder_id, 
+        NEW.question_id, NEW.ranks, NEW.score, NEW.weighted_score, 
+        NEW.penalty_points, NEW.is_biased, NEW.is_current_session, 
+        NEW.is_completed, NEW.expected_ranks, NEW.average_score, 
+        NEW.deviation, NEW.penalty_calculated,  NEW.created_at)`,
+
+`CREATE TRIGGER IF NOT EXISTS after_survey_results_update
+AFTER UPDATE ON survey_results
+FOR EACH ROW
+UPDATE survey_results_permanent 
+SET 
+    score = NEW.score,
+    weighted_score = NEW.weighted_score,
+    penalty_points = NEW.penalty_points,
+    is_biased = NEW.is_biased,
+    is_current_session = NEW.is_current_session,
+    is_completed = NEW.is_completed,
+    average_score = NEW.average_score,
+    deviation = NEW.deviation,
+    penalty_calculated = NEW.penalty_calculated
+  
+WHERE id = NEW.id`,
+    
 `CREATE TABLE IF NOT EXISTS venue_qr_codes (
     id VARCHAR(36) PRIMARY KEY,
     venue_id VARCHAR(36) NOT NULL,
