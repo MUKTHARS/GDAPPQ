@@ -159,14 +159,14 @@ export default function ProfileScreen({ navigation }) {
               </View>
 
               <View style={styles.detailItem}>
-                <View style={styles.detailIcon}>
-                  <Icon name="badge" size={20} color="#4F46E5" />
-                </View>
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Student ID</Text>
-                  <Text style={styles.detailValue}>{userData?.id || 'N/A'}</Text>
-                </View>
-              </View>
+  <View style={styles.detailIcon}>
+    <Icon name="badge" size={20} color="#4F46E5" />
+  </View>
+  <View style={styles.detailContent}>
+    <Text style={styles.detailLabel}>Roll Number</Text>
+    <Text style={styles.detailValue}>{userData?.roll_number || 'N/A'}</Text>
+  </View>
+</View>
 
               <View style={styles.detailItem}>
                 <View style={styles.detailIcon}>

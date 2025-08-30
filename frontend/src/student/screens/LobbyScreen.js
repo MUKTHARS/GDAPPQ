@@ -140,7 +140,7 @@ export default function LobbyScreen({ navigation, route }) {
 
     return (
         <View style={styles.container}>
-            <HamburgerHeader/>
+            <HamburgerHeader title='Lobby'/>
             <View style={styles.contentContainer}>
                 {/* Header Section */}
                 <View style={styles.header}>

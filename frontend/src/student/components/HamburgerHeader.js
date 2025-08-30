@@ -84,7 +84,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
   },
   titleContainer: {
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
     alignItems: 'center',
     paddingHorizontal: 16,
   },
@@ -101,6 +103,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4F46E5',
     marginTop: 4,
     borderRadius: 1,
+    alignSelf: 'center',
   },
   bottomBorder: {
     height: 1,
