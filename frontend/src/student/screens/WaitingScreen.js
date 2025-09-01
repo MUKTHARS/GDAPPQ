@@ -38,7 +38,12 @@ const checkCompletionStatus = async () => {
 
             if (hasEnoughParticipants && completed >= total) {
                 clearInterval(pollingRef.current);
-                navigation.replace('Results', { sessionId });
+                
+                // FIX: Use reset to completely clear navigation stack
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Results', params: { sessionId } }],
+                });
             }
         }
     } catch (err) {
@@ -48,6 +53,19 @@ const checkCompletionStatus = async () => {
         setLoading(false);
     }
 };
+
+
+useEffect(() => {
+    // Safety check: If we somehow end up back on Waiting after seeing Results,
+    // navigate back to Results
+    const currentRoute = navigation.getState()?.routes?.[navigation.getState().index]?.name;
+    if (currentRoute === 'Waiting' && status.allCompleted) {
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'Results', params: { sessionId } }],
+        });
+    }
+}, [navigation, sessionId, status.allCompleted]);
 
     useEffect(() => {
         // Initial check
