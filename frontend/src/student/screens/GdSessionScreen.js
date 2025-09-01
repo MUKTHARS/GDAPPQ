@@ -18,44 +18,82 @@ export default function GdSessionScreen({ navigation, route }) {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [topic, setTopic] = useState("");
 
-  useEffect(() => {
-    const syncPhaseWithServer = async () => {
-      try {
-        const response = await api.student.getSessionPhase(sessionId);
-        if (response.data.phase !== phase) {
-          setPhase(response.data.phase);
-          const remainingSeconds = Math.max(0, 
-            (new Date(response.data.end_time) - new Date()) / 1000
-          );
-          setTimeRemaining(remainingSeconds);
+
+
+  
+ useEffect(() => {
+  const syncPhaseWithServer = async () => {
+    try {
+      const response = await api.student.getSessionPhase(sessionId);
+      if (response.data.phase !== phase) {
+        setPhase(response.data.phase);
+        
+        // Use default values until session data is loaded
+        // The actual session times will be set when session data loads
+        let durationInSeconds = 60; // Default fallback
+        
+        // If session data is already loaded, use the actual values
+        if (session) {
+          if (response.data.phase === 'prep') {
+            durationInSeconds = session.prep_time * 60;
+          } else if (response.data.phase === 'discussion') {
+            durationInSeconds = session.discussion_time * 60;
+          } else {
+            durationInSeconds = session.survey_time * 60;
+          }
         }
-      } catch (error) {
-        console.log("Using local phase state as fallback");
+        
+        setTimeRemaining(durationInSeconds);
       }
-    };
-    
+    } catch (error) {
+      console.log("Using local phase state as fallback");
+    }
+  };
+  
+  // Only sync if we have a sessionId
+  if (sessionId) {
     syncPhaseWithServer();
-  }, [sessionId]);
+  }
+}, [sessionId, session]);
 
   // Load session state from storage on mount
-  useEffect(() => {
-    const loadSessionState = async () => {
+useEffect(() => {
+  const loadSessionState = async () => {
+    try {
+      // Always start from prep phase regardless of saved state
+      setPhase('prep');
+      
+      if (session) {
+        setTimeRemaining(session.prep_time * 60);
+      }
+      
+      // Clean up any saved state to prevent future restores
+      await AsyncStorage.removeItem(`session_${sessionId}`);
+    } catch (error) {
+      console.log('Error handling session state:', error);
+    }
+  };
+
+  if (sessionId) {
+    loadSessionState();
+  }
+}, [sessionId, session]);
+
+
+useEffect(() => {
+  return () => {
+    // Clean up session state when leaving the screen
+    const cleanup = async () => {
       try {
-        const savedState = await AsyncStorage.getItem(`session_${sessionId}`);
-        if (savedState) {
-          const { phase: savedPhase, timeRemaining: savedTime } = JSON.parse(savedState);
-          setPhase(savedPhase);
-          setTimeRemaining(savedTime);
-        }
+        await AsyncStorage.removeItem(`session_${sessionId}`);
       } catch (error) {
-        console.log('Error loading session state:', error);
+        console.log('Cleanup error:', error);
       }
     };
+    cleanup();
+  };
+}, [sessionId]);
 
-    if (sessionId) {
-      loadSessionState();
-    }
-  }, [sessionId]);
 
   // Save session state to storage whenever it changes
   useEffect(() => {
@@ -111,84 +149,198 @@ export default function GdSessionScreen({ navigation, route }) {
       return;
     }
 
-    const fetchSessionAndTopic = async () => {
-      try {
-        const authData = await auth.getAuthData();
-        
-        if (!authData?.token) {
-          throw new Error('Authentication required');
-        }
+const fetchSessionAndTopic = async () => {
+  try {
+    const authData = await auth.getAuthData();
+    
+    if (!authData?.token) {
+      throw new Error('Authentication required');
+    }
 
-        // Fetch session details
-        const response = await api.student.getSession(sessionId);
-        
-        if (response.data?.error) {
-          throw new Error(response.data.error);
-        }
+    // Fetch session details
+    const response = await api.student.getSession(sessionId);
+    
+    if (response.data?.error) {
+      throw new Error(response.data.error);
+    }
 
-        if (!response.data || !response.data.id) {
-          throw new Error('Invalid session data received');
-        }
+    if (!response.data || !response.data.id) {
+      throw new Error('Invalid session data received');
+    }
 
-        const sessionData = response.data;
-        setSession(sessionData);
+    const sessionData = response.data;
+    
+    // Log the received session data for debugging
+    console.log('Session data received:', sessionData);
+    console.log('Prep time:', sessionData.prep_time, 'minutes');
+    console.log('Discussion time:', sessionData.discussion_time, 'minutes');
+    console.log('Survey time:', sessionData.survey_time, 'minutes');
+    
+    setSession(sessionData);
 
-        // Fetch topic for the session's level - FIXED THIS PART
-        try {
-          const topicResponse = await api.student.getTopicForLevel(sessionData.level);
-          
-          // Check if the response structure is correct
-          if (topicResponse.data && topicResponse.data.topic_text) {
-            setTopic(topicResponse.data.topic_text);
-          } else if (topicResponse.data && typeof topicResponse.data === 'string') {
-            // Handle case where the response might be just the topic text
-            setTopic(topicResponse.data);
-          } else {
-            // Use default topic if none found
-            setTopic("Discuss the impact of technology on modern education");
-          }
-        } catch (topicError) {
-          console.log('Failed to fetch session topic:', topicError);
-          setTopic("Discuss the impact of technology on modern education");
-        }
-
-      } catch (error) {
-        console.error('Failed to load session:', error);
-        let errorMessage = error.message;
-        
-        if (error.response) {
-          if (error.response.status === 404) {
-            errorMessage = 'Session not found';
-          } else if (error.response.status === 403) {
-            errorMessage = 'Not authorized to view this session';
-          } else if (error.response.status === 500) {
-            errorMessage = 'Server error - please try again later';
-          }
-        }
-        
-        Alert.alert(
-          'Session Error',
-          errorMessage,
-          [{ 
-            text: 'OK', 
-            onPress: () => navigation.goBack()
-          }]
-        );
-      } finally {
-        setLoading(false);
+    // Fetch topic for the session's level
+    try {
+      const topicResponse = await api.student.getTopicForLevel(sessionData.level);
+      
+      // Check if the response structure is correct
+      if (topicResponse.data && topicResponse.data.topic_text) {
+        setTopic(topicResponse.data.topic_text);
+      } else if (topicResponse.data && typeof topicResponse.data === 'string') {
+        // Handle case where the response might be just the topic text
+        setTopic(topicResponse.data);
+      } else {
+        // Use default topic if none found
+        setTopic("Discuss the impact of technology on modern education");
       }
-    };
+    } catch (topicError) {
+      console.log('Failed to fetch session topic:', topicError);
+      setTopic("Discuss the impact of technology on modern education");
+    }
+
+  } catch (error) {
+    console.error('Failed to load session:', error);
+    let errorMessage = error.message;
+    
+    if (error.response) {
+      if (error.response.status === 404) {
+        errorMessage = 'Session not found';
+      } else if (error.response.status === 403) {
+        errorMessage = 'Not authorized to view this session';
+      } else if (error.response.status === 500) {
+        errorMessage = 'Server error - please try again later';
+      }
+    }
+    
+    Alert.alert(
+      'Session Error',
+      errorMessage,
+      [{ 
+        text: 'OK', 
+        onPress: () => navigation.goBack()
+      }]
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+    // const fetchSessionAndTopic = async () => {
+    //   try {
+    //     const authData = await auth.getAuthData();
+        
+    //     if (!authData?.token) {
+    //       throw new Error('Authentication required');
+    //     }
+
+    //     // Fetch session details
+    //     const response = await api.student.getSession(sessionId);
+        
+    //     if (response.data?.error) {
+    //       throw new Error(response.data.error);
+    //     }
+
+    //     if (!response.data || !response.data.id) {
+    //       throw new Error('Invalid session data received');
+    //     }
+
+    //     const sessionData = response.data;
+    //     setSession(sessionData);
+
+    //     // Fetch topic for the session's level - FIXED THIS PART
+    //     try {
+    //       const topicResponse = await api.student.getTopicForLevel(sessionData.level);
+          
+    //       // Check if the response structure is correct
+    //       if (topicResponse.data && topicResponse.data.topic_text) {
+    //         setTopic(topicResponse.data.topic_text);
+    //       } else if (topicResponse.data && typeof topicResponse.data === 'string') {
+    //         // Handle case where the response might be just the topic text
+    //         setTopic(topicResponse.data);
+    //       } else {
+    //         // Use default topic if none found
+    //         setTopic("Discuss the impact of technology on modern education");
+    //       }
+    //     } catch (topicError) {
+    //       console.log('Failed to fetch session topic:', topicError);
+    //       setTopic("Discuss the impact of technology on modern education");
+    //     }
+
+    //   } catch (error) {
+    //     console.error('Failed to load session:', error);
+    //     let errorMessage = error.message;
+        
+    //     if (error.response) {
+    //       if (error.response.status === 404) {
+    //         errorMessage = 'Session not found';
+    //       } else if (error.response.status === 403) {
+    //         errorMessage = 'Not authorized to view this session';
+    //       } else if (error.response.status === 500) {
+    //         errorMessage = 'Server error - please try again later';
+    //       }
+    //     }
+        
+    //     Alert.alert(
+    //       'Session Error',
+    //       errorMessage,
+    //       [{ 
+    //         text: 'OK', 
+    //         onPress: () => navigation.goBack()
+    //       }]
+    //     );
+    //   } finally {
+    //     setLoading(false);
+    //   }
+    // };
 
     fetchSessionAndTopic();
   }, [sessionId, navigation]);
 
-  const handlePhaseComplete = () => {
+ const getTimerDuration = () => {
+    if (!session) return 60; // fallback
+    
+    switch (phase) {
+      case 'prep':
+        return session.prep_time * 60;
+      case 'discussion':
+        return session.discussion_time * 60;
+      case 'survey':
+        return session.survey_time * 60;
+      default:
+        return 60;
+    }
+  };
+
+  useEffect(() => {
+    if (session) {
+      // Set initial time based on current phase and session configuration
+      let initialTime = 0;
+      switch (phase) {
+        case 'prep':
+          initialTime = session.prep_time * 60;
+          break;
+        case 'discussion':
+          initialTime = session.discussion_time * 60;
+          break;
+        case 'survey':
+          initialTime = session.survey_time * 60;
+          break;
+        default:
+          initialTime = 60; // fallback
+      }
+      setTimeRemaining(initialTime);
+    }
+  }, [session, phase]);
+
+ const handlePhaseComplete = () => {
+    if (!session) return;
+    
     if (phase === 'prep') {
       setPhase('discussion');
-      setTimeRemaining(session.discussion_time * 5); 
+      setTimeRemaining(session.discussion_time * 60);
     } else if (phase === 'discussion') {
       setPhase('survey');
-      setTimeRemaining(session.survey_time * 5);
+      setTimeRemaining(session.survey_time * 60);
     } else {
       navigation.navigate('Survey', { 
         sessionId: sessionId,
@@ -288,18 +440,14 @@ export default function GdSessionScreen({ navigation, route }) {
               <Text style={styles.timerTitle}>Time Remaining</Text>
             </View>
             <View style={styles.timerWrapper}>
-              <Timer 
-                duration={
-                  phase === 'prep' ? session.prep_time :
-                  phase === 'discussion' ? session.discussion_time :
-                  session.survey_time 
-                }
-                onComplete={handlePhaseComplete}
-                active={timerActive}
-                initialTimeRemaining={timeRemaining}
-                onTick={(remaining) => setTimeRemaining(remaining)}
-                textStyle={{ fontSize: 48, fontWeight: '800', color: '#FFFFFF' }}
-              />
+               <Timer 
+    duration={getTimerDuration()}
+    onComplete={handlePhaseComplete}
+    active={timerActive}
+    initialTimeRemaining={timeRemaining}
+    onTick={(remaining) => setTimeRemaining(remaining)}
+    textStyle={{ fontSize: 48, fontWeight: '800', color: '#FFFFFF' }}
+  />
             </View>
           </View>
         </View>

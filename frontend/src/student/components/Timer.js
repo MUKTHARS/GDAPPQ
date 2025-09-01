@@ -4,6 +4,13 @@ import { Text, StyleSheet } from 'react-native';
 const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTick }) => {
   const [remaining, setRemaining] = useState(initialTimeRemaining || duration);
   
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+
   useEffect(() => {
     if (initialTimeRemaining) {
       setRemaining(initialTimeRemaining);
@@ -44,12 +51,12 @@ const Timer = ({ duration, onComplete, active = true, initialTimeRemaining, onTi
 
 const styles = StyleSheet.create({
   timerText: {
-    fontSize: 60,            // Bigger size
+    fontSize: 60,           
     fontWeight: 'bold',
-    color: '#FFFFFF',        // White color
+    color: '#FFFFFF',       
     textAlign: 'center',
-    letterSpacing: 2,        // Space between characters for style
-    textShadowColor: 'rgba(0, 0, 0, 0.6)', // Soft shadow for visibility
+    letterSpacing: 2,       
+    textShadowColor: 'rgba(0, 0, 0, 0.6)', 
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
   },

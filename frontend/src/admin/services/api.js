@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.253.178:8080' 
+    ? 'http://10.150.249.159:8080' 
     : 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
@@ -60,6 +60,37 @@ createBulkSessions: (data) => {
     }]
   });
 },
+getSessions: () => api.get('/admin/sessions', {
+  validateStatus: function (status) {
+    return status < 500; // Accept all status codes except server errors
+  },
+  transformResponse: [
+    function (data) {
+      try {
+        // Handle empty responses
+        if (!data) {
+          return [];
+        }
+        
+        // Handle non-JSON responses
+        if (typeof data === 'string') {
+          try {
+            return JSON.parse(data);
+          } catch (e) {
+            console.error('Failed to parse sessions response:', e);
+            return [];
+          }
+        }
+        
+        // Handle proper JSON responses
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        console.error('Sessions response parsing error:', e);
+        return [];
+      }
+    }
+  ]
+}),
 getSessionFeedbacks: (sessionId) => api.get('/admin/feedbacks', { 
     params: { session_id: sessionId } 
 }),

@@ -55,7 +55,8 @@ router.Handle("/admin/analytics/qualifications", middleware.AdminOnly(
 
 router.Handle("/admin/students", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetStudentProgress)))
-
+router.Handle("/admin/sessions", middleware.AdminOnly(
+    http.HandlerFunc(controllers.GetSessions)))
 router.Handle("/admin/questions", middleware.AdminOnly(
     http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         switch r.Method {

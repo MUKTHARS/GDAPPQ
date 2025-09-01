@@ -170,6 +170,10 @@ func GetSessionRules(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(response)
 }
+
+
+
+
 func UpdateSessionRules(w http.ResponseWriter, r *http.Request) {
     var request struct {
         SessionID string `json:"session_id"`
@@ -221,4 +225,76 @@ func UpdateSessionRules(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+
+
+func GetSessions(w http.ResponseWriter, r *http.Request) {
+    rows, err := database.GetDB().Query(`
+        SELECT id, venue_id, level, start_time, end_time, agenda, status 
+        FROM gd_sessions 
+        ORDER BY created_at DESC
+    `)
+    
+    if err != nil {
+        log.Printf("Database error fetching sessions: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer rows.Close()
+
+    var sessions []map[string]interface{}
+    for rows.Next() {
+        var session struct {
+            ID        string
+            VenueID   string
+            Level     int
+            StartTime string
+            EndTime   string
+            AgendaJSON []byte
+            Status    string
+        }
+        
+        if err := rows.Scan(&session.ID, &session.VenueID, &session.Level, 
+            &session.StartTime, &session.EndTime, &session.AgendaJSON, &session.Status); err != nil {
+            log.Printf("Error scanning session row: %v", err)
+            continue
+        }
+
+        var agenda map[string]interface{}
+        if len(session.AgendaJSON) > 0 {
+            if err := json.Unmarshal(session.AgendaJSON, &agenda); err != nil {
+                log.Printf("Error unmarshaling agenda JSON: %v", err)
+                agenda = map[string]interface{}{
+                    "prep_time": 0,
+                    "discussion": 0,
+                    "survey": 0,
+                }
+            }
+        } else {
+            agenda = map[string]interface{}{
+                "prep_time": 0,
+                "discussion": 0,
+                "survey": 0,
+            }
+        }
+
+        sessions = append(sessions, map[string]interface{}{
+            "id":         session.ID,
+            "venue_id":   session.VenueID,
+            "level":      session.Level,
+            "start_time": session.StartTime,
+            "end_time":   session.EndTime,
+            "agenda":     agenda,
+            "status":     session.Status,
+        })
+    }
+
+    if err := rows.Err(); err != nil {
+        log.Printf("Row iteration error: %v", err)
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(sessions)
 }

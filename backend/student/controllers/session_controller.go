@@ -37,74 +37,166 @@ type SurveyResponse struct {
 	Rankings map[int]string `json:"rankings"`
 }
 
+
 func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	sessionID := r.URL.Query().Get("session_id")
-	if sessionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
-		return
-	}
+    w.Header().Set("Content-Type", "application/json")
+    sessionID := r.URL.Query().Get("session_id")
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
 
-	studentID := r.Context().Value("studentID").(string)
-	log.Printf("Fetching session %s for student %s", sessionID, studentID)
+    studentID := r.Context().Value("studentID").(string)
+    log.Printf("Fetching session %s for student %s", sessionID, studentID)
 
-	// First verify the student is part of this session
-	var isParticipant bool
-	err := database.GetDB().QueryRow(`
+    // First verify the student is part of this session
+    var isParticipant bool
+    err := database.GetDB().QueryRow(`
         SELECT EXISTS(
             SELECT 1 FROM session_participants 
             WHERE session_id = ? AND student_id = ? AND is_dummy = FALSE
         )`, sessionID, studentID).Scan(&isParticipant)
 
-	if err != nil {
-		log.Printf("Database error checking participant: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
+    if err != nil {
+        log.Printf("Database error checking participant: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
 
-	if !isParticipant {
-		log.Printf("Student %s not authorized for session %s", studentID, sessionID)
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view this session"})
-		return
-	}
+    if !isParticipant {
+        log.Printf("Student %s not authorized for session %s", studentID, sessionID)
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Not authorized to view this session"})
+        return
+    }
 
-	// Get session details with proper error handling
-	var (
-		id           string
-		venue        string
-		topic        sql.NullString
-		agendaJSON   []byte
-		startTimeStr string
-	)
+    // Get session details with proper error handling
+    var (
+        id           string
+        venue        string
+        topic        sql.NullString
+        agendaJSON   []byte
+        startTimeStr string
+        level        int
+    )
 
-	err = database.GetDB().QueryRow(`
-        SELECT s.id, v.name, s.topic, s.agenda, s.start_time
+    err = database.GetDB().QueryRow(`
+        SELECT s.id, v.name, s.topic, s.agenda, s.start_time, s.level
         FROM gd_sessions s
         JOIN venues v ON s.venue_id = v.id
         WHERE s.id = ?`, sessionID).Scan(
-		&id, &venue, &topic, &agendaJSON, &startTimeStr,
-	)
+        &id, &venue, &topic, &agendaJSON, &startTimeStr, &level,
+    )
+
+    if err != nil {
+        log.Printf("Database error fetching session: %v", err)
+        if err == sql.ErrNoRows {
+            w.WriteHeader(http.StatusNotFound)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Session not found"})
+        } else {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        }
+        return
+    }
+
+    // Parse start_time from string
+    startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
+    if err != nil {
+        log.Printf("Error parsing start_time: %v", err)
+        startTime = time.Now() // Fallback to current time if parsing fails
+    }
+
+    // Parse agenda using the new parser
+    agenda, err := parseAgendaJSON(agendaJSON)
+    if err != nil {
+        log.Printf("Error parsing agenda JSON: %v. Using defaults.", err)
+        agenda = map[string]int{
+            "prep_time":   1,
+            "discussion": 1,
+            "survey":      1,
+        }
+    }
+
+    response := map[string]interface{}{
+        "id":              id,
+        "venue":           venue,
+        "topic":           topic.String,
+        "prep_time":       agenda["prep_time"],
+        "discussion_time": agenda["discussion"],
+        "survey_time":     agenda["survey"],
+        "level":           level,
+        "start_time":      startTime,
+    }
+
+    log.Printf("Session %s times - Prep: %dmin, Discussion: %dmin, Survey: %dmin", 
+        sessionID, agenda["prep_time"], agenda["discussion"], agenda["survey"])
+    
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        log.Printf("Error encoding session response: %v", err)
+    }
+}
+func parseAgendaJSON(agendaJSON []byte) (map[string]int, error) {
+    var agenda map[string]int
+    
+    if len(agendaJSON) == 0 || string(agendaJSON) == "null" {
+        return map[string]int{
+            "prep_time":   1,
+            "discussion": 1,
+            "survey":      1,
+        }, nil
+    }
+    
+    // Try to parse as both possible formats
+    if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
+        // If first format fails, try the alternative format
+        var altAgenda struct {
+            PrepTime   int `json:"prep_time"`
+            Discussion int `json:"discussion"`
+            Survey     int `json:"survey"`
+        }
+        
+        if err := json.Unmarshal(agendaJSON, &altAgenda); err != nil {
+            return nil, err
+        }
+        
+        agenda = map[string]int{
+            "prep_time":   altAgenda.PrepTime,
+            "discussion": altAgenda.Discussion,
+            "survey":      altAgenda.Survey,
+        }
+    }
+    
+    // Set defaults if any values are missing or zero
+    if agenda["prep_time"] == 0 {
+        agenda["prep_time"] = 1
+    }
+    if agenda["discussion"] == 0 {
+        agenda["discussion"] = 1
+    }
+    if agenda["survey"] == 0 {
+        agenda["survey"] = 1
+    }
+    
+    return agenda, nil
+}
+// Helper function to get session rules internally
+func GetSessionRulesInternal(sessionID string) map[string]interface{} {
+	var agendaJSON []byte
+	err := database.GetDB().QueryRow(`
+		SELECT agenda FROM gd_sessions WHERE id = ?`,
+		sessionID,
+	).Scan(&agendaJSON)
 
 	if err != nil {
-		log.Printf("Database error fetching session: %v", err)
-		if err == sql.ErrNoRows {
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Session not found"})
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+		log.Printf("Error getting session rules internally: %v", err)
+		return map[string]interface{}{
+			"prep_time":       1,
+			"discussion_time": 1,
+			"survey_time":     1,
 		}
-		return
-	}
-
-	// Parse start_time from string
-	startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
-	if err != nil {
-		log.Printf("Error parsing start_time: %v", err)
-		startTime = time.Now() // Fallback to current time if parsing fails
 	}
 
 	// Parse agenda with defaults
@@ -113,42 +205,25 @@ func GetSessionDetails(w http.ResponseWriter, r *http.Request) {
 		Discussion int `json:"discussion"`
 		Survey     int `json:"survey"`
 	}
-
+	
 	// Set default values
 	agenda.PrepTime = 1
 	agenda.Discussion = 1
 	agenda.Survey = 1
-
+	
 	if len(agendaJSON) > 0 {
 		if err := json.Unmarshal(agendaJSON, &agenda); err != nil {
-			log.Printf("Error parsing agenda JSON: %v", err)
+			log.Printf("Error parsing agenda JSON internally: %v", err)
 			// Use defaults if parsing fails
-		} else {
-			// Ensure values are in minutes (not seconds)
-			if agenda.Discussion > 5 { // If somehow seconds got stored
-				agenda.Discussion = agenda.Discussion / 5
-			}
 		}
 	}
 
-	response := map[string]interface{}{
-		"id":              id,
-		"venue":           venue,
-		"topic":           topic.String,
+	return map[string]interface{}{
 		"prep_time":       agenda.PrepTime,
 		"discussion_time": agenda.Discussion,
 		"survey_time":     agenda.Survey,
-		"start_time":      startTime,
-	}
-
-	log.Printf("Successfully fetched session %s", sessionID)
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding session response: %v", err)
 	}
 }
-
-////////////////
 
 func JoinSession(w http.ResponseWriter, r *http.Request) {
 	log.Println("JoinSession endpoint hit")
@@ -195,8 +270,37 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("QR payload parsed - VenueID: %s, Expiry: %s", qrPayload.VenueID, qrPayload.Expiry)
 
+
+     var hasActiveBooking bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM session_participants sp
+            JOIN gd_sessions s ON sp.session_id = s.id
+            WHERE sp.student_id = ? 
+            AND s.venue_id = ? 
+            AND s.status IN ('pending', 'active', 'lobby')
+            AND sp.is_dummy = FALSE
+        )`, studentID, qrPayload.VenueID).Scan(&hasActiveBooking)
+
+    if err != nil {
+        log.Printf("Database error checking booking: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    if !hasActiveBooking {
+        log.Printf("Student %s has no active booking for venue %s", studentID, qrPayload.VenueID)
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "You must book this venue before joining the session"})
+        return
+    }
+
+    log.Printf("Student %s has active booking for venue %s", studentID, qrPayload.VenueID)
+
+
 	// Verify QR code against database and get QR details
-	err := database.GetDB().QueryRow(`
+	err = database.GetDB().QueryRow(`
         SELECT id, max_capacity, current_usage, is_active, qr_group_id
         FROM venue_qr_codes 
         WHERE qr_data = ? AND venue_id = ?`,
@@ -229,6 +333,23 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "This QR code has reached its capacity limit"})
 		return
 	}
+
+    var bookedStudentsCount int
+err = database.GetDB().QueryRow(`
+    SELECT COUNT(DISTINCT sp.student_id)
+    FROM session_participants sp
+    JOIN gd_sessions s ON sp.session_id = s.id
+    WHERE s.venue_id = ? 
+    AND s.status IN ('pending', 'active', 'lobby')
+    AND sp.is_dummy = FALSE`, qrPayload.VenueID).Scan(&bookedStudentsCount)
+
+if err != nil {
+    log.Printf("Error counting booked students: %v", err)
+    // Continue anyway, but log the error
+}
+
+log.Printf("Venue %s has %d booked students, QR capacity: %d/%d", 
+    qrPayload.VenueID, bookedStudentsCount, qrCapacity.CurrentUsage, qrCapacity.MaxCapacity)
 
 	// Increment QR usage
 	_, err = database.GetDB().Exec(`
