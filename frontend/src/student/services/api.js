@@ -564,6 +564,14 @@ getSessionRules: (sessionId) => api.get('/student/session/rules', {
         }
     };
 }),
+
+
+ checkLevelProgression: (sessionId) => api.get('/student/level/check', {
+        params: { session_id: sessionId },
+        validateStatus: function (status) {
+            return status < 500;
+        }
+    }),
   };
 
   

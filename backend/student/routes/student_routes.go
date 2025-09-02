@@ -62,7 +62,8 @@ func SetupStudentRoutes() *http.ServeMux {
 router.Handle("/student/bookings/my", middleware.StudentOnly(
     http.HandlerFunc(controllers.GetUserBookings)))
 
-
+router.Handle("/student/level/check", middleware.StudentOnly(
+    http.HandlerFunc(controllers.CheckLevelProgression)))
     router.Handle("/student/feedback/get", middleware.StudentOnly(
     http.HandlerFunc(controllers.GetFeedback)))
      router.Handle("/student/questions", middleware.StudentOnly(

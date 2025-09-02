@@ -1061,6 +1061,11 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             if err := calculatePenalties(sessionID); err != nil {
                 log.Printf("Warning: Could not calculate penalties: %v", err)
             }
+            
+            // NEW: Update student levels after penalties are calculated
+            if err := updateStudentLevel(sessionID); err != nil {
+                log.Printf("Warning: Could not update student levels: %v", err)
+            }
         }
     }
 
@@ -1265,6 +1270,139 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
     })
 }
 
+func updateStudentLevel(sessionID string) error {
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %v", err)
+    }
+    defer tx.Rollback()
+
+    // Get top 3 students from the session
+    rows, err := tx.Query(`
+        SELECT student_id, final_score
+        FROM (
+            SELECT 
+                student_id,
+                SUM(weighted_score - penalty_points) as final_score
+            FROM survey_results 
+            WHERE session_id = ? AND is_completed = 1
+            GROUP BY student_id
+        ) as scores
+        ORDER BY final_score DESC
+        LIMIT 3`,
+        sessionID)
+    
+    if err != nil {
+        return fmt.Errorf("error getting top students: %v", err)
+    }
+    defer rows.Close()
+
+    var topStudents []string
+    for rows.Next() {
+        var studentID string
+        var finalScore float64
+        if err := rows.Scan(&studentID, &finalScore); err != nil {
+            continue
+        }
+        topStudents = append(topStudents, studentID)
+    }
+
+    // Update level for top 3 students
+    for _, studentID := range topStudents {
+        _, err := tx.Exec(`
+            UPDATE student_users 
+            SET current_gd_level = current_gd_level + 1 
+            WHERE id = ? AND current_gd_level < 5`, // Cap at level 5
+            studentID)
+        
+        if err != nil {
+            log.Printf("Error updating level for student %s: %v", studentID, err)
+            // Continue with other students instead of failing
+        } else {
+            log.Printf("Promoted student %s to next level", studentID)
+        }
+    }
+
+    return tx.Commit()
+}
+
+func CheckLevelProgression(w http.ResponseWriter, r *http.Request) {
+    studentID := r.Context().Value("studentID").(string)
+    sessionID := r.URL.Query().Get("session_id")
+
+    if sessionID == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "session_id is required"})
+        return
+    }
+
+    // Check if student was promoted
+    var oldLevel, newLevel int
+    err := database.GetDB().QueryRow(`
+        SELECT current_gd_level FROM student_users WHERE id = ?`, studentID).Scan(&oldLevel)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    // Check rank and update if needed
+    var rank int
+    err = database.GetDB().QueryRow(`
+        SELECT ranking FROM (
+            SELECT 
+                student_id,
+                RANK() OVER (ORDER BY SUM(weighted_score - penalty_points) DESC) as ranking
+            FROM survey_results 
+            WHERE session_id = ? AND is_completed = 1
+            GROUP BY student_id
+        ) as ranks
+        WHERE student_id = ?`,
+        sessionID, studentID).Scan(&rank)
+
+    if err != nil && err != sql.ErrNoRows {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    promoted := false
+    if rank <= 3 && rank > 0 {
+        _, err = database.GetDB().Exec(`
+            UPDATE student_users 
+            SET current_gd_level = LEAST(current_gd_level + 1, 5) 
+            WHERE id = ?`,
+            studentID)
+        
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update level"})
+            return
+        }
+        promoted = true
+    }
+
+    // Get updated level
+    err = database.GetDB().QueryRow(`
+        SELECT current_gd_level FROM student_users WHERE id = ?`, studentID).Scan(&newLevel)
+    
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "promoted":      promoted,
+        "old_level":     oldLevel,
+        "new_level":     newLevel,
+        "rank":          rank,
+        "session_id":    sessionID,
+        "student_id":    studentID,
+    })
+}
 
 func CalculateSessionPenalties(w http.ResponseWriter, r *http.Request) {
     sessionID := r.URL.Query().Get("session_id")

@@ -363,7 +363,7 @@ useEffect(() => {
           <Text style={styles.hintsText}>
             {phase === 'prep' ? 'Use this time to think about the topic and organize your thoughts' :
              phase === 'discussion' ? 'Actively participate in the group discussion' :
-             'The survey will begin automatically when the timer ends'}
+              'Preparing survey...'}
           </Text>
         </View>
       </View>

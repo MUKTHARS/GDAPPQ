@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gd/database"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -519,4 +520,41 @@ func shuffleQuestionsWithSeed(questions []map[string]interface{}, seed string) [
     }
 
     return shuffled
+}
+
+func checkAndUpdateStudentLevel(studentID string, sessionID string) error {
+    // Check if student is in top 3
+    var rank int
+    err := database.GetDB().QueryRow(`
+        SELECT ranking FROM (
+            SELECT 
+                student_id,
+                RANK() OVER (ORDER BY SUM(weighted_score - penalty_points) DESC) as ranking
+            FROM survey_results 
+            WHERE session_id = ? AND is_completed = 1
+            GROUP BY student_id
+        ) as ranks
+        WHERE student_id = ?`,
+        sessionID, studentID).Scan(&rank)
+    
+    if err != nil {
+        return fmt.Errorf("error checking student rank: %v", err)
+    }
+
+    // If student is in top 3 (rank 1, 2, or 3), promote them
+    if rank <= 3 {
+        _, err := database.GetDB().Exec(`
+            UPDATE student_users 
+            SET current_gd_level = LEAST(current_gd_level + 1, 5) 
+            WHERE id = ?`,
+            studentID)
+        
+        if err != nil {
+            return fmt.Errorf("error promoting student: %v", err)
+        }
+        
+        log.Printf("Student %s promoted to next level (rank %d)", studentID, rank)
+    }
+
+    return nil
 }
