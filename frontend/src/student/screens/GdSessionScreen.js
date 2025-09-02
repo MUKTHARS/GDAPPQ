@@ -17,6 +17,17 @@ export default function GdSessionScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [topic, setTopic] = useState("");
+  const [isNewSession, setIsNewSession] = useState(true);
+
+useEffect(() => {
+    // Reset phase to 'prep' when sessionId changes (new session)
+    if (sessionId) {
+      setPhase('prep');
+      setIsNewSession(true);
+      // Clear any stored session state for this session
+      AsyncStorage.removeItem(`session_${sessionId}`);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     const syncPhaseWithServer = async () => {
@@ -31,71 +42,59 @@ export default function GdSessionScreen({ navigation, route }) {
         }
       } catch (error) {
         console.log("Using local phase state as fallback");
+        // Force prep phase for new sessions
+        if (isNewSession) {
+          setPhase('prep');
+          setIsNewSession(false);
+        }
       }
     };
     
-    syncPhaseWithServer();
-  }, [sessionId]);
+    if (sessionId) {
+      syncPhaseWithServer();
+    }
+  }, [sessionId, isNewSession]);
 
   // Load session state from storage on mount
-useEffect(() => {
-  const loadSessionState = async () => {
-    try {
-      // First check if session is still active from server
+ useEffect(() => {
+    const loadSessionState = async () => {
       try {
-        const sessionResponse = await api.student.getSession(sessionId);
-        if (sessionResponse.data?.status === 'active') {
-          // Session is still active, load saved state
-          const savedState = await AsyncStorage.getItem(`session_${sessionId}`);
-          if (savedState) {
-            const { phase: savedPhase, timeRemaining: savedTime } = JSON.parse(savedState);
+        const savedState = await AsyncStorage.getItem(`session_${sessionId}`);
+        if (savedState) {
+          const { phase: savedPhase, timeRemaining: savedTime } = JSON.parse(savedState);
+          // Only use saved state if it's not a new session
+          if (!isNewSession) {
             setPhase(savedPhase);
             setTimeRemaining(savedTime);
-            return;
           }
         }
       } catch (error) {
-        console.log('Could not verify session status:', error);
+        console.log('Error loading session state:', error);
       }
-      
-      // If session is not active or we couldn't verify, start from prep
-      setPhase('prep');
-      if (session) {
-        setTimeRemaining(session.prep_time * 60);
-      }
-      
-    } catch (error) {
-      console.log('Error loading session state:', error);
-      // Fallback to prep phase
-      setPhase('prep');
-      if (session) {
-        setTimeRemaining(session.prep_time * 60);
-      }
+    };
+
+    if (sessionId && !isNewSession) {
+      loadSessionState();
     }
-  };
+  }, [sessionId, isNewSession]);
 
-  if (sessionId) {
-    loadSessionState();
-  }
-}, [sessionId, session]);
+  // Save session state to storage whenever it changes
+  useEffect(() => {
+    const saveSessionState = async () => {
+      try {
+        await AsyncStorage.setItem(`session_${sessionId}`, JSON.stringify({
+          phase,
+          timeRemaining
+        }));
+      } catch (error) {
+        console.log('Error saving session state:', error);
+      }
+    };
 
-// Save session state to storage whenever it changes
-useEffect(() => {
-  const saveSessionState = async () => {
-    try {
-      await AsyncStorage.setItem(`session_${sessionId}`, JSON.stringify({
-        phase,
-        timeRemaining
-      }));
-    } catch (error) {
-      console.log('Error saving session state:', error);
+    if (sessionId) {
+      saveSessionState();
     }
-  };
-
-  if (sessionId) {
-    saveSessionState();
-  }
-}, [phase, timeRemaining, sessionId]);
+  }, [phase, timeRemaining, sessionId]);
 
   // Handle back button press
   useEffect(() => {
@@ -207,11 +206,9 @@ useEffect(() => {
   const handlePhaseComplete = () => {
     if (phase === 'prep') {
       setPhase('discussion');
-      setTimeRemaining(session.discussion_time * 60); 
+      setTimeRemaining(session.discussion_time * 60);
     } else if (phase === 'discussion') {
-      setPhase('survey');
-      setTimeRemaining(session.survey_time * 60);
-    } else {
+      
       navigation.navigate('Survey', { 
         sessionId: sessionId,
         members: [] 
@@ -232,7 +229,6 @@ useEffect(() => {
     switch (currentPhase) {
       case 'prep': return ['#FF9800', '#F57C00'];
       case 'discussion': return ['#4CAF50', '#388E3C'];
-      case 'survey': return ['#2196F3', '#1976D2'];
       default: return ['#9E9E9E', '#757575'];
     }
   };
@@ -310,59 +306,56 @@ useEffect(() => {
               <Text style={styles.timerTitle}>Time Remaining</Text>
             </View>
             <View style={styles.timerWrapper}>
-<Timer 
-  duration={
-    phase === 'prep' ? session.prep_time * 60 :        // Convert minutes to seconds
-    phase === 'discussion' ? session.discussion_time * 60 : // Convert minutes to seconds
-    session.survey_time * 60                           // Convert minutes to seconds
-  }
-  onComplete={handlePhaseComplete}
-  active={timerActive}
-  initialTimeRemaining={timeRemaining}
-  onTick={(remaining) => setTimeRemaining(remaining)}
-  sessionId={sessionId}
-  phase={phase}
-  textStyle={{ fontSize: 48, fontWeight: '800', color: '#FFFFFF' }}
-/>
+               <Timer 
+    duration={
+      phase === 'prep' ? session.prep_time * 60 : 
+      phase === 'discussion' ? session.discussion_time * 60 : 
+      1 
+    }
+    onComplete={handlePhaseComplete}
+    active={timerActive}
+    initialTimeRemaining={timeRemaining}
+    onTick={(remaining) => setTimeRemaining(remaining)}
+    textStyle={{ fontSize: 48, fontWeight: '800', color: '#FFFFFF' }}
+  />
             </View>
           </View>
         </View>
 
         {/* Phase Progress Indicators */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressSteps}>
-            {['prep', 'discussion', 'survey'].map((stepPhase, index) => (
-              <View key={stepPhase} style={styles.stepContainer}>
-                <View style={[
-                  styles.stepCircle,
-                  phase === stepPhase && styles.stepCircleActive,
-                  index < ['prep', 'discussion', 'survey'].indexOf(phase) && styles.stepCircleCompleted
-                ]}>
-                  <LinearGradient
-                    colors={phase === stepPhase || index < ['prep', 'discussion', 'survey'].indexOf(phase) 
-                      ? getPhaseColors(stepPhase) 
-                      : ['#374151', '#4B5563']}
-                    style={styles.stepGradient}
-                  >
-                    <Icon 
-                      name={getPhaseIcon(stepPhase)} 
-                      size={26} 
-                      color={phase === stepPhase || index < ['prep', 'discussion', 'survey'].indexOf(phase) ? '#fff' : '#9CA3AF'} 
-                    />
-                  </LinearGradient>
-                </View>
-                <Text style={[
-                  styles.stepLabel,
-                  phase === stepPhase && styles.stepLabelActive
-                ]}>
-                  {stepPhase === 'prep' ? 'Prep' : 
-                   stepPhase === 'discussion' ? 'Discuss' : 'Survey'}
-                </Text>
-                {index < 2 && <View style={styles.stepConnector} />}
-              </View>
-            ))}
-          </View>
+       <View style={styles.progressContainer}>
+  <View style={styles.progressSteps}>
+    {['prep', 'discussion'].map((stepPhase, index) => ( 
+      <View key={stepPhase} style={styles.stepContainer}>
+        <View style={[
+          styles.stepCircle,
+          phase === stepPhase && styles.stepCircleActive,
+          index < ['prep', 'discussion'].indexOf(phase) && styles.stepCircleCompleted
+        ]}>
+          <LinearGradient
+            colors={phase === stepPhase || index < ['prep', 'discussion'].indexOf(phase) 
+              ? getPhaseColors(stepPhase) 
+              : ['#374151', '#4B5563']}
+            style={styles.stepGradient}
+          >
+            <Icon 
+              name={getPhaseIcon(stepPhase)} 
+              size={26} 
+              color={phase === stepPhase || index < ['prep', 'discussion'].indexOf(phase) ? '#fff' : '#9CA3AF'} 
+            />
+          </LinearGradient>
         </View>
+        <Text style={[
+          styles.stepLabel,
+          phase === stepPhase && styles.stepLabelActive
+        ]}>
+          {stepPhase === 'prep' ? 'Prep' : 'Discuss'}
+        </Text>
+        {index < 1 && <View style={styles.stepConnector} />} {/* Updated to index < 1 */}
+      </View>
+    ))}
+  </View>
+</View>
 
         {/* Action Hints */}
         <View style={styles.hintsContainer}>

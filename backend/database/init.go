@@ -384,16 +384,6 @@ WHERE id = NEW.id`,
     UNIQUE KEY (session_id, student_id)
 )`,
 
-`CREATE TABLE IF NOT EXISTS session_phases (
-    session_id VARCHAR(36) NOT NULL,
-    phase ENUM('prep', 'discussion', 'survey') NOT NULL,
-    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    end_time TIMESTAMP NOT NULL,
-    completed BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (session_id, phase),
-    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
-);`,
-
 
     }
 

@@ -69,11 +69,5 @@ router.Handle("/student/bookings/my", middleware.StudentOnly(
         http.HandlerFunc(controllers.GetQuestionsForStudent)))
     router.Handle("/student/session/status", middleware.StudentOnly(
     http.HandlerFunc(controllers.UpdateSessionStatus)))
-    router.Handle("/student/session/phase-time", middleware.StudentOnly(
-    http.HandlerFunc(controllers.GetSessionPhaseTime)))
-router.Handle("/student/session/update-phase-time", middleware.StudentOnly(
-    http.HandlerFunc(controllers.UpdateSessionPhaseTime)))
-router.Handle("/student/session/complete-phase", middleware.StudentOnly(
-    http.HandlerFunc(controllers.CompleteSessionPhase)))
     return router
 }
