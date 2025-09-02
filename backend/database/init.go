@@ -180,6 +180,7 @@ func InitDB(db *sql.DB) error {
     is_completed BOOLEAN DEFAULT FALSE,
     expected_ranks JSON DEFAULT NULL,
     average_score DECIMAL(5,2) DEFAULT 0.0,
+     median_score DECIMAL(5,2) DEFAULT 0.00,
 deviation DECIMAL(5,2) DEFAULT 0.0,
 penalty_calculated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -382,6 +383,16 @@ WHERE id = NEW.id`,
     FOREIGN KEY (student_id) REFERENCES student_users(id) ON DELETE CASCADE,
     UNIQUE KEY (session_id, student_id)
 )`,
+
+`CREATE TABLE IF NOT EXISTS session_phases (
+    session_id VARCHAR(36) NOT NULL,
+    phase ENUM('prep', 'discussion', 'survey') NOT NULL,
+    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    end_time TIMESTAMP NOT NULL,
+    completed BOOLEAN DEFAULT FALSE,
+    PRIMARY KEY (session_id, phase),
+    FOREIGN KEY (session_id) REFERENCES gd_sessions(id) ON DELETE CASCADE
+);`,
 
 
     }

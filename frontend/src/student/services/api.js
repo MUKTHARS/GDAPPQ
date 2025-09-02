@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from './auth';
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.249.159:8080' 
+    ? 'http://10.150.252.239:8080' 
     : 'http://localhost:8080',
 });
 
@@ -564,6 +564,71 @@ getSessionRules: (sessionId) => api.get('/student/session/rules', {
         }
     };
 }),
+
+getSessionPhaseTime: (sessionId, phase) => {
+  return api.get('/student/session/phase-time', {
+    params: { 
+      session_id: sessionId,
+      phase: phase
+    },
+    validateStatus: function (status) {
+      // Accept all status codes including 500
+      return true;
+    },
+    transformResponse: [
+      function (data) {
+        try {
+          // If server returns error, return empty data to trigger fallback
+          if (typeof data === 'string' && data.includes('error')) {
+            return {};
+          }
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          return parsed;
+        } catch (e) {
+          console.log('Timer API response parsing error:', e);
+          return {};
+        }
+      }
+    ]
+  }).catch(error => {
+    console.log('Timer API error, using fallback:', error.message);
+    // Return empty response to trigger fallback
+    return { data: {} };
+  });
+},
+
+updateSessionPhaseTime: (sessionId, phase, remainingSeconds) => {
+  return api.post('/student/session/update-phase-time', {
+    session_id: sessionId,
+    phase: phase,
+    remaining_seconds: remainingSeconds
+  }, {
+    validateStatus: function (status) {
+      // Accept all status codes
+      return true;
+    }
+  }).catch(error => {
+    console.log('Timer update error (non-critical):', error.message);
+    
+    return { data: { status: 'ignored' } };
+  });
+},
+
+completeSessionPhase: (sessionId, phase) => {
+  return api.post('/student/session/complete-phase', {
+    session_id: sessionId,
+    phase: phase
+  }, {
+    validateStatus: function (status) {
+      
+      return true;
+    }
+  }).catch(error => {
+    console.log('Phase completion error (non-critical):', error.message);
+    
+    return { data: { status: 'ignored' } };
+  });
+},
   };
 
   

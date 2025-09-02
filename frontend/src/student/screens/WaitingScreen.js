@@ -17,33 +17,47 @@ export default function WaitingScreen({ navigation, route }) {
     const [error, setError] = useState(null);
     const pollingRef = useRef(null);
     const [lastUpdate, setLastUpdate] = useState(Date.now());
+const [isNavigating, setIsNavigating] = useState(false);
 
 const checkCompletionStatus = async () => {
+    if (isNavigating) return; // Prevent multiple navigation attempts
+    
     try {
         const response = await api.student.checkSurveyCompletion(sessionId);
         
+        console.log('Completion check response:', response.data);
+        
         if (response.data) {
-            const completed = Number(response.data.completed) || 0;
-            const total = Number(response.data.total) || 0;
+            const responseData = response.data;
             
-            // Minimum 2 participants required (excluding self)
-            const hasEnoughParticipants = total >= 2;
+            // Handle different response structures
+            const completed = Number(responseData.completed) || Number(responseData.data?.completed) || 0;
+            const total = Number(responseData.total) || Number(responseData.data?.total) || 0;
+            
+            console.log('Completion status - Completed:', completed, 'Total:', total);
+            
+            // Wait for ALL participants to complete
+            const allCompletedNow = completed >= total && total > 0;
             
             setStatus({
-                allCompleted: hasEnoughParticipants && (completed >= total),
+                allCompleted: allCompletedNow,
                 completed,
                 total
             });
             setLastUpdate(Date.now());
 
-            if (hasEnoughParticipants && completed >= total) {
+            // Only navigate when ALL participants have completed AND we're not already navigating
+            if (allCompletedNow && !isNavigating) {
+                setIsNavigating(true);
+                console.log('ALL participants completed, navigating to Results');
                 clearInterval(pollingRef.current);
                 
-                // FIX: Use reset to completely clear navigation stack
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Results', params: { sessionId } }],
-                });
+                setTimeout(() => {
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Results', params: { sessionId } }],
+                    });
+                }, 100);
             }
         }
     } catch (err) {
@@ -67,34 +81,34 @@ useEffect(() => {
     }
 }, [navigation, sessionId, status.allCompleted]);
 
-    useEffect(() => {
-        // Initial check
-        checkCompletionStatus();
+useEffect(() => {
+    // Initial check
+    checkCompletionStatus();
 
-        // Start polling every 3 seconds
-        pollingRef.current = setInterval(checkCompletionStatus, 3000);
+    // Start polling every 3 seconds
+    pollingRef.current = setInterval(checkCompletionStatus, 3000);
 
-        // Handle back button
-        const backHandler = BackHandler.addEventListener(
-            'hardwareBackPress',
-            () => {
-                Alert.alert(
-                    "Waiting for Results",
-                    "Are you sure you want to leave? You won't see the results if you exit now.",
-                    [
-                        { text: "Cancel", onPress: () => null },
-                        { text: "Exit", onPress: () => navigation.goBack() }
-                    ]
-                );
-                return true;
-            }
-        );
+    // Handle back button
+    const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+            Alert.alert(
+                "Waiting for Results",
+                "Are you sure you want to leave? You won't see the results if you exit now.",
+                [
+                    { text: "Cancel", onPress: () => null },
+                    { text: "Exit", onPress: () => navigation.goBack() }
+                ]
+            );
+            return true;
+        }
+    );
 
-        return () => {
-            clearInterval(pollingRef.current);
-            backHandler.remove();
-        };
-    }, [sessionId]);
+    return () => {
+        clearInterval(pollingRef.current);
+        backHandler.remove();
+    };
+}, [sessionId, isNavigating]);
 
     if (loading) {
         return (
