@@ -143,6 +143,8 @@ export default function SessionConfig() {
           <Picker.Item label="Level 1" value={1} />
           <Picker.Item label="Level 2" value={2} />
           <Picker.Item label="Level 3" value={3} />
+          <Picker.Item label="Level 4" value={4} />
+          <Picker.Item label="Level 5" value={5} />
         </Picker>
       </View>
       

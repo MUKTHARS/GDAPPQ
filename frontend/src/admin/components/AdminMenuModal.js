@@ -20,6 +20,7 @@ const AdminMenuModal = ({ visible, onClose, navigation }) => {
     // { name: 'Bulk Session', title: 'Bulk Session', icon: 'post-add' },
     { name: 'BookedStudents', title: 'Booked Students', icon: 'check-circle' },
     { name: 'RankingPointsConfig', title: 'Ranking Points Config', icon: 'trophy' },
+     { name: 'AdminFeedbackScreen', title: 'Admin Feedback', icon: 'trophy' },
   ];
 
   const handleNavigation = (screenName) => {

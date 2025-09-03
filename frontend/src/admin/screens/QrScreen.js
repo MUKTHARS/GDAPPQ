@@ -80,9 +80,12 @@ export default function QrScreen({ route, navigation }) {
   const { venue } = route.params;
 
   // Get stored QR data for this venue
-  const getStoredQR = async () => {
-    try {
-      const storedData = await AsyncStorage.getItem(`qr_${venue.id}`);
+const getStoredQR = async () => {
+  try {
+    const authData = await AsyncStorage.getItem('admin_auth_data');
+    if (authData) {
+      const { user_id } = JSON.parse(authData);
+      const storedData = await AsyncStorage.getItem(`qr_${venue.id}_${user_id}`);
       if (storedData) {
         const { qrData, expiry, qrId, isFull } = JSON.parse(storedData);
         // Return stored QR regardless of fullness for display
@@ -90,26 +93,30 @@ export default function QrScreen({ route, navigation }) {
           return { qrData, expiry, qrId, isFull };
         }
       }
-      return null;
-    } catch (error) {
-      console.error('Error getting stored QR:', error);
-      return null;
     }
-  };
+    return null;
+  } catch (error) {
+    console.error('Error getting stored QR:', error);
+    return null;
+  }
+};
 
-  // Store QR data for this venue
-  const storeQR = async (qrData, expiry, qrId, isFull = false) => {
-    try {
-      await AsyncStorage.setItem(`qr_${venue.id}`, JSON.stringify({
+const storeQR = async (qrData, expiry, qrId, isFull = false) => {
+  try {
+    const authData = await AsyncStorage.getItem('admin_auth_data');
+    if (authData) {
+      const { user_id } = JSON.parse(authData);
+      await AsyncStorage.setItem(`qr_${venue.id}_${user_id}`, JSON.stringify({
         qrData,
         expiry,
         qrId,
         isFull
       }));
-    } catch (error) {
-      console.error('Error storing QR:', error);
     }
-  };
+  } catch (error) {
+    console.error('Error storing QR:', error);
+  }
+};
 
   // Safe date conversion function to prevent "Date value out of bounds" error
   const safeToISOString = (dateString) => {

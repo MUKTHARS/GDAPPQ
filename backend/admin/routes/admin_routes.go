@@ -50,11 +50,6 @@ router.Handle("/admin/venues/", middleware.AdminOnly(http.HandlerFunc(func(w htt
 router.Handle("/admin/analytics/qualifications", middleware.AdminOnly(
 	http.HandlerFunc(controllers.GetQualificationRates)))
 
-    router.Handle("/admin/calendar", middleware.AdminOnly(
-    http.HandlerFunc(controllers.GetSessionCalendar)))
-
-router.Handle("/admin/students", middleware.AdminOnly(
-    http.HandlerFunc(controllers.GetStudentProgress)))
 router.Handle("/admin/sessions", middleware.AdminOnly(
     http.HandlerFunc(controllers.GetSessions)))
 router.Handle("/admin/questions", middleware.AdminOnly(

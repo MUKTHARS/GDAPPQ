@@ -54,6 +54,8 @@ const StoryCircles = () => {
           '• Level 1: Beginner discussions',
           '• Level 2: Intermediate topics',
           '• Level 3: Advanced conversations',
+          '• Level 4: Advanced 2 conversations',
+          '• Level 5: Advanced 3 conversations',
           '• Match your current academic level',
           '• Progress through levels systematically'
         ]

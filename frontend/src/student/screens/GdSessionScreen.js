@@ -351,7 +351,7 @@ useEffect(() => {
         ]}>
           {stepPhase === 'prep' ? 'Prep' : 'Discuss'}
         </Text>
-        {index < 1 && <View style={styles.stepConnector} />} {/* Updated to index < 1 */}
+        {index < 1 && <View style={styles.stepConnector} />} 
       </View>
     ))}
   </View>
@@ -362,8 +362,7 @@ useEffect(() => {
           <Icon name="info-outline" size={20} color="#4F46E5" />
           <Text style={styles.hintsText}>
             {phase === 'prep' ? 'Use this time to think about the topic and organize your thoughts' :
-             phase === 'discussion' ? 'Actively participate in the group discussion' :
-              'Preparing survey...'}
+             phase === 'discussion' ? 'Actively participate in the group discussion' :'Preparing survey...'}
           </Text>
         </View>
       </View>

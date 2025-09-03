@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from './auth';
 const api = axios.create({
   baseURL: Platform.OS === 'android' 
-    ? 'http://10.150.252.239:8080' 
+    ? 'http://10.150.248.197:8080' 
     : 'http://localhost:8080',
 });
 
@@ -190,43 +190,43 @@ api.student = {
     return { data: [] };
   }),
  getUserBookings: () => {
-  return api.get('/student/bookings/my', {
-    validateStatus: function (status) {
-      // Accept all status codes including 404
-      return true;
+        return api.get('/student/bookings/my', {
+            validateStatus: function (status) {
+                // Accept all status codes including 404
+                return true;
+            },
+            transformResponse: [
+                function (data) {
+                    try {
+                        // Handle empty responses
+                        if (!data) {
+                            return [];
+                        }
+                        
+                        // Handle non-JSON responses
+                        if (typeof data === 'string') {
+                            try {
+                                return JSON.parse(data);
+                            } catch (e) {
+                                return [];
+                            }
+                        }
+                        
+                        // Handle proper JSON responses
+                        const parsed = typeof data === 'object' ? data : JSON.parse(data);
+                        return parsed.data || parsed || [];
+                    } catch (e) {
+                        console.error('Bookings response parsing error:', e);
+                        return [];
+                    }
+                }
+            ]
+        }).catch(error => {
+            console.error('Bookings API error:', error);
+            // Return empty array on error
+            return { data: [] };
+        });
     },
-    transformResponse: [
-      function (data) {
-        try {
-          // Handle empty responses
-          if (!data) {
-            return [];
-          }
-          
-          // Handle non-JSON responses
-          if (typeof data === 'string') {
-            try {
-              return JSON.parse(data);
-            } catch (e) {
-              return [];
-            }
-          }
-          
-          // Handle proper JSON responses
-          const parsed = typeof data === 'object' ? data : JSON.parse(data);
-          return parsed.data || parsed || [];
-        } catch (e) {
-          console.error('Bookings response parsing error:', e);
-          return [];
-        }
-      }
-    ]
-  }).catch(error => {
-    console.error('Bookings API error:', error);
-    // Return empty array on error
-    return { data: [] };
-  });
-},
 markSurveyCompleted: (sessionId) => api.post('/student/survey/mark-completed', { 
     session_id: sessionId 
 }).catch(err => {
@@ -409,7 +409,12 @@ getFeedback: (sessionId) => api.get('/student/feedback/get', {
     ]
 }),
   bookVenue: (venueId) => api.post('/student/sessions/book', { venue_id: venueId }),
-  checkBooking: (venueId) => api.get('/student/session/check', { params: { venue_id: venueId } }),
+ checkBooking: (venueId) => api.get('/student/session/check', { 
+        params: { venue_id: venueId },
+        validateStatus: function (status) {
+            return status < 500; // Accept all status codes except server errors
+        }
+    }),
   cancelBooking: (venueId) => api.delete('/student/session/cancel', { data: { venue_id: venueId } }),
    updateSessionStatus: (sessionId, status) => api.put('/student/session/status', { sessionId, status }),
    startSurveyTimer: (sessionId) => api.post('/student/survey/start', { session_id: sessionId }),

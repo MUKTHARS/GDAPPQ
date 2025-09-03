@@ -296,9 +296,11 @@ WHERE id = NEW.id`,
     max_capacity INT DEFAULT 15,
     current_usage INT DEFAULT 0,
     qr_group_id VARCHAR(36) NULL,
+    created_by VARCHAR(36) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
    /** CREATE INDEX IF NOT EXISTS idx_venue_qr_group ON venue_qr_codes (venue_id, qr_group_id);**/
-    FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE
+    FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES admin_users(id) ON DELETE SET NULL
 )`,
 
 `CREATE TABLE IF NOT EXISTS consensus_rankings (

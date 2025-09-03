@@ -12,60 +12,88 @@ export default function QrScannerScreen({ navigation }) {
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
+   const [hasActiveBooking, setHasActiveBooking] = useState(false);
   const camera = useRef(null);
   const device = useCameraDevice('back');
   const { hasPermission: cameraPermission, requestPermission } = useCameraPermission();
   const isFocused = useIsFocused();
 
-  const codeScanner = useCodeScanner({
-    codeTypes: ['qr'],
+   useEffect(() => {
+        checkActiveBooking();
+    }, []);
 
-    onCodeScanned: async (codes) => {
-      if (codes.length > 0 && isActive && isFocused) {
-        setIsActive(false);
-        setIsScanning(true);
-        const qrData = codes[0].value;
-        
+    const checkActiveBooking = async () => {
         try {
-          const authData = await auth.getAuthData();
-          
-          if (!authData?.token) {
-            throw new Error('Authentication required - please login again');
-          }
-
-          const response = await api.student.joinSession({ qr_data: qrData });
-
-          if (response?.data?.error) {
-            throw new Error(response.data.error);
-          }
-
-          if (!response?.data?.session_id) {
-            throw new Error('Failed to join session - invalid response');
-          }
-
-          // Navigate to lobby instead of directly to session
-          navigation.navigate('Lobby', { 
-            sessionId: response.data.session_id 
-          });
-          
+            const authData = await auth.getAuthData();
+            const bookingsResponse = await api.student.getUserBookings();
+            
+            // Check if user has any active bookings
+            const hasBooking = Array.isArray(bookingsResponse.data) && 
+                              bookingsResponse.data.length > 0;
+            
+            setHasActiveBooking(hasBooking);
+            
+            if (!hasBooking) {
+                setError('You must book a venue before scanning QR code');
+                setIsActive(false);
+            }
         } catch (error) {
-          console.error('QR Scan Error:', error);
-          setIsActive(true);
-          setIsScanning(false);
-          Alert.alert(
-            'Session Error',
-            error.message || 'Failed to join session',
-            [{ 
-              text: 'OK', 
-              onPress: () => {
-                setIsActive(true);
-                setIsScanning(false);
-              }
-            }]
-          );
+            console.error('Error checking active booking:', error);
+            setError('Unable to verify booking status');
+            setIsActive(false);
         }
-      }
-    }
+    };
+
+
+   const codeScanner = useCodeScanner({
+        codeTypes: ['qr'],
+
+        onCodeScanned: async (codes) => {
+            if (codes.length > 0 && isActive && isFocused && hasActiveBooking) {
+                setIsActive(false);
+                setIsScanning(true);
+                const qrData = codes[0].value;
+                
+                try {
+                    const authData = await auth.getAuthData();
+                    
+                    if (!authData?.token) {
+                        throw new Error('Authentication required - please login again');
+                    }
+
+                    const response = await api.student.joinSession({ qr_data: qrData });
+
+                    if (response?.data?.error) {
+                        throw new Error(response.data.error);
+                    }
+
+                    if (!response?.data?.session_id) {
+                        throw new Error('Failed to join session - invalid response');
+                    }
+
+                    // Navigate to lobby instead of directly to session
+                    navigation.navigate('Lobby', { 
+                        sessionId: response.data.session_id 
+                    });
+                    
+                } catch (error) {
+                    console.error('QR Scan Error:', error);
+                    setIsActive(true);
+                    setIsScanning(false);
+                    Alert.alert(
+                        'Session Error',
+                        error.message || 'Failed to join session',
+                        [{ 
+                            text: 'OK', 
+                            onPress: () => {
+                                setIsActive(true);
+                                setIsScanning(false);
+                            }
+                        }]
+                    );
+                }
+            }
+        }
   });
 
   useEffect(() => {
@@ -145,6 +173,38 @@ export default function QrScannerScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+       {!hasActiveBooking && error && (
+                <View style={styles.bookingErrorContainer}>
+                    <View style={styles.bookingErrorContent}>
+                        <Icon name="event-busy" size={48} color="#EF4444" />
+                        <Text style={styles.bookingErrorTitle}>No Active Booking</Text>
+                        <Text style={styles.bookingErrorText}>
+                            You need to book a venue before scanning QR codes
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.bookingErrorButton}
+                            onPress={() => navigation.navigate('SessionBooking')}
+                        >
+                            <Icon name="event-available" size={18} color="#fff" />
+                            <Text style={styles.bookingErrorButtonText}>Book Venue</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {/* Only show camera if user has active booking */}
+            {hasActiveBooking && device && (
+                <Camera
+                    ref={camera}
+                    style={StyleSheet.absoluteFill}
+                    device={device}
+                    isActive={isActive && isFocused}
+                    codeScanner={codeScanner}
+                    torch={'off'}
+                    zoom={1}
+                />
+            )}
+
       <Camera
         ref={camera}
         style={StyleSheet.absoluteFill}
@@ -490,6 +550,47 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+    bookingErrorContainer: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    bookingErrorContent: {
+        backgroundColor: '#1F2937',
+        padding: 24,
+        borderRadius: 16,
+        alignItems: 'center',
+        width: '80%',
+    },
+    bookingErrorTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#F8FAFC',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    bookingErrorText: {
+        fontSize: 16,
+        color: '#CBD5E1',
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    bookingErrorButton: {
+        backgroundColor: '#4F46E5',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    bookingErrorButtonText: {
+        color: '#FFFFFF',
+        fontWeight: '600',
+        fontSize: 16,
+    },
 });
 
 

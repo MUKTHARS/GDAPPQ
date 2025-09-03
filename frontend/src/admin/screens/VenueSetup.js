@@ -161,7 +161,7 @@ export default function VenueSetup({ route, navigation }) {
 
       <TextInput
         style={styles.input}
-        placeholder="Level (1, 2, or 3)"
+        placeholder="Level (1, 2, 3, 4 or 5)"
         keyboardType="numeric"
         value={level}
         onChangeText={setLevel}

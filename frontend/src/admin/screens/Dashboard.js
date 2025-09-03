@@ -185,7 +185,7 @@ export default function Dashboard({ navigation }) {
 
             <TextInput
               style={styles.input}
-              placeholder="Level (1, 2, or 3)"
+              placeholder="Level (1, 2, 3, 4 or 5)"
               value={venueLevel}
               onChangeText={setVenueLevel}
               keyboardType="numeric"
@@ -301,6 +301,8 @@ export default function Dashboard({ navigation }) {
               backgroundColor:
                 venue.level === 1 ? '#2e86de' :
                   venue.level === 2 ? '#10ac84' :
+                  venue.level === 3 ? '#6610acff' :
+                  venue.level === 4 ? '#1034acff' :
                     '#ee5253'
             }
           ]}>

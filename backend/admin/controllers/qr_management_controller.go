@@ -14,14 +14,21 @@ func GetVenueQRCodes(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{"error": "venue_id parameter is required"})
         return
     }
+     
+    adminID := r.Context().Value("userID").(string)
+    if adminID == "" {
+        w.WriteHeader(http.StatusUnauthorized)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Admin authentication required"})
+        return
+    }
 
     rows, err := database.GetDB().Query(`
         SELECT id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id, created_at
         FROM venue_qr_codes 
-        WHERE venue_id = ? AND is_active = TRUE
+        WHERE venue_id = ? AND created_by = ? AND is_active = TRUE
         AND expires_at > NOW()
         ORDER BY created_at DESC`,
-        venueID)
+        venueID, adminID) 
     
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
@@ -74,11 +81,19 @@ func DeactivateQR(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+ adminID := r.Context().Value("userID").(string)
+    if adminID == "" {
+        w.WriteHeader(http.StatusUnauthorized)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Admin authentication required"})
+        return
+    }
+
+
     _, err := database.GetDB().Exec(`
         UPDATE venue_qr_codes 
         SET is_active = FALSE 
-        WHERE id = ?`,
-        qrID)
+       WHERE id = ? AND created_by = ?`, 
+        qrID, adminID)
     
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)

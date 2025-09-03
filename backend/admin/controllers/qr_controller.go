@@ -19,6 +19,13 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+adminID := r.Context().Value("userID").(string)
+    if adminID == "" {
+        w.WriteHeader(http.StatusUnauthorized)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Admin authentication required"})
+        return
+    }
+
     // Check if force_new parameter is set
     forceNew := r.URL.Query().Get("force_new") == "true"
 
@@ -35,15 +42,15 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
         err := database.GetDB().QueryRow(`
             SELECT id, qr_data, expires_at, max_capacity, current_usage
             FROM venue_qr_codes 
-            WHERE venue_id = ? AND is_active = TRUE 
+            WHERE venue_id = ? AND created_by = ? AND is_active = TRUE 
             AND expires_at > NOW()
             AND current_usage < max_capacity
             ORDER BY created_at DESC LIMIT 1`,
-            venueID,
+            venueID, adminID, // Added adminID filter
         ).Scan(&availableQR.ID, &availableQR.QRData, &availableQR.ExpiresAt, 
               &availableQR.MaxCapacity, &availableQR.CurrentUsage)
 
-        if err == nil {
+       if err == nil {
             // Found available QR code - return it
             w.Header().Set("Content-Type", "application/json")
             json.NewEncoder(w).Encode(map[string]interface{}{
@@ -62,13 +69,13 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
         
         // If we get here, no available QR was found (either expired or full)
         // Check if there are any full QR codes that should trigger new generation
-        var fullQRCount int
+       var fullQRCount int
         database.GetDB().QueryRow(`
             SELECT COUNT(*) FROM venue_qr_codes 
-            WHERE venue_id = ? AND is_active = TRUE 
+            WHERE venue_id = ? AND created_by = ? AND is_active = TRUE 
             AND expires_at > NOW()
             AND current_usage >= max_capacity`,
-            venueID).Scan(&fullQRCount)
+            venueID, adminID).Scan(&fullQRCount) // Added adminID filter
             
         if fullQRCount > 0 {
             // There are full QR codes, so we should generate a new one
@@ -89,15 +96,15 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
                 err := database.GetDB().QueryRow(`
                     SELECT id, qr_data, expires_at, max_capacity, current_usage
                     FROM venue_qr_codes 
-                    WHERE venue_id = ? AND is_active = TRUE 
+                    WHERE venue_id = ? AND created_by = ? AND is_active = TRUE 
                     AND expires_at > NOW()
                     AND current_usage >= max_capacity
                     ORDER BY created_at DESC LIMIT 1`,
-                    venueID,
+                    venueID, adminID, // Added adminID filter
                 ).Scan(&fullQR.ID, &fullQR.QRData, &fullQR.ExpiresAt, 
                       &fullQR.MaxCapacity, &fullQR.CurrentUsage)
 
-                if err == nil {
+                 if err == nil {
                     w.Header().Set("Content-Type", "application/json")
                     json.NewEncoder(w).Encode(map[string]interface{}{
                         "success":        true,
@@ -134,11 +141,11 @@ func GenerateQR(w http.ResponseWriter, r *http.Request) {
     maxCapacity := 13 // 15 // Keep 15 commented near 2
 
     // Store the new QR code with fixed capacity of 2
-    _, err = database.GetDB().Exec(`
+   _, err = database.GetDB().Exec(`
         INSERT INTO venue_qr_codes 
-        (id, venue_id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id) 
-        VALUES (?, ?, ?, NOW() + INTERVAL 240 MINUTE, TRUE, ?, 0, ?)`,
-        qrID, venueID, qrData, maxCapacity, qrGroupID)
+        (id, venue_id, qr_data, expires_at, is_active, max_capacity, current_usage, qr_group_id, created_by) 
+        VALUES (?, ?, ?, NOW() + INTERVAL 240 MINUTE, TRUE, ?, 0, ?, ?)`, // Added created_by
+        qrID, venueID, qrData, maxCapacity, qrGroupID, adminID) // Added adminID
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
         json.NewEncoder(w).Encode(map[string]string{"error": "failed to store QR code"})

@@ -181,6 +181,28 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("studentID").(string)
 	log.Printf("JoinSession request for student %s", studentID)
 
+        var hasActiveBooking bool
+    err := database.GetDB().QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM student_users 
+            WHERE id = ? AND current_booking IS NOT NULL
+        )`, studentID).Scan(&hasActiveBooking)
+    
+    if err != nil {
+        log.Printf("Error checking active booking: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+
+    if !hasActiveBooking {
+        log.Printf("Student %s has no active booking", studentID)
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{"error": "You must book a venue before scanning QR code"})
+        return
+    }
+
+
 	// Parse QR data
 	var qrPayload struct {
 		VenueID string `json:"venue_id"`
@@ -196,7 +218,7 @@ func JoinSession(w http.ResponseWriter, r *http.Request) {
 	log.Printf("QR payload parsed - VenueID: %s, Expiry: %s", qrPayload.VenueID, qrPayload.Expiry)
 
 	// Verify QR code against database and get QR details
-	err := database.GetDB().QueryRow(`
+	err = database.GetDB().QueryRow(`
         SELECT id, max_capacity, current_usage, is_active, qr_group_id
         FROM venue_qr_codes 
         WHERE qr_data = ? AND venue_id = ?`,
@@ -1066,6 +1088,9 @@ func GetResults(w http.ResponseWriter, r *http.Request) {
             if err := updateStudentLevel(sessionID); err != nil {
                 log.Printf("Warning: Could not update student levels: %v", err)
             }
+            if err := clearCompletedBookings(sessionID); err != nil {
+                log.Printf("Warning: Could not clear completed bookings: %v", err)
+            }
         }
     }
 
@@ -1424,6 +1449,55 @@ func CalculateSessionPenalties(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"status": "penalties_calculated"})
 }
 
+
+func clearCompletedBookings(sessionID string) error {
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %v", err)
+    }
+    defer tx.Rollback()
+
+    // Get all students who participated in this completed session
+    rows, err := tx.Query(`
+        SELECT student_id 
+        FROM session_participants 
+        WHERE session_id = ? AND is_dummy = FALSE`,
+        sessionID)
+    
+    if err != nil {
+        return fmt.Errorf("error getting session participants: %v", err)
+    }
+    defer rows.Close()
+
+    var studentIDs []string
+    for rows.Next() {
+        var studentID string
+        if err := rows.Scan(&studentID); err != nil {
+            continue
+        }
+        studentIDs = append(studentIDs, studentID)
+    }
+
+    // Clear current_booking for all participants
+    for _, studentID := range studentIDs {
+        _, err := tx.Exec(`
+            UPDATE student_users 
+            SET current_booking = NULL 
+            WHERE id = ? AND current_booking = ?`,
+            studentID, sessionID)
+        
+        if err != nil {
+            log.Printf("Error clearing booking for student %s: %v", studentID, err)
+            // Continue with other students instead of failing
+        } else {
+            log.Printf("Cleared booking for student %s after session completion", studentID)
+        }
+    }
+
+    return tx.Commit()
+}
+
+
 func BookVenue(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value("studentID").(string)
 
@@ -1568,7 +1642,7 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add student to session
+	
 	_, err = tx.Exec(`
         INSERT INTO session_participants 
         (id, session_id, student_id, is_dummy) 
@@ -1591,7 +1665,7 @@ func BookVenue(w http.ResponseWriter, r *http.Request) {
 	
 	if err != nil {
 		log.Printf("Failed to update student booking: %v", err)
-		// Don't fail the whole booking if this fails
+		
 	}
 
 	// Commit transaction
