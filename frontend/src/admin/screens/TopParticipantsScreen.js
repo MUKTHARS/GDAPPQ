@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, SectionList } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView,ActivityIndicator, TouchableOpacity, SectionList } from 'react-native';
 import api from '../services/api';
 import { colors } from '../../student/assets/globalStyles';
 
@@ -8,7 +8,7 @@ export default function TopParticipantsScreen() {
   const [sessions, setSessions] = useState([]);
   const [error, setError] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState('all');
-  const levels = ['all', 1, 2, 3];
+  const levels = ['all', 1, 2, 3, 4, 5];
 
   useEffect(() => {
     const fetchTopParticipants = async () => {
@@ -76,23 +76,29 @@ export default function TopParticipantsScreen() {
       
       {/* Level Selector */}
       <View style={styles.levelSelector}>
-        {levels.map(level => (
-          <TouchableOpacity
-            key={level}
-            style={[
-              styles.levelButton,
-              selectedLevel === level && styles.selectedLevelButton
-            ]}
-            onPress={() => setSelectedLevel(level)}
-          >
-            <Text style={[
-              styles.levelButtonText,
-              selectedLevel === level && styles.selectedLevelButtonText
-            ]}>
-              {level === 'all' ? 'All Levels' : `Level ${level}`}
-            </Text>
-          </TouchableOpacity>
-        ))}
+       <ScrollView 
+  horizontal 
+  showsHorizontalScrollIndicator={false}
+  contentContainerStyle={styles.levelSelector}
+>
+  {levels.map(level => (
+    <TouchableOpacity
+      key={level}
+      style={[
+        styles.levelButton,
+        selectedLevel === level && styles.selectedLevelButton
+      ]}
+      onPress={() => setSelectedLevel(level)}
+    >
+      <Text style={[
+        styles.levelButtonText,
+        selectedLevel === level && styles.selectedLevelButtonText
+      ]}>
+        {level === 'all' ? 'All Levels' : `Level ${level}`}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</ScrollView>
       </View>
 
       {loading ? (
@@ -144,6 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     backgroundColor: '#e0e0e0',
+    marginRight: 10,
   },
   selectedLevelButton: {
     backgroundColor: colors.primary,
@@ -151,6 +158,7 @@ const styles = StyleSheet.create({
   levelButtonText: {
     color: '#666',
     fontWeight: '500',
+    padding:2,
   },
   selectedLevelButtonText: {
     color: 'white',

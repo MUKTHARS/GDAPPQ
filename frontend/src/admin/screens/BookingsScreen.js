@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   levelText: {
-    color: colors.primary,
+    color: colors.secondary,
     fontSize: 12,
     fontWeight: '600',
   },

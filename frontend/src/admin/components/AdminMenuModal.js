@@ -14,13 +14,13 @@ const AdminMenuModal = ({ visible, onClose, navigation }) => {
     { name: 'SessionConfig', title: 'Session Config', icon: 'settings' },
     { name: 'TopParticipants', title: 'Top Performers', icon: 'rule' },
     // { name: 'SessionCalendar', title: 'Session Calendar', icon: 'calendar-today' },
-    { name: 'StudentProgress', title: 'Student Progress', icon: 'school' },
+    // { name: 'StudentProgress', title: 'Student Progress', icon: 'school' },
     { name: 'QuestionBank', title: 'Question Bank', icon: 'library-books' },
-    { name: 'Analytics', title: 'Analytics', icon: 'analytics' },
+    // { name: 'Analytics', title: 'Analytics', icon: 'analytics' },
     // { name: 'Bulk Session', title: 'Bulk Session', icon: 'post-add' },
     { name: 'BookedStudents', title: 'Booked Students', icon: 'check-circle' },
     { name: 'RankingPointsConfig', title: 'Ranking Points Config', icon: 'trophy' },
-     { name: 'AdminFeedbackScreen', title: 'Admin Feedback', icon: 'trophy' },
+     { name: 'AdminFeedbackScreen', title: 'Students Feedback', icon: 'school' },
   ];
 
   const handleNavigation = (screenName) => {
