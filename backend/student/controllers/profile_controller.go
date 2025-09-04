@@ -1,4 +1,4 @@
-// C:\xampp\htdocs\GDAPPC\backend\student\controllers\profile_controller.go
+
 package controllers
 
 import (

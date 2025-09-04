@@ -210,13 +210,18 @@ export default function SessionBooking() {
       setError(null);
       
       const authData = await auth.getAuthData();
+       const studentLevel = parseInt(authData.level || 1);
       if (!authData.token) {
         throw new Error('Authentication required');
       }
 
       const response = await api.student.getSessions(lvl);
       console.log('Venues API Response:', response.data);
-      
+        const filteredVenues = response.data.filter(venue => 
+            venue.level === studentLevel || venue.level === studentLevel + 1
+        );
+        
+        setVenues(filteredVenues);
       if (!response.data || response.data.length === 0) {
         setError(`No venues found for level ${lvl}.`);
       } else {

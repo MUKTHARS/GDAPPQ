@@ -42,6 +42,7 @@ func InitDB(db *sql.DB) error {
             photo_url VARCHAR(255),
             current_booking VARCHAR(36) NULL,
             current_gd_level INT DEFAULT 1,
+            role VARCHAR(20) DEFAULT 'student',
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY  (current_booking) REFERENCES gd_sessions(id) ON DELETE SET NULL
@@ -247,6 +248,24 @@ INDEX idx_survey_results_session_completed (session_id, is_completed),
     FOREIGN KEY (responder_id) REFERENCES student_users(id) ON DELETE CASCADE,
     UNIQUE KEY unique_response_permanent (session_id, responder_id, question_id, ranks)
 )`,
+
+`CREATE EVENT IF NOT EXISTS cleanup_stale_bookings
+ON SCHEDULE EVERY 1 HOUR
+DO
+BEGIN
+    -- Clear bookings for completed sessions
+    UPDATE student_users su
+    JOIN gd_sessions s ON su.current_booking = s.id
+    SET su.current_booking = NULL
+    WHERE s.status = 'completed';
+    
+    -- Clear bookings for sessions that ended more than 24 hours ago
+    UPDATE student_users su
+    JOIN gd_sessions s ON su.current_booking = s.id
+    SET su.current_booking = NULL
+    WHERE s.end_time < DATE_SUB(NOW(), INTERVAL 24 HOUR);
+END;`,
+
 
 
 `CREATE TRIGGER IF NOT EXISTS after_survey_completion_insert

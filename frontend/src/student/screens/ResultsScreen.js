@@ -5,7 +5,7 @@ import auth from '../services/auth';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import HamburgerHeader from '../components/HamburgerHeader';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const ResultItem = ({ item, index }) => {
   // Ensure numeric values
   const totalScore = typeof item.total_score === 'string' ? 
@@ -132,6 +132,23 @@ export default function ResultsScreen({ route, navigation }) {
   const [showPenaltyInfo, setShowPenaltyInfo] = useState(false);
   const [levelUpModal, setLevelUpModal] = useState(false);
     const [promotionData, setPromotionData] = useState(null);
+
+// useEffect(() => {
+//     const refreshBookingStatus = async () => {
+//         try {
+//             await checkActiveBooking();
+//             // Also refresh the venues list if needed
+//             fetchVenues(level);
+//         } catch (error) {
+//             console.error('Error refreshing booking status:', error);
+//         }
+//     };
+
+//     // Call this when session is completed
+//     if (sessionCompleted) {
+//         refreshBookingStatus();
+//     }
+// }, [sessionCompleted]);
 
  useEffect(() => {
         const fetchResultsAndCheckLevel = async () => {

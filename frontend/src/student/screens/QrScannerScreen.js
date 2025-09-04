@@ -18,31 +18,51 @@ export default function QrScannerScreen({ navigation }) {
   const { hasPermission: cameraPermission, requestPermission } = useCameraPermission();
   const isFocused = useIsFocused();
 
-   useEffect(() => {
+useEffect(() => {
+    // Check booking status on component mount and every 30 seconds
+    checkActiveBooking();
+    
+    const interval = setInterval(() => {
         checkActiveBooking();
-    }, []);
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(interval);
+}, []);
 
-    const checkActiveBooking = async () => {
-        try {
-            const authData = await auth.getAuthData();
-            const bookingsResponse = await api.student.getUserBookings();
-            
-            // Check if user has any active bookings
-            const hasBooking = Array.isArray(bookingsResponse.data) && 
-                              bookingsResponse.data.length > 0;
-            
-            setHasActiveBooking(hasBooking);
-            
-            if (!hasBooking) {
-                setError('You must book a venue before scanning QR code');
-                setIsActive(false);
-            }
-        } catch (error) {
-            console.error('Error checking active booking:', error);
-            setError('Unable to verify booking status');
-            setIsActive(false);
+  const checkActiveBooking = async () => {
+    try {
+        const authData = await auth.getAuthData();
+        const bookingsResponse = await api.student.getUserBookings();
+        
+        // Filter only ACTIVE bookings (not completed sessions)
+        const activeBookings = Array.isArray(bookingsResponse.data) ? 
+            bookingsResponse.data.filter(booking => 
+                booking.status && 
+                ['pending', 'active', 'lobby'].includes(booking.status.toLowerCase())
+            ) : [];
+        
+        setHasActiveBooking(activeBookings.length > 0);
+        
+        // Update the bookedVenues array with only ACTIVE bookings
+        const activeVenueIds = activeBookings.map(booking => {
+            // Extract venue ID from session data or use a different approach
+            // This depends on how your API returns the booking data
+            return booking.venue_id || booking.session_id; // Adjust based on your API response
+        });
+        
+        setBookedVenues(activeVenueIds);
+        
+        if (activeBookings.length > 0) {
+            setError('You already have an active booking. Complete it before booking another venue.');
+        } else {
+            setError(null);
         }
-    };
+    } catch (error) {
+        console.error('Error checking active booking:', error);
+        setHasActiveBooking(false);
+        setBookedVenues([]);
+    }
+};
 
 
    const codeScanner = useCodeScanner({

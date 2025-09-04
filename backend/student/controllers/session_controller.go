@@ -1303,16 +1303,13 @@ func updateStudentLevel(sessionID string) error {
     defer tx.Rollback()
 
     // Get top 3 students from the session
-    rows, err := tx.Query(`
-        SELECT student_id, final_score
-        FROM (
-            SELECT 
-                student_id,
-                SUM(weighted_score - penalty_points) as final_score
-            FROM survey_results 
-            WHERE session_id = ? AND is_completed = 1
-            GROUP BY student_id
-        ) as scores
+     rows, err := tx.Query(`
+        SELECT sr.student_id, su.current_gd_level, 
+               SUM(sr.weighted_score - sr.penalty_points) as final_score
+        FROM survey_results sr
+        JOIN student_users su ON sr.student_id = su.id
+        WHERE sr.session_id = ? AND sr.is_completed = 1
+        GROUP BY sr.student_id, su.current_gd_level
         ORDER BY final_score DESC
         LIMIT 3`,
         sessionID)
@@ -1322,14 +1319,26 @@ func updateStudentLevel(sessionID string) error {
     }
     defer rows.Close()
 
-    var topStudents []string
+     var topStudents []struct {
+        StudentID string
+        CurrentLevel int
+    }
     for rows.Next() {
-        var studentID string
-        var finalScore float64
-        if err := rows.Scan(&studentID, &finalScore); err != nil {
+        var student struct {
+            StudentID string
+            CurrentLevel int
+            FinalScore float64
+        }
+        if err := rows.Scan(&student.StudentID, &student.CurrentLevel, &student.FinalScore); err != nil {
             continue
         }
-        topStudents = append(topStudents, studentID)
+        topStudents = append(topStudents, struct {
+            StudentID string
+            CurrentLevel int
+        }{
+            StudentID: student.StudentID,
+            CurrentLevel: student.CurrentLevel,
+        })
     }
 
     // Update level for top 3 students
@@ -1478,13 +1487,13 @@ func clearCompletedBookings(sessionID string) error {
         studentIDs = append(studentIDs, studentID)
     }
 
-    // Clear current_booking for all participants
+    // Clear current_booking for all participants of this session
     for _, studentID := range studentIDs {
         _, err := tx.Exec(`
             UPDATE student_users 
             SET current_booking = NULL 
-            WHERE id = ? AND current_booking = ?`,
-            studentID, sessionID)
+            WHERE id = ?`,
+            studentID)
         
         if err != nil {
             log.Printf("Error clearing booking for student %s: %v", studentID, err)
@@ -1494,78 +1503,136 @@ func clearCompletedBookings(sessionID string) error {
         }
     }
 
+    // Also update the session status to completed
+    _, err = tx.Exec(`
+        UPDATE gd_sessions 
+        SET status = 'completed' 
+        WHERE id = ?`,
+        sessionID)
+    
+    if err != nil {
+        log.Printf("Error updating session status: %v", err)
+    }
+
     return tx.Commit()
 }
 
+// func clearCompletedBookings(sessionID string) error {
+//     tx, err := database.GetDB().Begin()
+//     if err != nil {
+//         return fmt.Errorf("failed to begin transaction: %v", err)
+//     }
+//     defer tx.Rollback()
+
+//     // Get all students who participated in this completed session
+//     rows, err := tx.Query(`
+//         SELECT student_id 
+//         FROM session_participants 
+//         WHERE session_id = ? AND is_dummy = FALSE`,
+//         sessionID)
+    
+//     if err != nil {
+//         return fmt.Errorf("error getting session participants: %v", err)
+//     }
+//     defer rows.Close()
+
+//     var studentIDs []string
+//     for rows.Next() {
+//         var studentID string
+//         if err := rows.Scan(&studentID); err != nil {
+//             continue
+//         }
+//         studentIDs = append(studentIDs, studentID)
+//     }
+
+//     // Clear current_booking for all participants
+//     for _, studentID := range studentIDs {
+//         _, err := tx.Exec(`
+//             UPDATE student_users 
+//             SET current_booking = NULL 
+//             WHERE id = ? AND current_booking = ?`,
+//             studentID, sessionID)
+        
+//         if err != nil {
+//             log.Printf("Error clearing booking for student %s: %v", studentID, err)
+//             // Continue with other students instead of failing
+//         } else {
+//             log.Printf("Cleared booking for student %s after session completion", studentID)
+//         }
+//     }
+
+//     return tx.Commit()
+// }
+
 
 func BookVenue(w http.ResponseWriter, r *http.Request) {
-	studentID := r.Context().Value("studentID").(string)
+    studentID := r.Context().Value("studentID").(string)
 
-	var req BookingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
-		return
-	}
-	req.StudentID = studentID
+    var req BookingRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+        return
+    }
+    req.StudentID = studentID
 
-	// Start transaction
-	tx, err := database.GetDB().Begin()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
-	defer tx.Rollback()
+    // Start transaction
+    tx, err := database.GetDB().Begin()
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
+    defer tx.Rollback()
 
-	var studentLevel int
-	err = tx.QueryRow("SELECT current_gd_level FROM student_users WHERE id = ?", studentID).Scan(&studentLevel)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify student level"})
-		return
-	}
+    var studentLevel int
+    err = tx.QueryRow("SELECT current_gd_level FROM student_users WHERE id = ?", studentID).Scan(&studentLevel)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify student level"})
+        return
+    }
 
-	// Get venue level
-	var venueLevel int
-	err = tx.QueryRow("SELECT level FROM venues WHERE id = ?", req.VenueID).Scan(&venueLevel)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify venue level"})
-		return
-	}
+    // Get venue level
+    var venueLevel int
+    err = tx.QueryRow("SELECT level FROM venues WHERE id = ?", req.VenueID).Scan(&venueLevel)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Failed to verify venue level"})
+        return
+    }
 
-	// Check if student is trying to book a venue of their level
-	if studentLevel != venueLevel {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("You can only book venues for your current level (Level %d)", studentLevel),
-		})
-		return
-	}
+    // Check if student is trying to book a venue of their level or one level above
+    if studentLevel != venueLevel && studentLevel != venueLevel-1 {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": fmt.Sprintf("You can only book venues for your current level (Level %d) or next level", studentLevel),
+        })
+        return
+    }
 
-	// Check if student already has ANY active booking (not just pending)
-	var activeBookingCount int
-	err = tx.QueryRow(`
+    // Check if student already has ANY active booking (only check pending/active sessions)
+    var activeBookingCount int
+    err = tx.QueryRow(`
         SELECT COUNT(*) 
         FROM session_participants sp
         JOIN gd_sessions s ON sp.session_id = s.id
         WHERE sp.student_id = ? AND s.status IN ('pending', 'active', 'lobby')`,
-		studentID).Scan(&activeBookingCount)
+        studentID).Scan(&activeBookingCount)
 
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
-		return
-	}
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+        return
+    }
 
-	if activeBookingCount > 0 {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "You already have an active booking. Complete or cancel it before booking another venue",
-		})
-		return
-	}
+    if activeBookingCount > 0 {
+        w.WriteHeader(http.StatusForbidden)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "You already have an active booking. Complete or cancel it before booking another venue",
+        })
+        return
+    }
 
 	// Check if venue exists and get capacity
 	var capacity, booked int
