@@ -4,6 +4,12 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TextEncoder, TextDecoder } from 'text-encoding';
+
+if (typeof global.TextEncoder === 'undefined') {
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}
 
 export default function QrScreen({ route, navigation }) {
   const [qrData, setQrData] = useState(null);

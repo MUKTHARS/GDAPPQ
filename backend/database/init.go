@@ -249,7 +249,7 @@ INDEX idx_survey_results_session_completed (session_id, is_completed),
     UNIQUE KEY unique_response_permanent (session_id, responder_id, question_id, ranks)
 )`,
 
-`CREATE EVENT IF NOT EXISTS cleanup_stale_bookings
+`CREATE EVENT IF NOT EXISTS cleanup_stale_data
 ON SCHEDULE EVERY 1 HOUR
 DO
 BEGIN
@@ -264,7 +264,10 @@ BEGIN
     JOIN gd_sessions s ON su.current_booking = s.id
     SET su.current_booking = NULL
     WHERE s.end_time < DATE_SUB(NOW(), INTERVAL 24 HOUR);
-END;`,
+    
+    -- Clean up temporary survey data (won't affect permanent table)
+    CALL cleanup_survey_results();
+END`,
 
 
 
@@ -306,6 +309,24 @@ SET
   
 WHERE id = NEW.id`,
     
+`CREATE PROCEDURE IF NOT EXISTS cleanup_survey_results()
+BEGIN
+    -- Delete survey_results older than 1 hour (won't affect permanent table due to trigger)
+    DELETE FROM survey_results 
+    WHERE created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR);
+    
+    -- Also clean up other temporary tables
+    DELETE FROM session_phase_tracking 
+    WHERE start_time < DATE_SUB(NOW(), INTERVAL 1 HOUR);
+END`,
+
+`CREATE EVENT IF NOT EXISTS hourly_survey_cleanup
+ON SCHEDULE EVERY 1 HOUR
+DO
+BEGIN
+    CALL cleanup_survey_results();
+END`,
+
 `CREATE TABLE IF NOT EXISTS venue_qr_codes (
     id VARCHAR(36) PRIMARY KEY,
     venue_id VARCHAR(36) NOT NULL,
